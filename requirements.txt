@@ -1,1 +1,3 @@
 ipykernel
+pymongo
+python-dotenv
