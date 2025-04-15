@@ -1,0 +1,515 @@
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT
+
+SMITH ZANDER INTERNATIONAL SDN BHD 201301028298 (1058128-V)
+15-01, Level 15, Menara MBMR, 1 Jalan Syed Putra, 58000 Kuala Lumpur, Malaysia
+T: +603 2732 7537 W: www.smith-zander.com
+
+SMITH ZANDER
+
+Date: 22 March 2023
+
+The Board of Directors
+
+Autocount Dotcom Berhad
+B2-3A01 & B2-3A02,
+Meritus Tower @ Oasis Corporate Park,
+Oasis Damansara (Pusat Korporat Oasis)
+No. 2, Jalan PJU 1A/2, Ara Damansara,
+47301 Petaling Jaya, Selangor Darul Ehsan
+
+Dear Sir / Madam,
+
+Independent Market Research Report on the Financial Management Software Industry ("IMR Report")
+This IMR Report has been prepared by SMITH ZANDER INTERNATIONAL SDN BHD ("SMITH ZANDER") for inclusion in the Prospectus in conjunction with the listing of Autocount Dotcom Berhad on the ACE Market of Bursa Malaysia Securities Berhad.
+The objective of this IMR Report is to provide an independent view of the industry in which Autocount Dotcom Berhad and its subsidiaries ("Autocount Group") operate and to offer a clear understanding of the industry dynamics. As Autocount Group is principally involved in the development and distribution of financial management software, the scope of work for this IMR Report will thus address the following areas:
+(i) Financial management software industry in Malaysia;
+(ii) Key industry drivers, risks and challenges of the financial management software industry in Malaysia;
+(iii) Competitive landscape;
+(iv) Financial management software industry in Singapore, Thailand, Indonesia, Vietnam and the Philippines; and
+(v) Outlook and prospects.
+The research process for this study has been undertaken through secondary or desktop research, as well as detailed primary research when required, which involves discussing the status of the industry with leading industry participants. Quantitative market information could be sourced from interviews by way of primary research and therefore, the information is subject to fluctuations due to possible changes in business, industry and economic conditions.
+SMITH ZANDER has prepared this IMR Report in an independent and objective manner and has taken adequate care to ensure the accuracy and completeness of the report. We believe that this IMR Report presents a balanced view of the industry within the limitations of, among others, secondary statistics and primary research, and does not purport to be exhaustive. Our research has been conducted with an "overall industry perspective and may not necessarily reflect the performance of individual companies in this IMR Report. SMITH ZANDER shall not be held responsible for the decisions and / or actions of the readers of this report. This report should also not be considered as a recommendation to buy or not to buy the shares of any company or companies mentioned in this report or otherwise.
+
+For and on behalf of SMITH ZANDER:
+
+[Signature of Dennis Tan Tze Wen]
+
+DENNIS TAN TZE WEN
+MANAGING PARTNER
+
+138
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+COPYRIGHT NOTICE
+No part of this IMR Report may be given, lent, resold, or disclosed to non-customers or any other parties, in any format, either for commercial or non-commercial reasons, without expressed consent from SMITH ZANDER. Further, no part of this IMR Report may be extracted, reproduced, altered, abridged, adapted, modified, stored in a retrieval system, or transmitted in any form or by any means, electronic, mechanical, photocopying, recording, or otherwise, for purposes other than the listing of Autocount Dotcom Berhad on the ACE Market of Bursa Malaysia Securities Berhad, without express consent from SMITH ZANDER.
+Any part of this IMR Report used in third party publications, where the publication is based on the content, in whole or in part, of this IMR Report, or where the content of this IMR Report is combined with any other material, must be cited and sourced to SMITH ZANDER.
+
+The research for this IMR Report was completed on 20 March 2023.
+
+For further information, please contact:
+
+SMITH ZANDER INTERNATIONAL SDN BHD
+15-01, Level 15, Menara MBMR
+1, Jalan Syed Putra
+58000 Kuala Lumpur
+Malaysia
+Tel: +603 2732 7537
+
+www.smith-zander.com
+
+© 2023, All rights reserved, SMITH ZANDER INTERNATIONAL SDN BHD
+
+About SMITH ZANDER INTERNATIONAL SDN BHD
+SMITH ZANDER is a professional independent market research company based in Kuala Lumpur, Malaysia, offering market research, industry intelligence and strategy consulting solutions. SMITH ZANDER is involved in the preparation of independent market research reports for capital market exercises, including initial public offerings, reverse takeovers, mergers and acquisitions, and other fund-raising and corporate exercises.
+
+Profile of the signing partner, Dennis Tan Tze Wen
+Dennis Tan is the Managing Partner of SMITH ZANDER. Dennis Tan has over 25 years of experience in market research and strategy consulting, including over 20 years in independent market research and due diligence studies for capital markets throughout the Asia Pacific region. Dennis Tan has a Bachelor of Science (major in Computer Science and minor in Business Administration) from Memorial University of Newfoundland, Canada.
+
+139
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+1 FINANCIAL MANAGEMENT SOFTWARE INDUSTRY IN MALAYSIA
+A financial management software is a computer program designed to manage businesses' financial activities such as keeping track of income, expenses, assets and liabilities, as well as managing financial transactions with internal parties (e.g. employees) and external parties (e.g. customers and suppliers). Financial management is one of the most important aspects of managing a business as it involves amongst others, planning, organising, monitoring and controlling the businesses' financial resources, performance and growth. Efficient financial management can be achieved through the use of financial management software, as follows:
+
+automation of certain basic tasks and fundamental processes related to financial management, including data entry and financial reporting which can otherwise be time-consuming, repetitive and prone to error if done manually.
+
+increase data accessibility where data entered can be synchronised across multiple modules within the software for accessibility by authorised users.
+
+convenient and quick generation of reports (e.g. sales summary and payroll summary) with different metrices, which gives business owner(s) and / or management quick insights for decision making.
+There are different types of financial management software, each designed to meet the different financial management needs of a business. Examples of financial management software are:
+
+[Image depicting three types of financial management software:
+
+Icon of a calculator and document, labelled "Accounting software".
+
+Icon of a cash register, labelled "Point of sale ("POS") software".
+
+Icon of currency and a person, labelled "Payroll software".]
+
+Note:
+
+The examples listed are not exhaustive.
+Source: SMITH ZANDER
+
+► Accounting software
+Accounting software is commonly used by businesses ranging from small and medium enterprises ("SMEs") to large organisations to facilitate accounting and bookkeeping tasks. A typical accounting software contains numerous accounting functions including general ledger, accounts payable, accounts receivable, sales orders, purchase orders, delivery orders and inventory management. These functions are linked to one another to streamline and automate accounting and bookkeeping tasks including payment, billing, invoicing, account reconciliation and financial reporting.
+► POS software
+POS is the point at which sales of goods / services to customers are made. POS software is part of a POS system which also includes POS hardware such as monitor / tablet, barcode scanner, contactless payment terminal, receipt printer and cash drawer, to process customer payments.
+POS software is commonly adopted by businesses such as retailers and food and beverage outlets. POS software can be integrated with accounting software as monetary transactions performed through POS software are required to be reflected in accounting records for financial reporting.
+► Payroll software
+Payroll software digitalises the payroll process and certain human resource related functions. A basic payroll software assists in managing various tasks including the documentation of employee personal information and remuneration package, salary disbursements, reimbursements, leave management as well as time attendance tracking, which are related to accounting and finance especially in calculating salary costs and related expenses. As such, payroll software can also be integrated with accounting software as salaries and related expenses are required to be reflected in accounting records for financial reporting.
+Traditionally, accounting, POS and payroll software were widely available as on-premise software. Over the years, with the advancement of technology, the cloud version of these software have become increasingly common.
+
+140
+1
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+On-premise software: software that is installed and operated on the user's local server located within the user's premises. Users are required to be present on-site in order to access the software.
+
+Cloud software: software that is installed and operated on external servers, leveraging on cloud computing and storage technology which enables users to access the software anytime from anywhere through internet connection.
+
+Value chain of the financial management software industry
+A general value chain of the financial management software industry is as follows:
+
+[Diagram showing the value chain:
+Starts with "Software principals" (icon of building with computer chip pattern) on the left.
+An arrow points to "Dealers" (icon of several connected figures) in the middle.
+An arrow points from "Dealers" to "Businesses (end-user customers)" (icon of city buildings) on the right.
+Between "Software principals" and "Dealers", a central box labelled "Financial management software" is shown. Surrounding this box are related services: "Consultation", "Software customisation", "Software implementation", "Integration and configuration", "Technical support and maintenance", "User training". Arrows indicate these services connect the software to the dealers/end-users.
+Text explanation to the right of the diagram: Software principals are the owners of financial management software. Software principals may develop financial management software in-house or outsource the development works to third party software developers. Financial management software is typically sold to end-user customers (i.e. businesses) through dealership distribution models, where software principals leverage on dealers to widen their distribution network and thus, enabling them to increase their market reach.]
+
+Note:
+
+Autocount Group is a software principal in the financial management software industry.
+Source: SMITH ZANDER
+
+Software principals may provide associated services such as consultation, software customisation, software implementation, integration and configuration, technical support and maintenance as well as user training directly to the end-user customers, or provide training to the dealers who will provide the associated services to the end-user customers.
+Dealers of financial management software are generally information technology ("IT") solution providers who sell the software as a standalone product or to be integrated with other IT solution offerings such as hardware, other types of software and services.
+
+Industry Performance, Size and Growth
+Sales value of accounting software licences, POS software licences and payroll software licences (Malaysia), 2019 – 2021
+
+[Bar chart showing sales value (RM million) for three software types from 2019 to 2021.
+X-axis: Software types (Accounting, POS, Payroll), with bars for 2019, 2020, 2021 for each.
+Y-axis: Sales value (RM million), from 0.00 to 100.00.
+Data:
+Accounting software licences: 2019 = RM72.51m, 2020 = RM84.13m, 2021 = RM95.62m.
+POS software licences: 2019 = RM59.55m, 2020 = RM66.45m, 2021 = RM71.10m.
+Payroll software licences: 2019 = RM65.71m, 2020 = RM75.66m, 2021 = RM85.09m.]
+Source: SMITH ZANDER
+
+From 2019 to 2021, the sales value of accounting software licences in Malaysia increased from RM72.51 million to RM95.62 million, at a compound annual growth rate ("CAGR") of 14.84%. Over the same period, the sales value of POS software licences in Malaysia increased from RM59.55 million to RM71.10 million, at a CAGR of 9.27%; and the sales value of payroll software licences in Malaysia increased from RM65.71 million to RM85.09 million, at a CAGR of 13.80%.
+Despite the COVID-19 pandemic in 2020 and 2021, the financial management software industry in Malaysia, measured in terms of the sales value of accounting software licences, POS software licences and payroll software licences, recorded a year-on-year ("YOY") growth of 16.03%, 11.59% and 15.14% respectively in
+
+141
+2
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+2020, as well as 13.66%, 7.00% and 12.46% respectively in 2021. The growth in the financial management software industry was attributed to, amongst others, the increasing need for digitalisation from businesses and implementation of initiatives for digital transformation by the Government of Malaysia.
+In 2022, SMITH ZANDER estimates the sales value of accounting software licences, POS software licences and payroll software licences in Malaysia to have increased YOY by 14.36% to RM109.35 million, 10.11% to RM78.29 million and 13.56% to RM96.63 million, respectively. In 2023, SMITH ZANDER forecasts the sales value of accounting software licences, POS software licences and payroll software licences in Malaysia to increase YOY by 13.27% to RM123.86 million, 9.08% to RM85.40 million and 12.67% to RM108.87 million, respectively. Please refer to Key Industry Drivers below for further information on the drivers of the financial management software industry in Malaysia.
+The sales value of accounting software licences, POS software licences and payroll software licences comprises revenue derived from the sales of the respective software licences in Malaysia, including both software developed by local companies in Malaysia and software developed by foreign companies. It does not include the revenue derived from the provision of associated services such as consultation, software customisation, software implementation, integration and configuration, as well as technical support and maintenance.
+
+2 KEY INDUSTRY DRIVERS, RISKS AND CHALLENGES OF THE FINANCIAL MANAGEMENT SOFTWARE INDUSTRY IN MALAYSIA
+Key Industry Drivers
+► Growing number of businesses signifies growth potential for the financial management software industry
+The number of businesses (i.e. companies, sole proprietorships and partnerships) in Malaysia increased from 8.88 million in 2019 to 10.32 million in 2022, at a CAGR of 5.14%, which indicates the growth potential of the financial management software industry in Malaysia.
+Regardless of the size of the business or complexity of the financial management processes involved, most businesses require a form of financial management software to manage their financial resources efficiently.
+Further, as businesses grow, the functions, features and modules required in a financial management software increase in tandem with the business needs. As such, businesses may upgrade their financial management software to more advanced versions over time, which can be easily achieved as most financial management software available in the market are scalable according to business needs. This is expected to sustain the demand for financial management software in the long term.
+
+Number of businesses (Malaysia), 2019-2022
+[Bar chart showing the number of businesses in Malaysia from 2019 to 2022.
+X-axis: Years (2019, 2020, 2021, 2022).
+Y-axis: Number of businesses (million), from 0.00 to 12.00.
+Data: 2019 = 8.88m, 2020 = 9.32m, 2021 = 9.95m, 2022 = 10.32m.]
+Source: Companies Commission of Malaysia ("CCM")
+
+► Businesses' need for the automation of financial management processes drives the demand for financial management software
+The automation of financial management processes with the use of financial management software allows businesses to, amongst others, save time and increase financial management efficiency. As a result, it enables businesses to focus their time and resources on managing their business operations.
+Accounting, POS and payroll software are amongst the common financial management software adopted by businesses, due to the following factors:
+
+Accounting software
+Accounting is a necessary function for businesses to record their financial transactions which will be used for financial reporting and decision making.
+Financial transactions such as sales, purchases, payments and borrowings have to be recorded in journal entries and posted to ledgers. In addition, financial transactions involve the preparation and
+
+142
+3
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+issuance of purchase orders and invoices to suppliers and customers respectively. Financial transactions processes can be repetitive and time-consuming; and even prone to error if done manually and in large volumes. With an accounting software, these processes can be automated which enhances the efficiency of businesses' financial management processes. In addition, accounting software is typically able to perform data analysis to provide businesses with insights of their financial conditions for better and more effective management of their financial resources.
+
+
+POS software
+POS software can automate POS functions such as sales recording and inventory management. Sales recorded in POS software can be automatically posted to accounting software through integration between these two software. In addition, POS software automates inventory management function by notifying retailers when certain stocks are running low for retailers to replenish the stocks on a timely basis. As such, having a POS software is crucial for businesses, especially retailers in facilitating sales and improving operational efficiency.
+Further, due to the competitive nature of the retail industry, there is a growing need for retailers to differentiate themselves by providing personalised services and enhanced shopping experience through loyalty rewards. This can be automated through POS software that comes with customer loyalty management function to manage amongst others, member purchases and discounts as well as points collection and redemption.
+From 2020 to 2021, the retail industry in Malaysia, measured by the value of retail sales, increased from RM511.01 billion to RM533.56 billion at a YOY of 4.41% amidst the COVID-19 pandemic. In 2022, the retail industry in Malaysia further increased YOY by 23.89% to RM661.05 billion. Along with the increasing popularity and adoption of online shopping, many businesses have ventured into e-commerce by establishing online stores to increase sales and widen customer reach. These businesses may integrate a POS software to their online stores to streamline their business operations, which subsequently is expected to drive the demand for POS software by retailers.
+
+Payroll software
+Payroll is an integral part of a business as it involves employee remuneration and the management of employee personal information. A typical payroll software is able to manage payroll tasks and certain human resource related functions, as well as automate fundamental payroll processes. The payroll records in the payroll software can be automatically posted to accounting software for the calculation of staff costs in financial reporting through integration between these software.
+Furthermore, the information recorded in payroll software can be used to generate reports that show the overall cost incurred by businesses for employee remuneration. Payroll software with data analysis function can also make use of existing information recorded to, amongst others, provide forecasts for employee remuneration to enable businesses to plan for payroll budget. By adopting payroll software, businesses are able to carry out payroll processes with greater accuracy and speed, which will subsequently enhance the efficiency of their financial management processes.
+Despite the outbreak of the COVID-19 pandemic, the financial management software industry continues to grow as more businesses adopt financial management software to undertake or accelerate digitalisation efforts for business sustainability. Moving forward, in order to remain competitive in a technology-driven economy, there is a growing need for businesses to adopt the use of technology including financial management software to become more fast-paced through automation which increases the efficiency in financial management.
+► Continuous technology advancement and changes in business environment drive the demand for financial management software
+The financial management software industry has undergone technology advancement, in tandem with new and more robust technologies introduced in the market such as cloud computing and storage as well as big data analytics. Many software principals have integrated these new technologies into financial management software to improve business mobility (i.e. the ability to access the software from anywhere) and enhance user experience, as follows:
+
+Cloud computing and storage technology enables the development of cloud software whereby users can access the software anytime from anywhere via internet connection; and
+
+143
+4
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+*   Big data analytics enables the analysis of large and complex data such as customer behaviour data which allows for fast and accurate delivery of insights for business decision making.
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+IGNORE_WHEN_COPYING_END
+
+As technology continues to evolve and businesses strive to remain competitive, there will be continuous demand from businesses for new or updated financial management software which are more robust and equipped with enhanced functions to assist in realising their business growth plans.
+► Implementation of digital transformation initiatives by the Government of Malaysia drives the financial management software industry
+The Government of Malaysia has introduced initiatives to support business digitalisation efforts which drive the financial management software industry. In the Budget 2020, the Government of Malaysia introduced the SME Digitalisation Grant Scheme to encourage SMEs to adopt digitalisation efforts in their business operations. Through this initiative, the Government of Malaysia will provide a matching grant of 50% whereby the Government of Malaysia will subsidise 50% of the total invoice and up to RM5,000 per company for the subscription of digital services including accounting and taxation, electronic POS system and human resource payroll system. The allocated grants are worth RM500 million which are limited to the first 100,000 SMEs that apply over the course of 5 years.
+The latest blueprint introduced to accelerate the growth of the digital economy is known as the Malaysian Digital Economy Blueprint (MyDigital), which was launched on 19 February 2021. The blueprint serves as a foundation for Malaysia's transformation into a "regional digital pulse" by 2030 with some targets listed below:
+
+Accelerating digitally-powered businesses by having 875,000 micro enterprises and SMEs to adopt e-commerce, attracting local and foreign companies into the country, investing RM70 billion in digitalisation, and increasing the number of start-ups to 5,000; and
+
+Accelerating a digitally-enabled government by having 100% of government servants possess digital literacy, 80% of end-to-end government services available online, all ministries and agencies to provide cashless payment options and 80% usage of cloud storage across the Government of Malaysia in 2022.
+In the Budget 2021, in support of automation and modernisation, the Government of Malaysia allocated funds amounting to RM150 million to businesses, including micro enterprises, SMEs and start-ups that have been operating for at least 6 months under the SME Digitalisation Grant Scheme and the Automation Grant. Further in the Budget 2022, the Government of Malaysia allocated RM200 million with RM50 million dedicated towards Bumiputera micro entrepreneurs in rural areas in the SME Digitisation Grant Scheme.
+In the revised Budget 2023 announced on 24 February 2023, the Government of Malaysia announced several digital transformation initiatives including the allocation of funds for SMEs to support business automation and digitalisation. Amongst the funds provided is the allocation of RM100 million under the SME Digitalisation Grant Scheme to fund matching grants of up to RM5,000 to SMEs that subscribe to business digitalisation software including accounting software, POS software or inventory management software. In addition, RM1 billion will be allocated under Bank Negara Malaysia for the SME Automation and Digitalisation Facility ("ADF") to encourage SMEs to automate processes and digitalise operations. Through the ADF, SMEs can receive financing amount of up to RM3 million with a tenure of up to 10 years at a loan rate of up to 4% per year (including guarantee fee).
+These budget allocations will continue to drive businesses to digitalise business processes, including the adoption of financial management software, thereby driving the financial management software industry.
+
+Key Industry Risks and Challenges
+► Inability of industry players to adapt to the latest technological development
+Industry players face the risk of not being able to adapt to the latest technological development. Their ability to adapt and enhance their financial management software to remain technologically relevant determines the sustainability of their businesses and their ability to retain and grow their customer base.
+For example, industry players that develop and host their cloud financial management software on third party cloud computing platforms must be able to continuously update their software to remain compatible to any changes in technological features adopted by these third party cloud computing platforms. In the event that the industry players fail to keep up with technological developments timely, they may experience
+
+5
+144
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+a loss of customers, which may in turn adversely impact their business sustainability and financial performance.
+► Dependency on the availability of experienced software developers in the market
+Industry players require software developers that possess certain experience and fundamental skillsets such as the abilities to code in certain programming languages; debug the software if errors are discovered during software testing; and perform coding review. Further, knowledge in financial management is also essential to develop practical and user-friendly features and functions in financial management software.
+In the IT industry, these technical skillsets may be difficult to source as experienced personnel with a combination of IT skillset as well as financial management knowledge may not be widely available in the market at competitive salary rates. In the event that industry players are unable to source for suitable talent that meet their requirements timely and in sufficient numbers, they may experience slowdown in software development and face challenges in upkeeping and enhancing their software. Subsequently, this may affect the industry players' competitive edge and eventually impact their business sustainability.
+► Businesses' privacy and security concerns towards financial management software
+A major concern from businesses regarding the use of financial management software is the exposure to cyber security threats such as malware attacks or hacking which pose security risks to their confidential information. The accessibility aspect of financial management software, particularly cloud financial management software via the internet, renders financial management software vulnerable to such threats from hackers, who may mount attacks on the businesses' network to steal confidential information.
+In the event that there are security breaches of the financial management software which lead to the leakage of the businesses' confidential information, businesses may lose confidence in the security of financial management software in general. As such, the demand for financial management software may be adversely impacted.
+
+3 COMPETITIVE LANDSCAPE
+Competitive Overview
+The financial management software industry in Malaysia is competitive and moderately fragmented. There is a wide selection of financial management software available in the market as these software range in terms of price points and functionalities, and are accessible to end-user customers through various sources including direct from software principals, through appointed local dealers or on online channels. Software principals who offer financial management software in Malaysia comprise local private companies, as well as foreign private and public-listed companies without local presence in Malaysia and may offer their software locally through appointed local dealers. However, some of these local and foreign software principals may focus on offering other types of software while offering accounting software as part of their product offering and thus, are not included in the analysis of competitors of Autocount Group.
+Financial management software that emphasises on basic functions is simpler and more affordable, which is primarily targeted at, and used by, SMEs. This type of financial management software focuses on dedicated functions such as accounting, POS and payroll. Examples of these software include the financial management software offered by Autocount Group.
+On the other hand, enterprise resource planning ("ERP") solutions are more complex software that integrates financial management functions with other business functions including, amongst others, manufacturing, supply chain, project management, compliance management and risk management, into a single software. Examples of these software include the ERP solutions offered by Oracle, SAP and Workday. ERP is primarily targeted at, and used by, large organisations to handle complex functions and workflows for large numbers of users. Hence, ERP providers are not included in the analysis of competitors of Autocount Group as they have different target customers.
+Industry players compete in terms of price and software functions. The barriers to entry are moderate as industry players require expertise in financial management as well as IT to develop their financial management software and enhance software functions. Industry players are also dependent on the availability of experienced software developers that are equipped with a combination of IT skillset as well as financial management knowledge. In addition, industry players require a wide network of dealers to market and
+
+145
+6
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+distribute their software to end-user customers. To remain competitive in the industry and to have a sustainable business over the long term, it is essential for industry players to build and maintain business relationships with their network of dealers to expand their market reach. However, as there are no industry-specific licences or permits required to become a software principal other than ordinary business licences, existing industry players may also face competition from new market entrants.
+
+Competitors to Autocount Group
+Autocount Group is a software principal based in Malaysia which is principally involved in the development and distribution of financial management software, comprising accounting software, POS software and payroll software that primarily target SMEs. Autocount Group competes with other software principals which offer financial management software that also target SMEs in Malaysia, comprising software principals with local presence in Malaysia, as well as software principals without local presence in Malaysia and may offer their software locally through appointed local dealers.
+For Autocount Group's competitors that are software principals with local presence in Malaysia, the basis for selection are as follows:
+(i) Companies which offer accounting software that mainly target SMEs, as Autocount Group's revenue is mainly derived from the sales of accounting software licences and its target market is SMEs. These companies may or may not offer other types of financial management software; and
+(ii) Companies that recorded more than RM3.00 million in revenue based on their respective latest available financial years.
+The competitors to Autocount Group identified based on the basis for selection above are as follows:
+
+Company name	Examples of financial management software offered	Examples of software brands	Latest available financial year	Total revenue (RM million)	Gross profit ("GP") (RM million)	GP margin (%)	Profit after tax ("PAT")/(Loss after tax) (("LAT")) (RM million)	PAT/ (LAT) margin (%)
+Autocount Group	Accounting, POS and payroll	AutoCountb	31 December 2022	38.72	30.95	79.93	13.84	35.75
+Access Software Sdn Bhd (part of The Access Group)d	Accounting and payroll	Access UBSb, c	30 June 2022	11.14	10.58	94.97	2.40	21.54
+E Stream MSC Sdn Bhd / E Stream Software Sdn Bhde	Accounting, POS and payroll	SQLb	30 June 2020f	10.92e	8.01f	73.35f	5.41f	49.54f
+Smart-Acc Solutions Sdn Bhd	Accounting and POS	Smart New Retailb	31 December 2021	6.37	N/Ag	N/Ag	0.46	7.22
+Asian Business Software Solutions Sdn Bhd (a subsidiary of Asian Business Software Solutions Pte Ltd)h	Accounting, POS and payroll	ABSSc	31 March 2022	4.96	(0.10)	(2.02)	0.25i	5.04
+QNE Software Sdn Bhd	Accounting, POS and payroll	QNEb	31 December 2021	3.17	1.74	54.89	0.42	13.25
+
+Notes:
+a Latest available as at 20 March 2023.
+
+The list above is not exhaustive.
+
+May include revenue derived from other businesses that are not related to the sales of financial management software licences, as segmental revenue specifically for the sales of financial management software licences is not publicly available.
+b Local brand developed by Malaysian company.
+c Foreign brand developed by foreign company and was subsequently acquired by The Access Group.
+
+146
+7
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+d The financial statements for the latest available financial year covered a period of 9 months from 1 October 2021 to 30 June 2022.
+e E Stream MSC Sdn Bhd and E Stream Software Sdn Bhd which both offer financial management software under the brand of 'SQL', share common directors according to their respective annual reports for the latest available financial years. The total revenue comprises the summation of revenue for E Stream MSC Sdn Bhd and E Stream Software Sdn Bhd.
+f Computed based on the summation of respective figures for E Stream MSC Sdn Bhd and E Stream Software Sdn Bhd.
+g N/A - Not available as GP is not reported in the latest annual report.
+h Foreign brand developed by foreign company and was subsequently acquired by Asian Business Software Solutions Pte Ltd.
+i Despite recording a negative GP, a positive PAT was recorded due to contribution from other income. However, the details of other income are not available in the annual report.
+Sources: Autocount Group, various companies' websites, CCM, SMITH ZANDER
+
+[THE REST OF THIS PAGE IS INTENTIONALLY LEFT BLANK]
+
+147
+8
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+Examples of Autocount Group's competitors that are software principals which do not have local presence in Malaysia and may offer their software locally through appointed local dealers, are as follows:
+
+Company name	Examples of financial management software offered	Examples of software brand	Latest available financial year	Total revenue	Segmental revenue	GP	GP margin (%)	PAT/(LAT)	PAT/ (LAT) margin (%)
+Intuit Inc.	Accounting, POS and payroll	QuickBooks	31 July 2022	USD12.73 billion (RM54.10 billion)a	USD6.46 billion (RM27.46 billion)a,b	USD10.32 billion (RM43.86 billion)a	81.07	USD2.07 billion (RM8.80 billion)a	16.26
+Xero Limited	Accounting and payroll	Xero	31 March 2022	NZD1.10 billion (RM3.20 billion)c	NZD1.05 billion (RM3.05 billion)c,d	NZD0.96 billion (RM2.79 billion)c	87.27	(NZD0.01 billion) ((RM0.03 billion))c	(0.91)
+2ndSite Inc.	Accounting	FreshBooks	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae
+Wave Financial Inc. (a subsidiary of H&R Block, Inc.)	Accounting and payroll	Wave	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae
+Zoho Corporation Pvt. Ltd.	Accounting and payroll	Zoho	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae	N/Ae
+
+Notes:
+
+Latest available as at 20 March 2023.
+
+The list above is not exhaustive.
+
+The competitors above were identified on the basis that they offer accounting software in the Malaysian market that mainly target SMEs. These companies may or may not offer other types of financial management software. The software developed by these competitors are examples of financial management software which are known and/or used by businesses in Malaysia. The financial information of some of these competitors are not publicly available, hence are not presented in the table above.
+a Revenue from USD to RM for the financial year 31 July 2022 was converted based on the average annual exchange rate from August 2021 to July 2022, extracted from published information from Bank Negara Malaysia at USD1.00 = RM4.2501.
+b Comprises revenue from small business and self-employed segment, which comprises product revenue and service and other revenue. Product revenue primarily comprises revenue related to delivery of software licences and related updates, including version protection for QuickBooks Desktop subscriptions and desktop payroll products. Service and other revenue primarily comprises revenue derived from QuickBooks Online Accounting, online services, support and services for QuickBooks Desktop subscription and desktop payroll offerings as well as and merchant payment processing services.
+c Revenue from NZD to RM for the financial year 31 March 2022 was converted based on the average annual exchange rate from April 2021 to March 2022, extracted from published information from Bank Negara Malaysia at NZD1.00 = RM2.9081.
+d Comprises subscription revenue which refers to the recurring monthly fees for subscription to Xero's cloud-based software products.
+e N/A – Not available.
+Sources: Various companies' websites, SMITH ZANDER
+As Autocount Group is also a software principal of POS software and payroll software, Autocount Group also competes with industry players that are not software principals of accounting software but are software principals of POS software such as Panda Software House Sdn Bhd (software principal of Panda ECO System), Vision Source Solutions Sdn Bhd (software principal of VPOS) and Web Bytes Sdn Bhd (software principal of Xilnex), as well as software principals of payroll software such as Payroll Panda Sdn Bhd (software principal of PayrollPanda) and Coastal Hectare Sdn Bhd (software principal of Kakitangan.com), all of which are local brands developed by Malaysian companies.
+
+148
+9
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+Market Share
+
+[Diagram showing three icons representing software types with Autocount Group's market share percentages in Malaysia for 2021:
+
+Accounting software licence icon: 13.79%
+
+POS software licence icon: 4.68%
+
+Payroll software licence icon: 2.21%]
+Sources: Autocount Group, SMITH ZANDER
+
+In 2021, Autocount Group captured a market share of 13.79% in accounting software, 4.68% in POS software and 2.21% in payroll software in Malaysia, computed based on its sales of accounting software licences, POS software licences and payroll software licences of RM13.19 million, RM3.33 million and RM1.88 million respectively in Malaysia in the financial year ended 2021, against the sales value of accounting software licences, POS software licences and payroll software licences in Malaysia in 2021, which amounted to RM95.62 million, RM71.10 million and RM85.09 million respectively.
+
+4 FINANCIAL MANAGEMENT SOFTWARE INDUSTRY IN SINGAPORE, THAILAND, INDONESIA, VIETNAM AND THE PHILIPPINES
+Industry performance, size and growth
+This section will focus on the financial management software industry in Singapore, Thailand, Indonesia, Vietnam and the Philippines as Autocount Group currently operates in Singapore and intends to expand its business to Thailand, Indonesia, Vietnam and the Philippines.
+The size of the financial management software industry in Singapore, Thailand, Indonesia, Vietnam and the Philippines from 2019 to 2021, measured in terms of the sales value of accounting software licences, POS software licences and payroll software licences, are as follows:
+
+Sales value of accounting software licences
+[Bar chart showing sales value (USD million) of accounting software licences from 2019 to 2021 for five countries.
+X-axis: Countries (Singapore, Thailand, Indonesia, Vietnam, The Philippines), with bars for 2019, 2020, 2021 for each.
+Y-axis: Sales value (USD million), from 0.00 to 40.00.
+Data (USD million):
+Singapore: 2019=19.48, 2020=23.25, 2021=26.62
+Thailand: 2019=23.26, 2020=24.96, 2021=29.96
+Indonesia: 2019=23.78, 2020=28.42, 2021=34.11
+Vietnam: 2019=18.75, 2020=21.01, 2021=26.11
+The Philippines: 2019=10.60, 2020=11.24, 2021=13.34]
+Source: SMITH ZANDER
+
+From 2019 to 2021, the sales value of accounting software licences in Singapore, Thailand, Indonesia, Vietnam and the Philippines increased at CAGRs of 16.90%, 13.49%, 19.77%, 18.01% and 12.18% respectively. In 2022, SMITH ZANDER estimates the sales value of accounting software licences to have increased YOY by 15.36% to USD30.71 million in Singapore, 18.12% to USD35.39 million in Thailand, 18.47% to USD40.41 million in Indonesia, 23.40% to USD32.22 million in Vietnam and 17.47% to USD15.67 million in the Philippines. In 2023, SMITH ZANDER forecasts the sales value of accounting software licences to increase YOY by 14.33% to USD35.11 million in Singapore, 18.08% to USD41.79 million in Thailand, 18.36% to USD47.83 million in Indonesia, 22.69% to USD39.53 million in Vietnam and 16.85% to USD18.31 million in the Philippines.
+
+Sales value of POS software licences
+[Bar chart showing sales value (USD million) of POS software licences from 2019 to 2021 for five countries.
+X-axis: Countries (Singapore, Thailand, Indonesia, Vietnam, The Philippines), with bars for 2019, 2020, 2021 for each.
+Y-axis: Sales value (USD million), from 0.00 to 30.00.
+Data (USD million):
+Singapore: 2019=14.22, 2020=16.33, 2021=18.09
+Thailand: 2019=19.10, 2020=19.71, 2021=22.99
+Indonesia: 2019=19.70, 2020=23.11, 2021=26.94
+Vietnam: 2019=15.40, 2020=16.60, 2021=19.95
+The Philippines: 2019=8.70, 2020=8.88, 2021=10.35]
+Source: SMITH ZANDER
+
+149
+10
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+From 2019 to 2021, the sales value of POS software licences in Singapore, Thailand, Indonesia, Vietnam and the Philippines increased at CAGRs of 12.79%, 9.71%, 16.94%, 13.82% and 9.07% respectively. In 2022, SMITH ZANDER estimates the sales value of POS software licences to have increased YOY by 12.00% to USD20.26 million in Singapore, 15.27% to USD26.50 million in Thailand, 15.33% to USD31.07 million in Indonesia, 19.35% to USD23.81 million in Vietnam and 15.94% to USD12.00 million in the Philippines. In 2023, SMITH ZANDER forecasts the sales value of POS software licences to increase YOY by 10.96% to USD22.48 million in Singapore, 15.21% to USD30.53 million in Thailand, 15.16% to USD35.78 million in Indonesia, 18.44% to USD28.20 million in Vietnam and 15.08% to USD13.81 million in the Philippines.
+
+Sales value of payroll software licences
+[Bar chart showing sales value (USD million) of payroll software licences from 2019 to 2021 for five countries.
+X-axis: Countries (Singapore, Thailand, Indonesia, Vietnam, The Philippines), with bars for 2019, 2020, 2021 for each.
+Y-axis: Sales value (USD million), from 0.00 to 30.00.
+Data (USD million):
+Singapore: 2019=17.00, 2020=20.14, 2021=22.69
+Thailand: 2019=21.08, 2020=22.44, 2021=26.63
+Indonesia: 2019=21.22, 2020=25.07, 2021=29.75
+Vietnam: 2019=16.99, 2020=18.90, 2021=23.46
+The Philippines: 2019=9.60, 2020=10.11, 2021=12.05]
+Source: SMITH ZANDER
+
+From 2019 to 2021, the sales value of payroll software licences in Singapore, Thailand, Indonesia, Vietnam and the Philippines increased at CAGRs of 15.53%, 12.40%, 18.41%, 17.51% and 12.04% respectively. In 2022, SMITH ZANDER estimates the sales value of payroll software licences to have increased YOY by 13.27% to USD25.70 million in Singapore, 17.35% to USD31.25 million in Thailand, 17.28% to USD34.89 million in Indonesia, 23.83% to USD29.05 million in Vietnam and 18.09% to USD14.23 million in the Philippines. In 2023, SMITH ZANDER forecasts the sales value of payroll software licences to increase YOY by 12.49% to USD28.91 million in Singapore, 17.25% to USD36.64 million in Thailand, 17.14% to USD40.87 million in Indonesia, 22.93% to USD35.71 million in Vietnam and 17.01% to USD16.65 million in the Philippines.
+
+Demand drivers
+The growth in the number of businesses in a country drives the demand for financial management software. Further, in order to increase digitalisation efforts among businesses, the governments of Singapore, Thailand, Indonesia, Vietnam and the Philippines have launched various initiatives focusing on digital transformation which may lead to an increase in demand for financial management software. Some of the initiatives introduced by the governments of Singapore, Thailand, Indonesia, Vietnam and the Philippines are as follows:
+
+Country	Government initiatives
+Singapore	❖ The SMEs Go Digital Programme, which was launched in 2017, aims to accelerate digital transformation of SMEs in Singapore. Among the initiatives launched under the programme are: * Start Digital Pack - to provide newly incorporated SMEs or those who have yet to digitalise their businesses with competitively-priced digital solution packages to help them start their digitalisation journey. SMEs can select from 6 categories of packages including accounting and human resource management system (HRMS) and payroll. * Industry Digital Plans - to provide SMEs with step-by-step guide in adopting digital solutions and training programmes to enhance employees' digital skills. Among the sectors targeted by the Industry Digital Plans initiative are accountancy, retail and food services.
+Thailand	❖ The government has allocated THB2.40 billion for the fiscal year 2022 to sustain the execution of 6 key projects under the Thailand Digital Government Development Plan 2023 - 2027. The 6 key projects include a project that helps 3.00 million SMEs to gain access to government electronic services and government projects.
+Indonesia	❖ In 2017, Bank Indonesia launched a financial accounting mobile application namely SIAPIK which aims to improve the financial literacy of micro, small and medium enterprises ("MSMEs") and facilitate MSMEs' access to financing. SIAPIK enables MSMEs to record their financial transactions and automate the generation of financial statements.
+
+150
+11
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+Country	Government initiatives
+Vietnam	❖ The National Digital Transformation Programme to 2025, orientation to 2030 aims to accelerate the digital transformation of businesses to improve business efficiency, competitiveness and production. Among the goals that the programme aims to achieve by 2025 are as follows: * 70.00% of financial transactions to take place through digital channels; * 70.00% of records at credit institutions to be processed and stored digitally; and * 50.00% of the population to have an online banking account. ❖ In 2021, the Ministry of Finance issued a circular in which businesses are required to issue all invoices electronically effective July 2022 as part of the country's move towards adopting digital accounting.
+The Philippines	❖ The Digital Payments Transformation Roadmap 2020 - 2023 sets out the central bank of the Philippines' (Bangko Sentral ng Pilipinas ("BSP")) payment digitalisation plans, which include the digitalisation of 50.00% of the country's retail payments. Through the National Retail Payment System (NRPS) regulatory framework launched by BSP, BSP aims to promote the adoption of digital payment by individuals, businesses and the government.
+Source: Various government sources	
+
+The national initiatives launched by these governments are expected to drive digital transformation by encouraging both the public and private sectors to adopt digital solutions in their operations, including financial management software. Subsequently, this is expected to further drive the growth of the financial management software industry in these countries.
+
+Competitive landscape
+As Autocount Group's revenue is mainly derived from the sales of accounting software, this section will focus on major brands of accounting software that are available in Singapore, Thailand, Indonesia, Vietnam and the Philippines, against which Autocount Group may compete with.
+
+Accounting software available in Singapore, Thailand, Indonesia, Vietnam and the Philippines
+[Map of Southeast Asia highlighting Singapore, Thailand, Indonesia, Vietnam, and the Philippines. Text boxes list major accounting software brands available in each country:
+
+Thailand: QuickBooks, Xero, ABSS, FlowAccount*, Express*
+
+Singapore: QuickBooks, Xero, ABSS, Access UBS, Netiquette*
+
+Vietnam: QuickBooks, MYOB, Xero, MISA*, AsiaSoft*, Vietbooks*
+
+Indonesia: QuickBooks, Xero, ABSS, Accurate*, Zahir Accounting*
+
+Philippines: QuickBooks, Xero, ABSS, QNE*]
+Note: * local brand developed by local company in the respective country.
+Source: SMITH ZANDER
+
+The software principals of these brands may or may not have local presence in the respective countries and the distribution of these brands are either carried out through the software principals' locally incorporated companies or through appointed local dealers.
+
+Market share (Singapore)
+In 2021, Autocount Group captured a market share of 5.86% in accounting software and 0.11% in POS software in Singapore, computed based on its sales of accounting software licences and POS software licences of RM6.46 million (USD1.56 million) and RM0.08 million (USD0.02 million) respectively in Singapore in the financial year ended 20211, against the sales value of accounting software licences and POS software licences in Singapore in 2021, which
+
+[Diagram showing two circles representing Autocount Group's market share in Singapore for 2021:
+
+Left circle: "Accounting software licence" labelled "5.86%".
+
+Right circle: "POS software licence" labelled "0.11%".]
+Sources: Autocount Group, SMITH ZANDER
+
+1 Revenue from RM to USD for the financial year ended 2021 was converted based on the average annual exchange rate from January 2021 to December 2021, extracted from published information from Bank Negara Malaysia at RM1.00 = USD0.2413.
+
+151
+12
+
+Registration No. 202201006885 (1452582-U)
+8. INDEPENDENT MARKET RESEARCH REPORT (cont'd)
+
+SMITH ZANDER
+
+amounted to USD26.62 million and USD18.09 million respectively. Autocount Group does not offer payroll software licences in Singapore, and therefore did not capture any market share for the sales of payroll software licences in Singapore.
+
+5 OUTLOOK AND PROSPECTS
+From 2019 to 2021, the sales value of accounting software licences, POS software licences and payroll software licences in Malaysia increased at a CAGR of 14.84%, 9.27% and 13.80%, respectively. Despite the COVID-19 pandemic in 2020 and 2021, the financial management software industry in Malaysia, measured in terms of the sales value of accounting software licences, POS software licences and payroll software licences recorded a YOY growth of 16.03%, 11.59% and 15.14% respectively in 2020, as well as 13.66%, 7.00% and 12.46% respectively in 2021. Similar trend was observed in the sales value of accounting software licences, POS software licences and payroll software licences in Singapore, Thailand, Indonesia, Vietnam and the Philippines from 2019 to 2021.
+The financial management software industry is expected to continue on its growth trajectory, driven by the growth in number of businesses, continuous businesses' need for the automation of financial management processes, as well as the acceleration of digitalisation efforts for business sustainability along with the continuous technology advancement and changes in business environments in order for businesses to become more fast-paced through automation which increases the efficiency in financial management. The financial management software industry is also expected to be driven by the implementation of initiatives for digital transformation by the governments in Malaysia, Singapore, Thailand, Indonesia, Vietnam and the Philippines.
+As such, in 2022, SMITH ZANDER estimates the following growth in the respective financial management software industry in Malaysia, Singapore, Thailand, Indonesia, Vietnam and the Philippines:
+
+The sales value of accounting software licences to have increased YOY by 14.36% to RM109.35 million in Malaysia, 15.36% to USD30.71 million in Singapore, 18.12% to USD35.39 million in Thailand, 18.47% to USD40.41 million in Indonesia, 23.40% to USD32.22 million in Vietnam and 17.47% to USD15.67 million in the Philippines.
+
+The sales value of POS software licences to have increased YOY by 10.11% to RM78.29 million in Malaysia, 12.00% to USD20.26 million in Singapore, 15.27% to USD26.50 million in Thailand, 15.33% to USD31.07 million in Indonesia, 19.35% to USD23.81 million in Vietnam and 15.94% to USD12.00 million in the Philippines.
+
+The sales value of payroll software licences to have increased YOY by 13.56% to RM96.63 million in Malaysia, 13.27% to USD25.70 million in Singapore, 17.35% to USD31.25 million in Thailand, 17.28% to USD34.89 million in Indonesia, 23.83% to USD29.05 million in Vietnam and 18.09% to USD14.23 million in the Philippines.
+In 2023, SMITH ZANDER forecasts the following growth in the respective financial management software industry in Malaysia, Singapore, Thailand, Indonesia, Vietnam and the Philippines:
+
+The sales value of accounting software licences to increase YOY by 13.27% to RM123.86 million in Malaysia, 14.33% to USD35.11 million in Singapore, 18.08% to USD41.79 million in Thailand, 18.36% to USD47.83 million in Indonesia, 22.69% to USD39.53 million in Vietnam and 16.85% to USD18.31 million in the Philippines.
+
+The sales value of POS software licences to increase YOY by 9.08% to RM85.40 million in Malaysia, 10.96% to USD22.48 million in Singapore, 15.21% to USD30.53 million in Thailand, 15.16% to USD35.78 million in Indonesia, 18.44% to USD28.20 million in Vietnam and 15.08% to USD13.81 million in the Philippines.
+
+The sales value of payroll software licences to increase YOY by 12.67% to RM108.87 million in Malaysia, 12.49% to USD28.91 million in Singapore, 17.25% to USD36.64 million in Thailand, 17.14% to USD40.87 million in Indonesia, 22.93% to USD35.71 million in Vietnam and 17.01% to USD16.65 million in the Philippines.
+
+152
+13

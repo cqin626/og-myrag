@@ -1,0 +1,388 @@
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY
+
+THIS PROSPECTUS SUMMARY ONLY HIGHLIGHTS THE KEY INFORMATION FROM OTHER PARTS OF THIS PROSPECTUS. IT DOES NOT CONTAIN ALL THE INFORMATION THAT MAY BE IMPORTANT TO YOU. YOU SHOULD READ AND UNDERSTAND THE CONTENTS OF THE WHOLE PROSPECTUS PRIOR TO DECIDING WHETHER TO INVEST IN OUR SHARES.
+
+3.1 Details of our IPO
+
+3.1.1 Allocation
+
+Our IPO comprises the Public Issue of 93,585,000 Issue Shares and the Offer for Sale by Selling Shareholders of 44,040,000 Offer Shares at the IPO Price, payable in full on application and is subject to the terms and conditions of this Prospectus. The IPO Shares are expected to be allocated in the manner described below, subject to the underwriting and placement arrangement as set out in Section 4.8 of this Prospectus:
+
+Table: Allocation of IPO Shares
+
+Category	No. of Shares	% of the enlarged issued share capital (1)
+Public Issue		
+(i) Malaysian Public (2)	27,525,000	5.00
+(ii) Eligible Persons	11,010,000	2.00
+(iii) Placement to selected investors	55,050,000	10.00
+Offer for Sale		
+(i) Placement to selected investors	44,040,000	8.00
+Total	137,625,000	25.00
+
+Notes:
+(1) Based on our enlarged issued share capital of 550,500,000 Shares after our IPO.
+(2) 50.00% will be set aside for Bumiputera individuals, companies, societies, co-operatives and institutions.
+
+Further details on our IPO are set out in Section 4 of this Prospectus.
+
+3.1.2 The principal statistics of our IPO
+
+Upon completion of our IPO, our issued share capital will be as follows:
+
+Table: Principal Statistics of IPO
+
+Item	No. of Shares	RM
+Issued share capital as at the date of this Prospectus	456,915,000	8,007,511
+Shares to be issued pursuant to our Public Issue	93,585,000	30,883,050
+Less: Estimated listing expenses directly attributable to the Public Issue	-	(388,037)
+Enlarged issued share capital upon Listing	550,500,000	38,502,524
+IPO Price		RM0.33
+Pro forma consolidated NA per Share as at 31 December 2022		
+(based on the enlarged issued share capital upon Listing) (RM)		0.09
+Market capitalisation upon Listing (RM'000)		181,665
+
+7
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+3.1.3 Moratorium on our Shares
+
+Our Specified Shareholders are not allowed to sell, transfer or assign any part of their respective holdings in our Shares during the First 6-Month Moratorium. Upon expiry of the First 6-Month Moratorium, our Specified Shareholders' aggregate shareholdings amounting to at least 45.0% of our total issued Shares remain under moratorium during the Second 6-Month Moratorium. Thereafter, our Specified Shareholders may sell, transfer or assign up to a maximum of one-third per annum (on a straight-line basis) of our Shares held under moratorium.
+
+Further details on the moratorium on our Shares are set out in Section 2.2 of this Prospectus.
+
+3.2 Our Group
+
+Our Company was incorporated in Malaysia under the Act on 25 February 2022 as a public limited company. Our Company is an investment holding company. Through our subsidiaries, our Group is principally involved in the business of financial management software. As at LPD, the structure of our Group is as follows:
+
+Organizational Chart Interpretation:
+The chart shows the corporate structure of the Group.
+
+At the top level is ADB (Autocount Dotcom Berhad).
+
+ADB holds 100.00% ownership in two direct subsidiaries:
+
+ACSB (Auto Count Sdn Bhd)
+
+ASSB (Autocount Software Sdn Bhd)
+
+ACSB, in turn, holds 100.00% ownership in two subsidiaries:
+
+ACSPL (Autocount (S) Pte Ltd)
+
+AOTGSB (Autocount On The Go Sdn Bhd)
+
+Further details of our Group are set out in Section 6.2 of this Prospectus.
+
+3.3 Principal Business Activities
+
+We are principally involved in the development and distribution of financial management software comprising accounting, POS and payroll under our "AutoCount" brand. Our range of AutoCount software is comprehensive as they are designed to support a wide range of fundamental finance and accounting functions of a business.
+
+All our AutoCount software are developed in-house and distributed as off-the-shelf software to end-user customers through our network of Authorised Dealers and directly through our internal sales and marketing team. This allows us to focus our resources on continuous enhancement of our existing software and development of new software to cater to changing digitalisation needs of businesses and companies. We also provide technical support and maintenance services to our Authorised Dealers as part of our service offerings to them, and to our direct end-user customers upon request.
+
+Since the revamp of our accounting software using Microsoft .Net Framework and Microsoft SQL Server in 2006 and up to LPD, we have sold approximately 70,000 AutoCount software licences for use by approximately 210,000 businesses and companies, primarily in Malaysia and Singapore. The chart below illustrates the overview of our business model:
+
+8
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+Business Model Diagram Interpretation:
+The diagram illustrates the Group's business model for its "autocount" branded financial management software.
+
+Core Offering: At the center is the "Comprehensive suite of financial management software," including:
+
+autocount ACCOUNTING
+
+autocount CloudAccounting
+
+autocount POS
+
+autocount OneSales
+
+autocount CloudPayroll
+
+In-house Support System: Supporting the software development and distribution is the "In-house supporting system" (left side), which comprises:
+
+In-depth industry knowledge and programming expertise
+
+In-house sales and marketing support
+
+AutoCount Academy
+
+Distribution Channels: The software is distributed through two main channels:
+
+Authorised Dealers:
+
+The Group distributes the software to a "Wide network of authorised dealers" (center-right).
+
+The Group provides sales support, product training, and technical training to these dealers.
+
+There are 264 dealers located in Malaysia, Singapore, Indonesia, Brunei, and Myanmar, primarily software solution providers.
+
+These dealers then sell the AutoCount software to "End-user customers" (far right), either as standalone products or as part of larger software solutions (potentially with customization).
+
+Dealers also provide technical support and maintenance services to end-users.
+
+Direct Sales:
+
+The Group sells AutoCount financial management software directly to "End-user customers" (far right).
+
+The Group provides direct technical support and maintenance services.
+
+The Group, via the AutoCount Academy, provides free courses, learning resources, and user guides.
+
+End Customers: The "End-user customers" (far right, depicted with building icons) mainly consist of small and medium enterprises.
+
+Further details on our Group's principal business activities are set out in Section 7.2 of this Prospectus.
+
+3.4 Impact of COVID-19
+
+Since the outbreak of COVID-19 pandemic in March 2020, there were several rounds of office closure due to lockdown measures imposed by the Government of Malaysia, as our business is not deemed as essential services and we were not allowed to open our office. There were minimal interruptions to our business operations as we were unable to conduct physical meetings and trainings with our employees and Authorised Dealers, or perform software implementation physically at our end-user customers' office. Nevertheless, we conducted virtual meeting and training sessions, and performed software implementation remotely. As such, there was minimal impact to our business operations in Malaysia pursuant to the outbreak of the COVID-19 pandemic.
+
+For our Singapore operations, since the imposition of circuit breaker in April 2020, our office had been closed until the re-opening of our office in March 2021 with limitation on workforce capacity as our Group was deemed as non-essential services. Save for the restrictions on conducting physical meetings and trainings with our employees and Authorised Dealers as well as inability to perform software implementation physically, there was no other impact to our business operations in Singapore pursuant to the outbreak of the COVID-19 pandemic.
+
+Despite several rounds of office closure during the COVID-19 pandemic, there was no material impact to our business operations and our Group managed to record revenue growth for the FYE 2020 and FYE 2021.
+
+Please refer to Section 7.14 of this Prospectus for further information on the impact of COVID-19 pandemic on our Group.
+
+3.5 Competitive Strengths
+
+The following competitive strengths have driven our past business performance and will support our future growth:
+
+(i) Our AutoCount software are widely used in the market across multiple industries
+Since the revamp of our accounting software using Microsoft .Net Framework and Microsoft SQL Server in 2006 and up to LPD, we have sold approximately 70,000 AutoCount software licences for use by approximately 210,000 businesses and companies, primarily in Malaysia and Singapore.
+
+9
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+These businesses and companies spread across multiple industries, which include consumer products, F&B, trading, distribution, services, grocery retailing, construction, property development, hospitality, telecommunications and logistics to support their finance and accounting functions.
+
+(ii) Our business is backed by our in-house supporting system that drives our business sustainability
+We adopt a business model which emphasises on developing good quality software for distribution to end-user customers by our Authorised Dealers. We leverage on our wide network of Authorised Dealers to sell and distribute our software, and our Authorised Dealers are backed by our in-house supporting system which is built on 3 core areas, i.e. in-depth industry knowledge and programming expertise, in-house sales and marketing support and AutoCount Academy.
+
+(iii) We offer a range of financial management software which can be integrated and customised to suit different needs of businesses and companies
+Our Group offers 3 types of financial management software, comprising accounting software, POS software and payroll software under our “AutoCount" brand. These software can be used by businesses and companies on a standalone basis, or co-integrated with each other (e.g. integration between AutoCount Accounting and AutoCount POS Retail) to form a comprehensive system to support day-to-day business operations. Such integration ensures seamless connectivity between the different software under different business functions and streamlines the flow of data and information (e.g. sales data, commission and payroll record) across these business functions, which simplify financial and sales reporting process for better and timely decision making.
+
+(iv) Our experience, knowledge and expertise in the development of financial management software enable us to continuously upgrade and adapt our software to changing market requirements and trends
+Having been in the financial management software industry for approximately 27 years, we have accumulated relevant experience and knowledge in developing software to support businesses' and companies' accounting and other business functions. As at LPD, we have our in-house software development team comprising 31 programmers who are responsible for the development as well as continuous improvement and upgrades of our AutoCount software.
+
+(v) We have an established AutoCount brand and a wide Authorised Dealer network to expand our market and brand presence
+We have established a wide Authorised Dealer network comprising 269 dealers as at LPD across most states and federal territories in Malaysia, Singapore, Indonesia, the Philippines, Myanmar and Brunei to reach out to a broad base of businesses and companies to achieve economies of scale and grow our market share. Amongst our Authorised Dealers, most of them are software solution providers which are involved in the provision of software solutions using our AutoCount software as one or several of the modules of the software solutions together with some customisations to provide vertical solutions to their customers. This has further strengthened our competitive edge as we can leverage on their IT expertise in providing complete vertical solutions to businesses and companies using our AutoCount software. Please refer to Section 7.2.3 of this Prospectus for further information on our authorised dealer network.
+
+10
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+(vi) Our AutoCount Academy provides quick and easy access to a library of learning materials and coding references, as well as partnerships with educational institutions, which strengthen our reputation in the industry and create potential demand for our software
+Over the years, we have developed and improved our learning and training materials which are free materials made available online to allow our authorised dealers and end-user customers to learn about our AutoCount software at their convenience.
+As we emphasise on providing our users a friendly user experience, the learning materials provided will grant them quick and easy access to learn and pick up our software and speed up the adoption and usage of our software at their workplace, which aim to encourage continuous usage of our software. Since 2010, our Group has set up an education team with the aim of partnering with educational institutions including local public and private universities and colleges to utilise our accounting software for academic purposes.
+
+(vii) We have an experienced Executive Directors and Key Senior Management team
+Our Executive Directors and Key Senior Management team possesses in-depth industry knowledge, technical know-how and experience in finance management software industry. Our Executive Chairman, CCP, and our Managing Director, CYT, have approximately 27 years of experience in the finance management software industry. They have contributed significantly to our Group's historical expansion, and will continue to play pivotal roles in our Group's future growth. Our Executive Directors are supported by a team of Key Senior Management, which we believe with their respective experience and commitment to our Group, will provide for the continuous growth of our Group in the future.
+
+Further details on our competitive strengths are set out in Section 7.7 of this Prospectus.
+
+3.6 Business Strategies and Plans
+
+Our future plans and strategies are as follows:
+
+(i) We intend to expand our business presence to Thailand, Indonesia, Vietnam and Philippines; as well as continue to expand our business in Singapore
+As at LPD, our Group operates from our offices in Malaysia and Singapore, which are the main countries we derived our sales from. In the past 4 FYEs 2019 to 2022, revenue generated from Malaysia accounted for 83.15%, 78.58%, 75.10% and 80.65% to our Group's total revenue respectively, whereas Singapore accounted for 15.18%, 20.06%, 24.19% and 18.72% to our Group's total revenue respectively. Leveraging on our success in growing our business in Singapore, we intend to expand our business in Thailand, Indonesia, Vietnam and the Philippines, with primary focus on the sale of cloud-native software in these countries. We also plan to further expand our business in Singapore for the sale of cloud-native software. As at LPD, our Group only offers on-premise software in Singapore.
+To facilitate this regional expansion plan, we intend to do the following:
+(a) Establishment of offices;
+(b) Hiring of personnel for each country;
+(c) Undertake sales and marketing activities; and
+(d) Localisation of software.
+
+11
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+(ii) We intend to intensify our R&D efforts to enhance our software offerings
+Our Group recognises the importance of continuous R&D to enhance existing software and develop new software in order to remain competitive and relevant in the industry. As such, as part of our continuous effort in improving our range of software offerings, we intend to intensify and strengthen our R&D efforts by focusing on the following areas:
+(a) Enhancement of existing software; and
+(b) Development of new software.
+
+Further details on our business strategies and plans are set out in Section 7.8 of this Prospectus.
+
+3.7 Risk Factors
+
+Our business is subject to a number of risk factors which may have a material adverse impact on our business, financial condition and results of operations. The following is a summary of the key risk factors that we face in our business operations:
+
+(i) We are dependent on our Executive Directors and Key Senior Management team for continued success and growth of our business
+Since inception, the success of our Group has been attributed to the experience, industry knowledge and network, and skills of our Executive Directors and Key Senior Management team. The growth and future success of our Group will continue to be dependent on the continuous contribution from our Executive Chairman, CCP and our Managing Director, CYT for their leadership in setting the strategic direction and driving the business development of our Group.
+
+(ii) We are dependent on our team of programmers
+Our ability to retain and to attract competent and skilled programmers is crucial for our continued success, future business growth and expansion. Any loss of our programmers and our inability to find suitable replacements in a timely and cost-efficient manner may cause disruptions to our business operations and our ability to respond to technical issues and changes in technology quickly.
+
+(iii) We depend on third party cloud computing and hosting platform to function our AutoCount cloud-native software
+All our AutoCount cloud-native software are hosted on third party cloud computing and hosting platforms. As such, our Group is dependent on the quality, reliability, service upgrades, capacity and network connectivity of the third party cloud computing and hosting platforms for the hosting of our cloud-native software. If there are any major unforeseen interruptions in our third party cloud computing and hosting platforms, which are beyond our control, our end-user customers' user experience may be adversely affected, whereby our users may have limited or no access to our cloud-native software, and subsequently may have an adverse impact on our Group's reputation.
+
+(iv) We may not be able to successfully implement our business strategies
+The implementation of our business strategies may be influenced by factors beyond our control, such as changes in general market conditions, economic climate as well as political environment in Malaysia, Singapore, Thailand, Indonesia, Vietnam and the Philippines, which may affect the commercial viability of our business strategies.
+
+12
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+(v) We may be exposed to the risk of security breaches
+Our customers' information and all data generated from our cloud-native software are stored on third party cloud platform and transmitted through the internet. Storage of data electronically and data transmission over the internet may expose our database to external security threats such as malware attacks, hacking, espionage or cyber intrusions, as well as internal security breaches which include unauthorised access to restricted information by our employees. In the event where there are security breaches on the third party cloud platform which we subscribe to that lead to leakage of our customers' information to unauthorised parties, our reputation and relationship with our customers may be adversely affected. Further, it may also lead to loss of customers' confidence in our Group which will adversely affect our industry reputation.
+
+(vi) Our ownership rights may be infringed and / or we may inadvertently infringe on third party's ownership rights
+As all our AutoCount software are developed in-house by our Group, we retain the ownership rights of our software. However, there can be no assurance that the ownership rights will adequately protect our software against any infringement by third parties. Further, in the development of our software, including all on-going and future enhancements and modifications, there are possibilities that we could inadvertently infringe ownership rights held by third party(s). This would result in the risk of the third party challenging our Group's ownership rights or taking legal action against us.
+
+(vii) We are exposed to foreign exchange transaction risks which may impact the profitability of our Group
+We are exposed to foreign exchange transaction risk which was mainly arising from our revenue exposure to SGD, which constituted 15.18%, 20.07%, 24.19% and 18.72% of our total revenue in the FYEs 2019 to 2022 respectively. We currently do not have a formal policy with respect to our foreign exchange transactions, and we do not hedge our exposure to fluctuations in foreign currency exchange rates. As such, we are subject to foreign exchange fluctuation risk for our revenue and purchases denominated in foreign currencies which we transact, especially the SGD. Moving forward, we intend to expand to other Southeast Asia countries including Thailand, Indonesia, the Philippines and Vietnam. As such, our exposure to foreign exchange risk is expected to increase.
+
+(viii) Our business and operations may be exposed to sudden disruptions caused by serious pandemic and epidemic outbreaks
+On 11 March 2020, COVID-19 virus, also known as the novel coronavirus was declared a worldwide pandemic by the World Health Organisation. In light of the COVID-19 pandemic, the Government of Malaysia has imposed various degrees of nationwide movement restrictions. On 1 April 2022, the Government of Malaysia began the transition into an Endemic Phase with relaxed COVID-19 measures.
+During the movement restriction periods, there were several rounds of mandatory closure of our office, and our Authorised Dealers' offices were also closed at the same time. Despite our employees working from home during the periods of office closure, there were minimal interruptions to our business operations as we were unable to conduct physical meetings and trainings with our employees and Authorised Dealers as well as perform software implementation physically at our end-user customers' office.
+
+13
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+(ix) Our investments in R&D may not yield returns and may not positively contribute to our business operations
+Despite the commitments and efforts placed into R&D, there is no assurance that our R&D activities will yield results and develop software which suit the digitalisation needs of all businesses and companies that can substantially improve our financial performance. Further, if the development of new software or enhanced software are not able to complete in a timely manner, it could result in the loss of opportunities available in the market.
+
+(x) Our insurance coverage may not be adequate to cover all losses or liabilities that may arise in the course of our business operations
+We maintain insurance at levels that are customary in our industry to protect against various losses and liabilities. However, in the event of claims, our insurance may not be adequate to cover all losses or liabilities that might be incurred in our operations as a result of any unforeseen circumstances. Moreover, we will be subject to the risk that, in the future, we may not be able to maintain or obtain insurance of the type and amount desired at reasonable rates. If we were to incur a significant liability for which we were not fully insured, it could have a material adverse effect on our business operations and financial performance.
+
+Further details on the risks faced by our business and operations, industry and investment in our Shares are set out in Section 5 of this Prospectus.
+
+3.8 Directors and Key Senior Management
+
+Our Directors and Key Senior Management are as follows:
+
+(i) Directors
+
+Name	Designation
+CCP	Executive Director / Chairman
+CYT	Executive Director / Managing Director
+Dato' Ng Wan Peng	Independent Non-Executive Director
+Dr. Liew Soung Yue	Independent Non-Executive Director
+Chin Chee Seng	Independent Non-Executive Director
+
+(ii) Key Senior Management
+
+Name	Designation
+Ng Boon Thye	Sales and Marketing Director
+Lim Kim Seng	Software Development Director
+Tan Wee Kong	Chief Financial Officer
+
+Further details on our Directors and Key Senior Management are set out in Section 9.2 and Section 9.3 of this Prospectus.
+
+3.9 Promoters and Substantial Shareholders
+
+The details of our Promoters and substantial shareholders, and their shareholding in our Company before and after our IPO are as follows:
+
+14
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+Table: Shareholdings of Promoters and Substantial Shareholders Before and After IPO
+
+Name	Nationality	Before our IPO - Direct No. of Shares	Before our IPO - Direct (1)%	Before our IPO - Indirect No. of Shares	Before our IPO - Indirect (1)%	After our IPO - Direct No. of Shares	After our IPO - Direct (2)%	After our IPO - Indirect No. of Shares	After our IPO - Indirect (2)%
+Promoters and substantial shareholders									
+CCP	Malaysian	187,421,964	41.02	-	-	169,357,196	30.76	-	-
+CYT	Malaysian	187,421,964	41.02	-	-	169,357,196	30.76	-	-
+Substantial shareholders									
+Lim Kim Seng	Malaysian	26,615,299	5.83	-	-	24,049,969	4.37	-	-
+Ng Boon Thye	Malaysian	26,615,299	5.83	-	-	24,049,969	4.37	-	-
+
+Notes:
+(1) Based on our issued share capital of 456,915,000 Shares before our IPO.
+(2) Based on enlarged issued share capital of 550,500,000 Shares after our IPO.
+
+Further details on the Promoters and substantial shareholders are set out in Section 9.1 of this Prospectus.
+
+3.10 Utilisation of proceeds
+
+The total gross proceeds from the Public Issue will amount to RM30.88 million based on the IPO Price. We expect the proceeds to be used in the following manner:
+
+Table: Utilisation of Proceeds from Public Issue
+
+Purposes	RM'000	%	Estimated timeframe for utilisation from the Listing date
+Regional expansion to capture growth opportunities	17,352	56.19	Within 36 months
+Strengthening our R&D to expand our existing products' features	5,208	16.86	Within 24 months
+Working capital	4,423	14.32	Within 24 months
+Estimated listing expenses	3,900	12.63	Within 1 month
+Total	30,883	100.00	
+
+Further details on the use of proceeds are set out in Section 4.7 of this Prospectus.
+
+3.11 Financial Highlights
+
+The key historical financial information of our Group for the Financial Years Under Review are as follows:
+
+Table: Audited Financial Highlights (Income Statement)
+
+Item	FYE 2019 RM'000	FYE 2020 RM'000	FYE 2021 RM'000	FYE 2022 RM'000
+Revenue	18,891	19,638	29,483	38,717
+COS	(4,830)	(4,793)	(5,904)	(7,769)
+Other income	180	328	495	877
+GP	14,061	14,845	23,579	30,948
+PBT	5,515	6,890	13,547	18,211
+PAT attributable to owners of ADB	4,183	5,716	10,030	13,841
+
+15
+
+Registration No. 202201006885 (1452582-U)
+
+PROSPECTUS SUMMARY (cont'd)
+
+Table: Audited Financial Highlights (Balance Sheet, Cash Flow, Ratios)
+
+Item	FYE 2019 RM'000	FYE 2020 RM'000	FYE 2021 RM'000	FYE 2022 RM'000
+Current assets	12,439	21,374	28,732	23,224
+Current liabilities	5,011	9,073	27,540	11,123
+Total assets	16,658	25,726	40,518	37,302
+Total loans and borrowings (excluding lease liabilities for rights-of-use assets)	156	41	5,438	4,976
+Shareholders' fund/NA attributable to owners of the Company	10,325	16,039	8,008	21,663
+Cash flow from operating activities	4,806	8,782	12,904	17,030
+Cash and short-term deposits	10,751	15,623	24,846	22,609
+Dividend			18,060	
+GP margin (%) (1)	74.43	75.59	79.97	79.93
+PBT margin (%) (2)	29.19	35.09	45.95	47.04
+PAT margin (%) (2)	22.14	29.11	34.02	35.75
+Current ratio (times) (3)	2.48	2.36	1.04	2.09
+Gearing ratio (times) (4)	0.02	0.003	0.68	0.23
+Trade receivables turnover (days) (5)	21	39	39	17
+Trade payables turnover (days) (6)	N/A	N/A	N/A	N/A
+
+Notes:
+(1) Calculated based on GP over revenue.
+(2) Calculated based on PBT/PAT over revenue.
+(3) Computed based on current assets over current liabilities as of each financial year ended.
+(4) Computed based on our total loans and borrowings (excluding lease liabilities for rights-of-use assets) over total equity for each financial year ended.
+(5) Computed based on the average trade receivables over revenue for the financial years multiplied by 365 days for each financial year ended.
+(6) Computed based on the average trade payables over the cost of sales for the financial years multiplied by 365 days for each financial year ended. Not applicable as there were no outstanding balances for trade payables as at each financial year-end.
+
+Further details on our historical financial information are set out in Section 12.2 of this Prospectus.
+
+3.12 Dividend Policy
+
+Our Group presently does not have any formal dividend policy, and the declaration of dividends and other distributions are subject to the discretion of our Board. It is our Board's policy to recommend dividends to allow our shareholders to participate in the profits of our Group. However, our ability to pay dividends or make other distributions to our shareholders in the future years is subject to various factors such as having profits and excess funds, which are not required to be retained to fund our business.
+
+Further details on our dividend policy are set out in Section 12.16 of this Prospectus.
+
+16

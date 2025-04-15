@@ -1,0 +1,414 @@
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP
+
+6.1 Our Company
+
+Our Company was incorporated in Malaysia under the Act on 25 February 2022 as a public limited company.
+
+Our Company is an investment holding company. Through our subsidiaries, our Group is principally involved in the business of financial management software.
+
+As at LPD, our issued share capital is RM8,007,511.00 comprising 456,915,000 Shares. The movements in our issued share capital since our date of incorporation are set out below:
+
+Date of allotment	No. of Shares allotted	Consideration / Nature of transaction	Cumulative issued share capital
+			RM
+25 February 2022	2	Cash/ Subscriber’s shares	2.00
+20 June 2022	456,914,998	Otherwise (1)	8,007,511.00
+
+Note:
+
+(1) Being the consideration paid by our Company to CCP, CYT, Liaw Huah Seng, Lim Kim Seng, Lee Chern Siong, Tey Wah Sheng and Ng Boon Thye in relation to the Acquisition of ACSB, details of which are set out in the table below:
+
+Vendor	Date emerged as shareholder of ACSB	Ordinary shares owned by the vendor(s) in ACSB which were sold to our Company (“Sale Shares”)	Consideration paid by our Company to the respective vendor(s) in respect of the acquisition of Sale Shares
+CCP	10 January 2007	211,250	187,421,963
+CYT	10 January 2007	211,250	187,421,963
+Liaw Huah Seng	13 December 2019	15,000	13,309,934
+Lim Kim Seng	6 August 2019	30,000	26,615,299
+Lee Chern Siong	6 August 2019	7,500	6,652,682
+Tey Wah Sheng	6 August 2019	10,000	8,877,858
+Ng Boon Thye	6 August 2019	30,000	26,615,299
+Total		515,000	456,914,998
+
+As at LPD, we do not have any outstanding warrants, options, convertible securities and uncalled capital. In addition, there are no discounts, special terms or instalment payment terms applicable to the payment of the consideration for the above allotments.
+
+Upon completion of our IPO, our enlarged issued share capital will increase to RM38,502,524.00 comprising 550,500,000 Shares.
+
+45
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+6.2 Our Group
+
+(i) An overview of our Group structure before the Acquisitions is as follows:
+
+Interpretation of Diagram: Group Structure Before Acquisitions
+
+The diagram illustrates the ownership structure of the entities that would eventually form the ADB Group before the Acquisitions took place.
+
+Top Level Shareholders:
+
+CCP held 41.02% in ACSB.
+
+CYT held 41.02% in ACSB.
+
+A group of individuals collectively held 17.96% in ACSB. These individuals are listed as:
+
+Ng Boon Thye (5.83%)
+
+Lim Kim Seng (5.83%)
+
+Liaw Huah Seng (2.91%)
+
+Tey Wah Sheng (1.94%)
+
+Lee Chern Siong (1.45%)
+
+CCP held 50.00% in ASSB.
+
+CYT held 50.00% in ASSB.
+
+CCP held 41.00% in AOTGSB.
+
+CYT held 41.00% in AOTGSB.
+
+Lai Guan Siong held 9.00% in AOTGSB (part of an 18.00% block).
+
+Tan Yeow Sing held 9.00% in AOTGSB (part of an 18.00% block).
+
+Intermediate Holding/Operating Companies:
+
+ACSB: Owned by CCP (41.02%), CYT (41.02%), and the group of individuals (17.96%).
+
+ASSB: Owned 50% by CCP and 50% by CYT.
+
+AOTGSB: Owned by CCP (41.00%), CYT (41.00%), Lai Guan Siong (9.00%), and Tan Yeow Sing (9.00%).
+
+Subsidiaries:
+
+ACSPL: 100.00% owned by ACSB.
+
+AMCL: 100.00% owned by ACSPL (with a note indicating 2 shares were held in trust by CYT for ACSPL).
+
+ADB: This entity (Autocount Dotcom Berhad) is shown connected below ASSB, indicating it was likely part of the structure but perhaps not fully integrated or active in the same way pre-acquisition, or its role changed. The diagram shows ASSB linked to ADB, but no ownership percentage is given between them at this stage in this particular diagram layout, though ASSB and ADB are linked below CCP and CYT.
+
+Flow:
+
+Arrows indicate ownership flow downwards from shareholders to intermediate companies (ACSB, ASSB, AOTGSB) and further down to their subsidiaries (ACSPL, AMCL).
+
+ADB is shown linked below ASSB.
+
+ACSB, ASSB, and AOTGSB appear as separate entities under common shareholders (CCP, CYT, etc.) before the consolidation under ADB.
+
+Note:
+(1) 2 of 50,000 shares of AMCL were previously held in trust by CYT for ACSPL. The beneficial owner of the 2 shares is ACSPL as it was then a requirement to have at least 2 shareholders in a company incorporated in Myanmar. ACSPL had on 12 May 2022 completed the disposal of its wholly-owned subsidiary, AMCL to U Thet Tun Oo (a Myanmar citizen) for a total consideration of USD50,000.
+
+46
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+(ii) An overview of our Group structure as at LPD is as follows:
+
+Interpretation of Diagram: Group Structure as at LPD
+
+This diagram shows the ownership structure of the ADB Group as at the Latest Practicable Date (LPD), 15 March 2023, after the Acquisitions of ASSB and AOTGSB, but just before the Acquisition of ACSB was completed (though the share consideration was determined based on this structure). The diagram reflects ADB as the main holding company.
+
+Top Level Shareholders of ADB:
+
+CCP held 41.02%.
+
+CYT held 41.02%.
+
+A group of individuals collectively held 17.96%. These individuals are listed as:
+
+Ng Boon Thye (5.83%)
+
+Lim Kim Seng (5.83%)
+
+Liaw Huah Seng (2.91%)
+
+Tey Wah Sheng (1.94%)
+
+Lee Chern Siong (1.45%)
+(Note: These percentages reflect the pre-IPO holdings in ADB resulting from the share swap in the Acquisition of ACSB, which technically completed post-LPD but the structure reflects the intended consolidation)
+
+Holding Company:
+
+ADB (Autocount Dotcom Berhad): This is the parent company of the Group.
+
+Direct Subsidiaries of ADB:
+
+ACSB: 100.00% owned by ADB.
+
+ASSB: 100.00% owned by ADB.
+
+Subsidiaries of ACSB:
+
+ACSPL: 100.00% owned by ACSB.
+
+AOTGSB: 100.00% owned by ACSB.
+
+Flow:
+
+Ownership flows downwards from the shareholders (CCP, CYT, and the individual group) to the holding company, ADB.
+
+ADB directly owns 100% of ACSB and ASSB.
+
+ACSB, in turn, owns 100% of ACSPL and AOTGSB.
+
+This structure represents a consolidated group under ADB, incorporating the previously separate entities (ACSB, ASSB, AOTGSB, and ACSPL) through the Acquisitions. AMCL is no longer part of the structure as it was disposed of.
+
+47
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+(iii) An overview of our Group structure upon Listing is as follows:
+
+Interpretation of Diagram: Group Structure upon Listing
+
+This diagram illustrates the expected ownership structure of the ADB Group immediately after the completion of the IPO and Listing on the ACE Market.
+
+Top Level Shareholders of ADB:
+
+CCP: Holds 30.76%.
+
+CYT: Holds 30.76%.
+
+Group of Individuals: Collectively hold 13.48%. These individuals are listed with their individual post-IPO percentages:
+
+Ng Boon Thye (4.37%)
+
+Lim Kim Seng (4.37%)
+
+Liaw Huah Seng (2.19%)
+
+Tey Wah Sheng (1.46%)
+
+Lee Chern Siong (1.09%)
+
+Public Shareholders: Collectively hold 25.00% following the IPO.
+
+Holding Company:
+
+ADB (Autocount Dotcom Berhad): Remains the publicly listed parent company.
+
+Direct Subsidiaries of ADB:
+
+ACSB: 100.00% owned by ADB.
+
+ASSB: 100.00% owned by ADB.
+
+Subsidiaries of ACSB:
+
+ACSPL: 100.00% owned by ACSB.
+
+AOTGSB: 100.00% owned by ACSB.
+
+Flow:
+
+Ownership flows downwards from the shareholders (CCP, CYT, individual group, and Public Shareholders) to the holding company, ADB.
+
+ADB directly owns 100% of ACSB and ASSB.
+
+ACSB owns 100% of ACSPL and AOTGSB.
+
+The key difference from the LPD structure is the introduction of Public Shareholders holding 25.00% of ADB and the corresponding dilution of the original shareholders' stakes. The underlying operational structure of the subsidiaries remains the same.
+
+6.2.1 Acquisitions
+
+In conjunction with, and as an integral part of our Listing, ADB had undertaken the following Acquisitions:
+
+(i) Acquisition of ACSB
+
+The acquisition by ADB of 100.00% equity interest in ACSB comprising 515,000 ordinary shares from original shareholders of ACSB, i.e. CCP, CYT, Liaw Huah Seng, Lim Kim Seng, Lee Chern Siong, Tey Wah Sheng and Ng Boon Thye for a purchase consideration of RM8,007,509.00 was fully satisfied by the issuance of 456,914,998 new ADB Shares at an issue price of approximately RM0.018 per ADB Share pursuant to the share sale agreement dated 9 May 2022 (as supplemented on 21 June 2022). Based on the aforementioned supplemental agreement, the purchase consideration of RM8,007,509.00 is based on the pro forma combined NA of ACSB as at 31 December 2021 of RM8,007,509.00 which had been arrived at as follow:
+
+	(RM)
+ACSB	6,920,157
+ACSPL	1,263,215
+AOTGSB	(156,655)
+	8,026,717
+Less: Combined adjustment	(19,208)
+Pro forma combined NA	8,007,509
+
+For information, the Acquisition of AOTGSB was completed on 15 April 2022. The Acquisition of ACSB was completed on 20 June 2022.
+
+48
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+(ii) Acquisition of AOTGSB
+
+The acquisition by ACSB of 100.00% equity interest in AOTGSB comprising 300,000 ordinary shares from original shareholders of AOTGSB, i.e. CCP, CYT, Tan Yeow Sing and Lai Guan Siong for a purchase consideration of RM300,000.00 was fully satisfied in cash pursuant to the share sale agreements all dated 18 February 2022. The purchase consideration of RM300,000.00 is based on the basis of original investment cost, which represents the share capital in AOTGSB, as paid by the aforementioned original shareholders. The Acquisition of AOTGSB was completed on 15 April 2022.
+
+(iii) Acquisition of ASSB
+
+The acquisition by ADB of 100.00% equity interest in ASSB comprising 5,500 ordinary shares from original shareholders of ASSB, i.e. CCP and CYT for a purchase consideration of RM5,500.00 was fully satisfied in cash pursuant to the share sale agreements all dated 6 April 2022. The purchase consideration of RM5,500.00 is based on the basis of original investment cost, which represents the share capital in ASSB, as paid by the aforementioned original shareholders. The Acquisition of ASSB was completed on 9 May 2022.
+
+For information, we had determined our purchase consideration for our acquisition of AOTGSB and ASSB based on our original investment costs in these companies as these companies were in a net liabilities position. We acquired ACSB based on its pro forma combined NA as the transaction was merely to facilitate the shareholders of ACSB to become shareholders of ADB, being the holding company of ACSB, and for our Group to have the same pro forma combined NA assuming all our subsidiaries have been combined as a group.
+
+6.3 Our Subsidiaries
+
+The details of our subsidiaries are set out below:
+
+Name / Registration no.	Date / Place of incorporation	Principal place of business	Issued share capital	Effective equity interest	Principal activities
+Subsidiary of ADB					
+ACSB 200601031841 (751600-A)	27 October 2006 Malaysia	Malaysia	RM501,500.00	100.00%	Trading and development of software
+ASSB 202001018079 (1374399-V)	10 July 2020 Malaysia	Malaysia	RM5,500.00	100.00%	Dormant
+Subsidiary of ACSB					
+AOTGSB 201601008185 (1179113-V)	11 March 2016 Malaysia	Malaysia	RM390,000.00	100.00%	Developing and distributing software
+
+49
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+Name / Registration no.	Date / Place of incorporation	Principal place of business	Issued share capital	Effective equity interest	Principal activities
+ACSPL 201713604G	17 May 2017 Singapore	Singapore	SGD20,000.00 equivalent to RM66,800.00, adopting exchange ratio of SGD1:00: RM3.34 as at LPD	100.00%	Wholesale of computer software (except games) and also development of other software and programming activities
+
+6.3.1 ACSB
+
+(i) Background and history
+ACSB was incorporated in Malaysia under the CA 1965 and deemed registered under the Act on 27 October 2006, as a private limited company under the name of Soft Merit Sdn. Bhd.. It changed its name to Auto Count Sdn. Bhd. on 31 January 2007.
+
+(ii) Principal place of business
+ACSB’s principal place of business is at OASIS Office.
+
+(iii) Principal activities and products / services
+ACSB is principally involved in the business of trading and development of software. For information, apart from sale of AutoCount software, ACSB also trade other third party software such as SQL runtime license on Microsoft SQL server.
+
+(iv) Share capital
+As at LPD, the issued share capital of ACSB is RM501,500.00 comprising 515,000 ordinary shares.
+
+Date of allotment	No. of shares allotted	Consideration / Nature of transaction	Cumulative issued share capital
+			RM
+28 October 2006	2	Cash	2.00
+13 August 2009	99,998	Cash	100,000.00
+12 March 2013	200,000	Cash	300,000.00
+13 July 2015	200,000	Non-Cash(1)	500,000.00
+13 December 2019	15,000	Cash	501,500.00
+
+50
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+Note:
+(1) The said issuance was by way of bonus issue which was undertaken via capitalisation of a sum of RM200,000 from the retained profits of ACSB as at 31 December 2014.
+
+(v) Shareholder
+ACSB became our wholly-owned subsidiary upon completion of the Acquisition of ACSB on 20 June 2022.
+
+(vi) Subsidiary or associated company
+As at LPD, the subsidiaries of ACSB are ACSPL and AOTGSB.
+
+6.3.2 ASSB
+
+(i) Background and history
+ASSB was incorporated in Malaysia on 10 July 2020 under the Act, as a private limited company under its present name.
+
+(ii) Principal place of business
+ASSB has no principal place of business as at LPD in view that it is a dormant company. Nevertheless, the registered address of ASSB as at LPD is at Level 5, Tower 8, Avenue 5, Horizon 2, Bangsar South City, 59200 Kuala Lumpur
+
+(iii) Principal activities and products / services
+ASSB is currently a dormant company.
+
+For information, ASSB’s full name is “Autocount Software Sdn Bhd” which is similar to the “Autocount” brand name and the Autocount website domain “www.autocountsoft.com”. As such, ASSB was subsequently acquired as part of our Group to preserve our branding profile.
+
+Moving forward, ASSB may be used for the development and sales of new products. However, as at LPD, we have yet to decide on our plans for ASSB.
+
+(iv) Share capital
+
+Date of allotment	No. of shares allotted	Consideration / Nature of transaction	Cumulative issued share capital
+			RM
+10 July 2020	100	Cash	100.00
+29 March 2022	5,400	Cash	5,500.00
+
+51
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+(v) Shareholder
+ASSB became our wholly-owned subsidiary upon completion of the Acquisition of ASSB on 9 May 2022.
+
+(vi) Subsidiary or associated company
+ASSB does not have any subsidiary or associated company.
+
+6.3.3 AOTGSB
+
+(i) Background and history
+AOTGSB was incorporated in Malaysia on 11 March 2016 under the Act, as a private limited company under its present name.
+
+(ii) Principal place of business
+AOTG’s principal place of business is at OASIS Office.
+
+(iii) Principal activities and products / services
+AOTGSB is principally involved in the business of developing and distributing software.
+
+(iv) Share capital
+
+Date of allotment	No. of shares allotted	Consideration / Nature of transaction	Cumulative issued share capital
+			RM
+11 March 2016	232,500	Cash	232,500.00
+21 March 2016	67,500	Cash	300,000.00
+20 June 2022	90,000	Cash	390,000.00
+
+(v) Shareholder
+AOTGSB became our wholly-owned subsidiary upon completion of the Acquisition of AOTGSB on 15 April 2022.
+
+(vi) Subsidiary or associated company
+AOTGSB does not have any subsidiaries or associated companies.
+
+52
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+6.3.4 ACSPL
+
+(i) Background and history
+ACSPL was incorporated in Singapore on 17 May 2017 as a private limited company under its present name.
+
+(ii) Principal place of business
+ACSPL’s principal place of business is at 12 Arumugam Road, #05-10A, LTC Building B, Singapore, 409958.
+
+(iii) Principal activities and products / services
+ACSPL is principally involved in the business of the wholesale of computer software (except games) and also development of other software and programming activities.
+
+(iv) Share capital
+As at LPD, the issued share capital of ACSPL is SGD 20,000.00 (equivalent to RM66,800.00, adopting exchange ratio of SGD1:00: RM3.34 as at LPD).
+
+Date of allotment	No. of shares allotted	Consideration / Nature of transaction	Cumulative issued share capital
+			SGD
+17 May 2017	20,000	Cash	20,000.00
+
+(v) Shareholder
+ACSPL is a wholly owned subsidiary of ACSB, which in turn, is a wholly owned subsidiary of our Company.
+
+(vi) Subsidiary or associated company
+As at LPD, ACSPL does not have any subsidiary or associated company. For clarity purpose, ACSPL had on 12 May 2022 disposed of its wholly-owned subsidiary, AMCL to U Thet Tun Oo (a Myanmar citizen) for a total consideration of USD50,000. The said disposal was completed on 12 May 2022. The disposal of consideration of USD50,000 was decided after taking into consideration:- (i) the brand awareness and the client base built by ACSPL; and (ii) exclusive dealership for our software in Myanmar for three years commencing from 12 May 2022 to 11 May 2025. For information, 2 out of 50,000 AMCL shares were previously held in trust by CYT for ACSPL. The beneficial owner of the 2 shares was ACSPL.
+
+For information, AMCL was incorporated on 16 August 2017 to carry out the business of computer programming, consultancy and related activities. For the FYE 2019, AMCL recorded revenue of USD39,547. Since FYE 2020 and up to 12 May 2022 (being the date of disposal of AMCL by ACSPL), AMCL has not been operational. Based on the unaudited financial statements of AMCL for the FYE 31 March 2021, AMCL recorded nil revenue, loss after tax of USD1,136 and net liabilities of USD20,837.07.
+
+53
+
+Registration No. 202201006885 (1452582-U)
+
+6. INFORMATION ON OUR GROUP (cont’d)
+
+As at 31 December 2021, ACSPL’s investment in AMCL has been fully impaired. In view thereof, Myanmar is not part of our Group’s immediate expansion plan and we have decided to dispose of our interest in AMCL. For information, Myanmar has not been included in our Group’s regional expansion plan as AMCL had operated in Myanmar from 2017 to 2019 but had since ceased its operations as AMCL had been loss making since its operations commenced and that we have chosen the top 4 countries ranked by nominal value of gross domestic product within ASEAN excluding Malaysia and Singapore.
+
+[THE REST OF THIS PAGE HAS BEEN INTENTIONALLY LEFT BLANK]
+
+54
