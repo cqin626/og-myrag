@@ -1,5 +1,7 @@
 ipykernel
+ipywidgets
 openai>=1.0.0
+pinecone
 pymongo
 python-dotenv
 tenacity

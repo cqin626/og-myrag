@@ -1,1 +1,2 @@
 from .mongodb_storage import MongoDBStorage
+from .pinecone_storage import PineconeStorage

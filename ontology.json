@@ -117,7 +117,7 @@
             "source": "Company",
             "target": "Place",
             "type": "hasOperationIn",
-            "llm-guidance": "Use when a company is described as having physical business presence such as offices, stores, factories, facilities, or branches in a location.",
+            "llm-guidance": "Use this when a company is explicitly described as having a physical business presence - such as offices, branches, factories, retail stores, or other operational facilities - in a specific location. Do not use for personal addresses of individuals such as directors or employees.",
             "example": "Oriental Kopi hasOperationIn Klang Valley"
          },
          {

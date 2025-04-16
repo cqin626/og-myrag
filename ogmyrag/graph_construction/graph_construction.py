@@ -50,7 +50,7 @@ def get_formatted_entities(
    delimiter: str = "<|>",
    timezone_str: str = "Asia/Kuala_Lumpur"
    ) -> list[dict[str, Any]]:
-      app_logger.info(f"Formatting {len(entities)} entity(s) with delimiter '{delimiter}'")
+      app_logger.info(f"Formatting {len(entities)} entity(ies) with delimiter '{delimiter}'")
       
       formatted_entities = []
       
@@ -80,8 +80,9 @@ def get_formatted_entity(
          "type": entity_type,
          "description": entity_description,
          "created_at": get_formatted_current_datetime(timezone),
-         "inserted_at": "",
-         "last_modified_at": get_formatted_current_datetime(timezone)
+         "last_modified_at": get_formatted_current_datetime(timezone),
+         "inserted_into_vectordb_at": "",
+         "inserted_into_graphdb_at": "",
       }
       
       
@@ -123,6 +124,21 @@ def get_formatted_relationship(
          "target": relationship_target,
          "description": relationship_description,
          "created_at": get_formatted_current_datetime(timezone),
-         "inserted_at": "",
-         "last_modified_at": get_formatted_current_datetime(timezone)
+         "last_modified_at": get_formatted_current_datetime(timezone),
+         "inserted_into_graphdb_at": "",
       }
+
+def get_formatted_entity_for_vectordb(
+   entity: dict[str, Any], 
+   timezone="Asia/Kuala_Lumpur"
+   ) -> dict[str, Any]:
+   return {
+      "id": str(entity["_id"]),
+      "name": entity["name"],
+      "namespace": entity["type"],
+      "metadata": {
+         "description": entity["description"],
+         "created_at": get_formatted_current_datetime(timezone),
+         "last_modified_at": get_formatted_current_datetime(timezone),
+      }
+   }
