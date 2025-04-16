@@ -134,9 +134,10 @@ def get_formatted_entity_for_vectordb(
    ) -> dict[str, Any]:
    return {
       "id": str(entity["_id"]),
-      "name": entity["name"],
+      "name": entity["name"], 
       "namespace": entity["type"],
       "metadata": {
+         "entity_name": entity["name"],
          "description": entity["description"],
          "created_at": get_formatted_current_datetime(timezone),
          "last_modified_at": get_formatted_current_datetime(timezone),
