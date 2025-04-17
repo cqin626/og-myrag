@@ -143,3 +143,34 @@ def get_formatted_entity_for_vectordb(
          "last_modified_at": get_formatted_current_datetime(timezone),
       }
    }
+
+def get_formatted_entity_for_graphdb(
+   entity: dict[str, Any], 
+   timezone="Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+   return {
+      "id": str(entity["_id"]),
+      "name": entity["name"], 
+      "description": entity["description"],
+      "created_at": get_formatted_current_datetime(timezone),
+      "last_modified_at": get_formatted_current_datetime(timezone),
+   }
+   
+def get_formatted_relationship_for_graphdb(
+   relationship: dict[str, Any], 
+   timezone="Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+   return {
+      "id": str(relationship["_id"]),
+      "source_id": relationship["source_entity_id"], 
+      "target_id": relationship["target_entity_id"],
+      "rel_type": relationship["type"],
+      "properties": {
+         "source_entity_name": relationship["source"],
+         "target_entity_name": relationship["target"],
+         "description": relationship["description"],
+         "created_at": get_formatted_current_datetime(timezone),
+         "last_modified_at": get_formatted_current_datetime(timezone),
+      },
+  
+   }

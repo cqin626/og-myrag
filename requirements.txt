@@ -1,6 +1,7 @@
 ipykernel
 ipywidgets
 openai>=1.0.0
+neo4j
 pinecone
 pymongo
 python-dotenv

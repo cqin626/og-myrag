@@ -33,9 +33,10 @@ class PineconeStorage:
                 )
             self.index = self.pinecone.Index(index_name)
             self.openai = AsyncOpenAI(api_key=openai_api_key)
+            pinecone_logger.info(f"Connected to Pinecone index '{index_name}' successfully.")
 
         except Exception as e:
-            print(f"Could not connect to Pinecone: {str(e)}")
+            pinecone_logger.error(f"Could not connect to Pinecone: {str(e)}")
             raise
 
     async def create_vectors(self, items: list[dict[str, Any]]) -> None:
