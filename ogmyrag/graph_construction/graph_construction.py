@@ -161,11 +161,11 @@ def get_formatted_relationship_for_graphdb(
    timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
    return {
-      "id": str(relationship["_id"]),
       "source_id": relationship["source_entity_id"], 
       "target_id": relationship["target_entity_id"],
-      "rel_type": relationship["type"],
+      "type": relationship["type"],
       "properties": {
+         "id": str(relationship["_id"]),
          "source_entity_name": relationship["source"],
          "target_entity_name": relationship["target"],
          "description": relationship["description"],
