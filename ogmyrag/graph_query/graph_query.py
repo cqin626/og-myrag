@@ -1,39 +1,29 @@
 import logging
-import os
-import openai
-from typing import Any
 
 from ..prompts import PROMPT
 
-from ..util import get_formatted_openai_response
+from ..util import get_formatted_openai_response, get_ontology_for_query
+
+from ..base import BaseAgent, BaseMultiAgentSystem
 
 front_agent_logger = logging.getLogger("front-agent")
-
-class GraphQuerySystem:
-    def __init__(self, ontology: str):
-        """
-        Initialize the GraphQuerySystem with ontology.
-        """
-        try:
-            self.ontology = ontology
-            self.openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        except Exception as e:
-            raise ValueError(f"Failed to initialize GraphQuerySystem: {str(e)}")
-       
-    def front_agent(self, query:str):
-        """
-        An agent responsible for validating queries.
-        """
-        system_prompt = PROMPT["QUERY_VALIDATION"].format(ontology=self.ontology)
         
-        # front_agent_logger.debug(f"System prompt: {system_prompt}")
+class FrontAgent(BaseAgent):
+    """
+    An agent responsible for validating queries.
+    """
+    def handle_task(self, task_data: str):
+        formatted_ontology = get_ontology_for_query(self.agent_system.ontology)
+        system_prompt = PROMPT["QUERY_VALIDATION"].format(ontology=formatted_ontology)
+        
+        front_agent_logger.debug(f"System prompt: {system_prompt}")
 
         try:
             response = self.openai_client.responses.create(
                 model="o4-mini",
                 input=[
                     {"role": "developer", "content": system_prompt},
-                    {"role": "user", "content": query},
+                    {"role": "user", "content": task_data},
                 ],
                 text={
                     "format": {
@@ -53,4 +43,19 @@ class GraphQuerySystem:
         except Exception as e:
             return f"Error: {str(e)}"
 
+class GraphQuerySystem(BaseMultiAgentSystem):
+    def __init__(self, ontology: dict):
+        super().__init__(
+            {
+                "FrontAgent": FrontAgent("FrontAgent")
+            }
+        )
+        self.ontology = ontology
     
+    def handle_request(self, user_input: str):
+        # Start with the first agent (FrontAgent)
+        return self.agents["FrontAgent"].handle_task(user_input)
+
+
+
+        
