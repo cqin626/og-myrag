@@ -4,14 +4,20 @@ import json
 
 from ..prompts import PROMPT
 
-from ..util import get_formatted_openai_response, get_ontology_for_query, get_ontology_with_only_entities
+from ..util import (
+    get_formatted_openai_response, 
+    get_ontology_for_query, 
+    get_ontology_with_only_entities,
+    get_ontology_for_text2cypher
+    )
 
 from ..base import BaseAgent, BaseMultiAgentSystem
 
-from ..storage import PineconeStorage
+from ..storage import PineconeStorage, Neo4jStorage
 
 front_agent_logger = logging.getLogger("front-agent")
 vector_search_agent_logger = logging.getLogger("vector-search-agent")
+text2cypher_agent_logger = logging.getLogger("text2cypher-agent")
         
 class FrontAgent(BaseAgent):
     """
@@ -97,21 +103,71 @@ class VectorSearchAgent(BaseAgent):
             vector_search_agent_logger.error(f"Error: {str(e)}")
             return f"Error: {str(e)}"
         
+class Text2CypherAgent(BaseAgent):
+    """
+    An agent responsible for quering graph database.
+    """
+    def __init__(self, agent_name: str):
+        super().__init__(agent_name)
+        try:
+            self.neo4j = Neo4jStorage(
+                os.getenv("NEO4J_URI",""), 
+                os.getenv("NEO4J_USERNAME",""), 
+                os.getenv("NEO4J_PASSWORD","")
+                )
+        except Exception as e:
+            text2cypher_agent_logger.error(f"Could not connect to Neo4j: {str(e)}")
     
+    def handle_task(self, task_data: str):
+        formatted_ontology = get_ontology_for_text2cypher(self.agent_system.ontology)
+        system_prompt = PROMPT["TEXT_TO_CYPHER"].format(ontology=formatted_ontology)
+        
+        # text2cypher_agent_logger.debug(f"System prompt: {system_prompt}")
+        
+        try:
+            response = self.openai_client.responses.create(
+                model="o4-mini",
+                input=[
+                    {"role": "developer", "content": system_prompt},
+                    {"role": "user", "content": task_data},
+                ],
+                text={
+                    "format": {
+                        "type": "text"
+                    }
+                },
+                reasoning={
+                    "effort": "medium"
+                },
+                tools=[],
+                store=True
+            )
+            
+            text2cypher_agent_logger.debug(get_formatted_openai_response(response))
+            
+            cypher_query_with_params=json.loads(response.output_text)
+    
+            return self.neo4j.run_query_for_text2cypher_agent(query_data=cypher_query_with_params)     
+        except Exception as e:
+            text2cypher_agent_logger.error(f"Error: {str(e)}")
+            return f"Error: {str(e)}"        
+
 class GraphQuerySystem(BaseMultiAgentSystem):
     def __init__(self, ontology: dict):
         super().__init__(
             {
                 "FrontAgent": FrontAgent("FrontAgent"),
-                "VectorSearchAgent": VectorSearchAgent("VectorSearchAgent")
+                "VectorSearchAgent": VectorSearchAgent("VectorSearchAgent"),
+                "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent")
             }
         )
         self.ontology = ontology
     
-    async def handle_request(self, request_data: str):
+    def handle_request(self, request_data: str):
         # Start with the first agent (FrontAgent)
         # return self.agents["FrontAgent"].handle_task(request_data)
-        return await self.agents["VectorSearchAgent"].handle_task(request_data)
+        # return await self.agents["VectorSearchAgent"].handle_task(request_data)
+        return self.agents["Text2CypherAgent"].handle_task(request_data)
 
 
 

@@ -71,6 +71,25 @@ def get_ontology_for_query(ontology:dict)-> str:
 
     return "\n".join(prompt)
 
+def get_ontology_for_text2cypher(ontology:dict)-> str:
+    prompt = []
+
+    prompt.append("  Entities:")
+    for idx, (class_name, class_info) in enumerate(ontology.get("classes", {}).items(), 1):
+        prompt.append(f"    {idx}. {str(class_name).upper()}")
+        prompt.append(f"    - Definition: {class_info.get('high-level definition', '')}")
+        prompt.append("")
+
+    prompt.append("  Relationships:")
+    relationships = ontology.get("axioms", {}).get("relationships", [])
+    for idx, rel in enumerate(relationships, 1):
+        r_type = rel.get("type", "N/A")
+        source = rel.get("source", "N/A")
+        target = rel.get("target", "N/A")
+        prompt.append(f"    {idx}. {str(source).upper()} {r_type} {str(target).upper()}")
+        prompt.append("")
+
+    return "\n".join(prompt)
 
 def get_ontology_with_only_entities(ontology:dict)-> str:
     prompt = []

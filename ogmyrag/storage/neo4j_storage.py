@@ -109,3 +109,14 @@ class Neo4jStorage:
         except Exception as e:
             neo4j_logger.error(f"Failed to run custom query: {e}")
             return []
+    
+    def run_query_for_text2cypher_agent(self, query_data: dict):
+        """Wrapper to handle the input format with JSON-style query and parameters."""
+        try:
+            query = query_data.get("query")
+            parameters = query_data.get("parameters", {})
+            
+            return self.run_query(query, parameters)
+        except Exception as e:
+            neo4j_logger.error(f"Failed to parse and run formatted query: {e}")
+            return []
