@@ -30,4 +30,6 @@ class BaseMultiAgentSystem:
     
     def get_agent(self, agent_name: str) -> BaseAgent:
         return self.agents.get(agent_name)
-    
+   
+    def handle_request(self, request_data: Any):
+        raise NotImplementedError("Agent system musk implement handle_request")

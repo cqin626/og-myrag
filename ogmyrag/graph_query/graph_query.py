@@ -52,9 +52,9 @@ class GraphQuerySystem(BaseMultiAgentSystem):
         )
         self.ontology = ontology
     
-    def handle_request(self, user_input: str):
+    def handle_request(self, request_data: str):
         # Start with the first agent (FrontAgent)
-        return self.agents["FrontAgent"].handle_task(user_input)
+        return self.agents["FrontAgent"].handle_task(request_data)
 
 
 
