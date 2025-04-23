@@ -3,6 +3,10 @@ import os
 import openai
 from typing import Any
 
+from ..prompts import PROMPT
+
+from ..util import get_formatted_openai_response
+
 front_agent_logger = logging.getLogger("front-agent")
 
 class GraphQuerySystem:
@@ -16,29 +20,37 @@ class GraphQuerySystem:
         except Exception as e:
             raise ValueError(f"Failed to initialize GraphQuerySystem: {str(e)}")
        
-    def front_agent(self, message: str, history: list[dict[str, Any]]):
+    def front_agent(self, query:str):
         """
         An agent responsible for validating queries.
         """
-        messages = [{"role": "system", "content": "You are a helpful AI assistant."}] + history
-        messages.append({"role": "user", "content": message})
+        system_prompt = PROMPT["QUERY_VALIDATION"].format(ontology=self.ontology)
         
-        front_agent_logger.debug(f"Conversation history of front agent: {messages}")
+        # front_agent_logger.debug(f"System prompt: {system_prompt}")
 
         try:
-            stream = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                temperature=1.0,
-                max_tokens=500,
-                stream=True
+            response = self.openai_client.responses.create(
+                model="o4-mini",
+                input=[
+                    {"role": "developer", "content": system_prompt},
+                    {"role": "user", "content": query},
+                ],
+                text={
+                    "format": {
+                        "type": "text"
+                    }
+                },
+                reasoning={
+                    "effort": "medium"
+                },
+                tools=[],
+                store=True
             )
             
-            for chunk in stream:
-              if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+            front_agent_logger.debug(get_formatted_openai_response(response))
+            return response.output_text
                     
         except Exception as e:
-            yield f"Error: {str(e)}"
+            return f"Error: {str(e)}"
 
     
