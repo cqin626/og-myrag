@@ -90,25 +90,34 @@ class PineconeStorage:
     
     async def get_similar_results(
         self, 
-        query_text: str, 
+        query_texts: str | list[str], 
         namespace: str,
         top_k: int = 5, 
         include_metadata: bool = True
     ):
         """
-        Perform similarity search for the given query_text.
-        Returns top_k most similar vectors.
+        Perform similarity search for the given query_text(s).
+        Accepts a single string or list of strings.
+        Returns a list of results corresponding to each query.
         """
         try:
-            query_embedding = await self._embed_text(query_text)
+            if isinstance(query_texts, str):
+                query_texts = [query_texts]
             
-            result = self.index.query(
-                vector=query_embedding,
-                namespace=namespace,
-                top_k=top_k,
-                include_metadata=include_metadata
-            )
-            return result
+            query_embeddings = await self._embed_text(query_texts)
+            
+            all_results = []
+            
+            for embedding in query_embeddings:
+                result = self.index.query(
+                    vector=embedding,
+                    namespace=namespace,
+                    top_k=top_k,
+                    include_metadata=include_metadata
+                )
+                all_results.append(result)
+
+            return all_results
         except Exception as e:
             pinecone_logger.error(f"Error while fetching similar result(s): {e}")
             raise
@@ -143,13 +152,13 @@ class PineconeStorage:
         stop=stop_after_attempt(3), 
         wait=wait_exponential(multiplier=1, min=4, max=10)
     )
-    async def _embed_text(self, text: str) -> list[float]:
+    async def _embed_text(self, text: str | list[str]) -> list[float] | list[list[float]]:
         try:
             response = await self.openai.embeddings.create(
                 model="text-embedding-3-small",
                 input=text
             )
-            return response.data[0].embedding
+            return [item.embedding for item in response.data] if isinstance(text, list) else response.data[0].embedding
         except Exception as e:
             pinecone_logger.error(f"Error while embedding '{text}': {e}")
             raise
