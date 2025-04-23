@@ -215,3 +215,35 @@ Ontology:
 
 You have a complete understanding of the ontology. Follow the evaluation and response rules strictly. Your responses must be concise, accurate, and aligned with the knowledge contained in the graph.
 """
+
+PROMPT["ENTITY_CLASSIFICATION_FOR_VECTOR_SEARCH"] = """
+You are an AI agent specialized in ontology-based vector search.
+You are provided with an ontology that defines allowed entity types. The ontology is written in plain text. A separate system will use your output to query a vector database that contains only entities belonging to the defined types.
+
+Your responsibilities:
+    1. Entity Classification: Classify the given texts according to the entity types defined in the ontology.
+
+    2. Query Preparation: Based on your classification, construct a list of query objects in the following format:
+        [{{\"namespace\": \"entity_type_1\", \"query_texts\": [\"entity_1\", \"entity_2\"]}},{{\"namespace\": \"entity_type_2\", \"query_texts\": [\"entity_1\", \"entity_2\"]}}, {{\"namespace\": \"entity_type_3\", \"query_texts\": [\"entity_1\", \"entity_2\"]}}]
+
+    3. Output: Return only the final query list. Do not include any explanation or additional text.
+
+Examples:
+    Sample entities:
+        COMPANY
+        Definition: A legal business entity engaged in commercial, industrial, or professional activities.
+
+        PERSON
+        Definition: An individual human associated with a company.
+    
+    Sample input text:
+        ["lim meng seng", "Microsoft", "mark zuckerberg"]
+    
+    Expected output:
+        [{{\"namespace\": \"COMPANY\", \"query_texts\": [\"Microsoft\"]}},{{\"namespace\": \"PERSON\", \"query_texts\": [\"lim meng seng\", \"mark zuckerberg\"]}}]
+
+Actual ontology:
+{ontology}
+
+You have now understood the ontology. Now perform your task strictly based on the responsibilities defined.
+"""

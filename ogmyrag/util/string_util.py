@@ -71,6 +71,22 @@ def get_ontology_for_query(ontology:dict)-> str:
 
     return "\n".join(prompt)
 
+
+def get_ontology_with_only_entities(ontology:dict)-> str:
+    prompt = []
+
+    prompt.append("  Entities:")
+    for idx, (class_name, class_info) in enumerate(ontology.get("classes", {}).items(), 1):
+        prompt.append(f"    {idx}. {class_name}")
+        prompt.append(f"    - Definition: {class_info.get('high-level definition', '')}")
+        examples = class_info.get("examples", [])
+        if examples:
+            joined_examples = ", ".join(examples)
+            prompt.append(f"    - Examples: {joined_examples}")
+        prompt.append("")
+
+    return "\n".join(prompt)
+
 def get_formatted_openai_response(response_obj):
     try:
         # Use model_dump() for Pydantic-based objects (OpenAI Python SDK >= 1.0.0)

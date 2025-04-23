@@ -122,6 +122,59 @@ class PineconeStorage:
             pinecone_logger.error(f"Error while fetching similar result(s): {e}")
             raise
     
+    async def get_formatted_similar_results(
+        self, 
+        query_texts: str | list[str], 
+        namespace: str, 
+        top_k: int = 5
+    ) -> str:
+        """
+        Wrapper function that fetches and returns similar results as a formatted string.
+        """
+        results = await self.get_similar_results(query_texts, namespace, top_k)
+
+        if isinstance(query_texts, str):
+            query_texts = [query_texts]
+
+        output_lines = []
+
+        for query, result_set in zip(query_texts, results):
+            output_lines.append(f"Target: {query}")
+            output_lines.append("Found:")
+            for i, match in enumerate(result_set.get("matches", []), start=1):
+                entity_name = match["metadata"].get("entity_name", "Unknown")
+                score = match.get("score", 0.0)
+                output_lines.append(f"{i}. {entity_name} ({score:.9f} similarity score)")
+            output_lines.append("") 
+
+        return "\n".join(output_lines)
+    
+    async def get_similar_results_with_namespace(self, batch_queries: list[dict], top_k: int = 5) -> str:
+        """
+        Wrapper function to fetch and return similar results for multiple query_texts across namespaces.
+        
+        Args:
+            batch_queries (list): A list of dictionaries with 'namespace' and 'query_texts'.
+            top_k (int): Number of top matches to retrieve per query.
+
+        Returns:
+            str: A combined formatted string of results.
+        """
+        output_lines = []
+
+        for item in batch_queries:
+            namespace = str(item.get("namespace")).upper()
+            query_texts = item.get("query_texts")
+
+            if not namespace or not query_texts:
+                continue 
+
+            formatted_result = await self.get_formatted_similar_results(query_texts, namespace, top_k)
+            output_lines.append(formatted_result)
+
+        return "\n".join(output_lines)
+
+    
     async def update_vector(
         self, 
         id: str, 
