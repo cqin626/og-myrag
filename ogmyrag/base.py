@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import inspect
 import openai
 from typing import Any
 
@@ -17,9 +18,14 @@ class BaseAgent:
     def handle_task(self, task_data: Any):
         raise NotImplementedError("Agent musk implement handle_task")
     
-    def call_agent(self, agent_to_call: str, task_data: Any):
+    async def call_agent(self, agent_to_call: str, task_data: Any):
         agent = self.agent_system.get_agent(agent_to_call)
-        return agent.handle_task(task_data)
+        handler = agent.handle_task
+
+        if inspect.iscoroutinefunction(handler):
+            return await handler(task_data)
+        else:
+            return handler(task_data)
 
 class BaseMultiAgentSystem:
     def __init__(self, agents: dict[str, BaseAgent]):
