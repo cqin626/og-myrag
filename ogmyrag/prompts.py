@@ -348,3 +348,471 @@ Ontology:
 
 You now fully understand the ontology. Follow all rules and instructions to complete your task effectively.
 """
+
+PROMPT["ONTOLOGY_CONSTRUCTION"] = """
+You are a non-taxonomic, relationship-driven ontology construction agent. You are provided with a document describing {document_desc}, and your task is to extend the existing ontology using its content. Follow the guidelines, steps, and output format strictly.
+
+Guidelines:
+	1. Only extract entities and relationships that directly serve the ontology's purpose: {ontology_purpose}. Discard irrelevant content.
+
+	2. Identify non-taxonomic, meaningful relationships (e.g., Company hasSubsidiary Company) that reflect interconnections relevant to the purpose.
+		- Relationships may occur between entities of the same or different types.
+		- Do not include taxonomic/classification relationships.
+	
+	3. Extract only entities that are necessary to establish valid relationships.
+		- Use general but meaningful types (e.g., Person instead of Justin, avoid types like Entity).
+		- Do not convert names or overly specific attributes into entity types
+
+	4. If the source document includes any specific rules or constraints, honor them during extraction.
+	
+	5. Provided examples are for reference only. Do not reuse example entities or relationships unless they are explicitly present in the source document.
+	
+	6. Do not modify entities or relationships marked as "is_stable": "TRUE". Mark all newly proposed items as "is_stable": "FALSE".
+
+	7. Use feedback as informative, not prescriptive.
+      - Before applying changes based on feedback, think:
+         - "Does this improve alignment with the ontology's purpose?"
+         - "Does this preserve structural and conceptual coherence?"
+ 
+   8. If no new valid entities or relationships are found, return the ontology unchanged and include an explanation in the "note" field. Do not fabricate or infer entities or relationships beyond the document.
+	
+	9. You must follow the output format shown and include all existing and new entities and relationships in your output. 
+
+		Output Format:
+		{{
+			\"entities\": {{
+            \"EntityA\": {{
+               \"definition\": \"\",
+               \"llm-guidance\": \"\",
+               \"is_stable\": \"FALSE\",
+               \"examples\": []
+            }},
+            \"EntityB\": {{
+               \"definition\": \"\",
+               \"llm-guidance\": \"\",
+               \"is_stable\": \"FALSE\",
+               \"examples\": []
+            }}
+         }},
+         \"relationships\": {{
+            \"RelationshipA\": {{
+               \"source\": \"EntityA\",
+               \"target\": \"EntityB\",
+               \"llm-guidance\": \"\",
+               \"is_stable\": \"FALSE\",
+               \"examples\": []
+            }}
+         }}
+         \"note\": \"\"
+		}}
+		
+		Explanation:
+			a. Entity
+			- definition: A concise definition of the entity.
+			- llm-guidance: Clear, unambiguous instructions to ensure consistent parsing across edge cases.
+			- examples: A variety of representative examples, including edge cases where applicable.
+
+			b. Relationship
+			- source, target: Refer to entity types.
+			- llm-guidance: Instructions for when and how to apply this relationship.
+			- examples: Illustrative examples showing correct usage, including edge cases.
+
+Steps:
+	1. Review the current ontology, its stated purpose, and any provided feedback.
+
+	2. Identify new, valid non-taxonomic relationships from the document that align with the ontology purpose.
+
+	3. Define any required entity types that support the relationships.
+
+	4. Avoid duplication of any entity or relationship already in the ontology.
+
+	5. Preserve stability: unchanged components must retain "is_stable": "TRUE".
+
+	6. If applicable, incorporate feedback in a way that enhances precision without undermining structural integrity.
+
+Example Input:
+	a. Source text:
+	“Dr Tan Hui Mei is currently serving as the independent director of ABC Berhad, which is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.”
+
+	b. Existing ontology:
+	Empty
+	
+	c. Output:
+		{{
+			\"entities\": {{
+				\"Person\": {{
+					\"definition\": \"An individual human associated with a company.\",
+					\"llm-guidance\": \"Extract full names of individuals, removing titles (e.g., 'Dato'', 'Dr.', 'Mr.') or roles (e.g., 'CEO'). For example, 'Dr Tan Hui Mei' becomes 'Tan Hui Mei'.\",
+					\"is_stable\": \"FALSE\",
+					\"examples\": [
+						\"Tan Hui Mei\",
+						\"Emily Johnson\",
+						\"Priya Ramesh\"
+					]
+				}},
+				\"Company\": {{
+					\"definition\": \"A legal business entity engaged in commercial, industrial, or professional activities.\",
+					\"llm-guidance\": \"Extract entities identified as registered businesses with suffixes like 'Sdn Bhd', 'Berhad', or 'Pte Ltd'. Use the full legal name. Do not include the registration number if present.\",
+					\"is_stable\": \"FALSE\",
+					\"examples\": [
+						\"ABC Berhad\",
+						\"Apple Inc.\",
+						\"United Gomax Sdn Bhd\"
+					]
+				}},
+				\"Place\": {{
+					\"definition\": \"A geographic location, such as a city, region, or country.\",
+					\"llm-guidance\": \"Extract one meaningful location such as a city, state, or country. Ignore street names, postal codes, or unit numbers. From '135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.', extract 'Kuala Lumpur'.\",
+					\"is_stable\": \"FALSE\",
+					\"examples\": [
+						\"Kuala Lumpur\",
+						\"Texas\",
+						\"Malaysia\",
+						\"South America\"
+					]
+				}}
+			}},
+			\"relationships\": {{
+				\"hasIndependentDirector\": {{
+					\"source\": \"Company\",
+					\"target\": \"Person\",
+					\"llm-guidance\": \"Use this when a person is described as the independent director of a company.\",
+					\"is_stable\": \"FALSE\",
+					\"examples\": [
+						\"ABC Berhad hasIndependentDirector Tan Hui Mei\"
+					]
+				}},
+				\"headquarteredIn\": {{
+					\"source\": \"Company\",
+					\"target\": \"Place\",
+					\"llm-guidance\": \"Use this when a company is said to be headquartered in a specific location.\",
+					\"is_stable\": \"FALSE\",
+					\"examples\": [
+						"ABC Berhad headquarteredIn Kuala Lumpur"
+					]
+				}}
+			}},
+        \"note\": \"\"
+		}}
+	
+Actual Ontology:
+{ontology}
+
+Document Constraints:
+{document_constraints}
+
+Feedback:
+{feedback}
+
+You now understand your role, the constraints, and the evaluation criteria. Proceed to extend the ontology using the provided document and return the result using the specified format.
+
+Document:
+"""
+
+PROMPT["ONTOLOGY_COMPLEXITY_REDUCTION"] = """
+You are a non-taxonomic, relationship-driven ontology complexity reduction agent. Your task is to minimize the number of entities and relationships in the ontology without compromising its intended purpose.
+
+Guidelines:
+	
+	1. All reductions must preserve the ontology's ability to serve its defined purpose: {ontology_purpose}.
+ 
+	2. Do not remove any entities or relationships with "is_stable": "TRUE". Only consider reduction for elements marked "is_stable": "FALSE".
+   
+	3. When removing a relationship, check whether its associated entities (source or target) are involved in any other relationships:
+      - If an associated entity becomes orphaned (no longer part of any relationship), remove the entity as well.
+      - If the entity is used elsewhere, retain the entity.
+      
+   4. When removing an entity, check whether it is involved in any required relationship.
+      - If all related relationships are removable, you may proceed to remove the entity.
+      - If any related relationship is not removable, do not remove it.
+
+   5. Do not alter the structure, content, or attributes of any retained entities or relationships.
+
+   6. For every entity or relationship removed, include a brief explanation in the appropriate section of the output.
+
+   7. If no reduction is possible, return the ontology unchanged and explain why in the "note" field.
+	
+	8. Your output must exactly match the structure shown below.
+		
+      {{
+         \"updated_ontology\": {{
+            \"entities\": {{
+               \"EntityA\": {{
+                  \"definition\": \"\",
+                  \"llm-guidance\": \"\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": []
+               }},
+               \"EntityB\": {{
+                  \"definition\": \"\",
+                  \"llm-guidance\": \"\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": []
+               }}
+            }},
+            \"relationships\": {{
+               \"RelationshipA\": {{
+                  \"source\": \"EntityA\",
+                  \"target\": \"EntityB\",
+                  \"llm-guidance\": \"\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": []
+               }}
+            }}
+         }},
+         \"removed_entities\": [
+            {{
+               \"EntityM\": \"Explanation\"
+            }}
+         ],
+         \"removed_relationships\": [
+            {{
+               \"RelationshipN\": \"Explanation\"
+            }}
+         ],
+         \"note\": \"\"
+		}}
+  
+Steps:
+   1. Understand the ontology's function. Focus only on entities and relationships marked "is_stable": "FALSE".
+
+   2. Check if each relationship can be removed without breaking logical structure. If removal leads to orphaned entities, mark those entities for removal as well.
+
+   3. Ensure an entity is not involved in any non-removable relationship before removal. 
+   
+   4. Validate that the resulting ontology still supports all required use cases.
+   
+   5. Provide brief, clear justifications for each removed element.
+   
+Ontology:
+{Ontology}
+
+You have now received the guidelines and the ontology. Proceed to analyze and reduce the ontology strictly according to the instructions and return the output in the required format only.
+"""
+
+PROMPT["ONTOLOGY_CLARITY_ENHANCEMENT"] = """
+You are a non-taxonomic, relationship-driven ontology clarity enhancement agent. Your task is to refine the ontology to ensure all entity and relationship names, definitions, guidance, and examples are clear, intuitive, unambiguous, and free from jargon — without compromising the ontology's intended purpose.
+
+Guidelines
+   1. All modifications must preserve the ontology's ability to fulfill its intended purpose: {ontology_purpose}.
+
+   2. Do not modify any entity or relationship where "is_stable" is "TRUE". Only evaluate and modify those where "is_stable" is "FALSE".
+
+   3. For each unstable entity:
+
+      a. Name
+         - Should be clear, general (but not too broad or too specific).
+         - Should avoid jargon or counterintuitive terms.
+         - Example: Replace "ListedIssuer" with "ListedCompany".
+
+      b. Definition
+         - Must be concise, specific, and unambiguous.
+
+      c. LLM-Guidance
+         - Should include extraction rules that promote consistency and clarity.
+         - Examples:
+            - Remove honorifics (e.g., "Mr.", "Dr.") from person names.
+            - Extract only meaningful location names from long addresses.
+
+      d. Examples
+         - Must represent realistic, typical use cases of the entity.
+
+   4. For each unstable relationship:
+
+      a. Name
+         - Must be clearly distinct and intuitive.
+         - Use camelCase (e.g., hasSubsidiary, isPartOf).
+      
+      b. Source/Target Entities
+         - Must reference valid entity types in the ontology.
+
+      c. LLM-Guidance
+         - Must clearly describe when and how to apply the relationship.
+
+      d. Examples
+         - Must clearly illustrate how this relationship is applied.
+
+   5. Include a short reason for each change in the modified_entities and modified_relationships sections of the output.
+      - Example: "ListedIssuer's name": "ListedCompany is more intuitive and avoids financial jargon".
+
+   6. All unmodified entities and relationships must appear exactly as-is in the updated_ontology output, with their original "is_stable" values intact.
+
+   7. If no changes are made, output the original ontology unchanged. Provide a short justification in the note field.
+
+   8. Your output must strictly follow this structure:
+   
+      {{
+         \"updated_ontology\": {{
+            \"entities\": {{
+               \"EntityA\": {{
+                  \"definition\": \"\",
+                  \"llm-guidance\": \"\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": []
+               }},
+               \"EntityB\": {{
+                  \"definition\": \"\",
+                  \"llm-guidance\": \"\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": []
+               }}
+            }},
+            \"relationships\": {{
+               \"RelationshipA\":{{
+                  \"source\": \"EntityA\",
+                  \"target\": \"EntityB\",
+                  \"llm-guidance\": \"\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": []
+               }}
+            }}
+         }},
+         \"modified_entities\": [
+            {{
+               \"EntityM's name\": \"Explanation\",
+               \"EntityM's definition\": \"Explanation\"
+            }}
+         ],
+         \"modified_relationships\": [
+            {{
+               \"RelationshipN's definition\": \"Explanation\"
+            }}
+         ],
+         \"note\": \"\"
+      }}
+
+Steps
+   1. Begin by reading {ontology_purpose} to understand what the ontology is meant to achieve.
+
+   2. For each entity or relationship where "is_stable": "FALSE":
+      - Review and revise names, definitions, guidance, and examples to eliminate ambiguity or complexity.
+
+   3. Ensure all relationships link valid source and target entities and are clearly defined.
+
+   4. If a change is made, include:
+      - The modified name or aspect.
+      - A clear and short explanation in the modified_entities or modified_relationships section.
+
+   5. Output the complete ontology under updated_ontology, including unchanged elements.
+      - If no modifications were needed, output everything as-is with a brief reason in note.
+
+Ontology: 
+{ontology}
+
+You have now received the guidelines and the ontology. Proceed to analyze and modify the ontology strictly according to the instructions and return the output in the required format only.
+"""
+
+PROMPT["ONTOLOGY_CQ_GENERATION"] = """
+You are a non-taxonomic, relationship-driven ontology competency question generation agent. Your goal is to generate **realistic, answerable, and ontology-grounded** competency questions that test whether the ontology can support the types of queries required by its purpose.
+
+Ontology Purpose:
+\"{ontology_purpose}\"
+
+Guidelines:
+	1. Do not assume access to information beyond what is structurally captured in the ontology and its defined data sources. 
+      - Do not infer behavioral outcomes, causality, or abstract effects that are not modeled.
+      - Questions must remain within the scope of \"{ontology_purpose}\"
+
+	2. Based on this purpose, generate {personality_num} distinct user personalities.
+
+	3. For each personality, generate {task_num} distinct tasks.
+
+	4. For each task, generate {question_num} distinct competency questions that evaluate the ontology's robustness.
+
+	5. All personalities, tasks, and questions must be meaningfully distinct from one another. Collectively, they should aim to cover as many edge cases as possible to enable a thorough evaluation of the ontology.
+
+	6. Competency questions should be categorized by difficulty level as follows:
+ 
+      - Easy: Lookup queries or queries involving a single entity.
+      
+      - Moderate: One-hop relationships (e.g., A → B).
+      
+      - Difficult: Multi-hop relationships, filters, or aggregates.
+      
+      - Extremely Difficult: Requires multi-part queries, joins, subqueries, or nested logic.
+
+	7. For each task, distribute the questions evenly across the four difficulty levels. That is, generate ({question_num} / 4) question(s) for each difficulty level: Easy, Moderate, Difficult, and Extremely Difficult.
+ 
+   8. Avoid using the word "ontology" in any of the generated questions. Instead, focus on how a user with the generated personality would interrogate the system to retrieve relevant information. Questions should:
+
+      - Reflect real-world use cases.
+
+      - Require increasing levels of reasoning (from factual lookups to complex relational inferences).
+
+      - Be phrased as high-level, domain-relevant inquiries.
+
+      - Not refer explicitly to the ontology's structure.
+
+   9. All questions must be generalized. Do not mention specific entities from any data source or ontology instance. Questions should test the structure and reasoning capability of the ontology, not recall of named examples.
+   
+	10. Follow the exact output format shown below. Do not include any additional text or explanation.
+	
+		{{
+			\"PersonalityA\": {{
+				\"TaskA\": {{
+					\"Easy\": \"QuestionA\",
+					\"Moderate\": \"QuestionB\",
+					\"Difficult\": \"QuestionC\",
+					\"Extremely Difficult\": \"QuestionD\"
+				}}
+			}}
+		}}
+
+"""
+
+PROMPT["ONTOLOGY_COMPETENCY_EVALUATION"] = """
+You are a non-taxonomic, relationship-driven ontology competency evaluation agent. Your task is to assess the robustness of a given ontology in answering specific competency questions without compromising its intended purpose.
+
+Guidelines
+   1. All suggestions must preserve the ontology's ability to fulfill its intended purpose: {ontology_purpose}.
+   
+	2. For each competency question, evaluate how well the ontology supports it using one of the following categories.
+
+      a. Not Supportive: The ontology lacks necessary entities or relationships, requiring entirely new components.
+      
+      b. Slightly Supportive: The ontology has some relevant entities or relationships but requires significant additions or modifications.
+      
+      c. Partially Supportive: The ontology supports the question but requires minor adjustments to existing entities or relationships.
+      
+      d. Fully Supportive: The ontology fully supports the question with existing entities and relationships.
+  
+   3. For every competency question, include a brief justification for your chosen support level.
+   
+   4. Include a concise structural summary of the ontology in the summary field.
+
+	5. You must produce output strictly in the format below.
+	
+		{{
+         \"competency_evaluation\": {{
+            \"PersonalityA\": {{
+               \"TaskA\": [
+                  {{
+                     \"question\": \"questionA\",
+                     \"difficulty\": \"Easy\",
+                     \"support\": \"Fully Supportive\",
+                     \"justification\": \"\"
+                  }}
+               ]
+            }}
+         }},
+         \"summary\": \"\"
+		}}
+  
+Steps:
+   1. Read the ontology structure and its intended use case.
+
+   2. For every question under each task and personality:
+      - Determine if the current ontology can answer it based on existing entities and relationships.
+      - Assign one of the four support levels.
+      - Provide a concise justification.
+
+   3. In the summary field, describe the ontology's general capability, structure, and any observed strengths or limitations.
+
+Ontology:
+{ontology}
+
+Competency Questions:
+{competency_questions}
+
+You now understand the guidelines, ontology, and competency questions. Please evaluate the ontology based on the guidelines and provide the output in the required format.
+"""
