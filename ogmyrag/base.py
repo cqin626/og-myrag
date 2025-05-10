@@ -15,7 +15,7 @@ class BaseAgent:
         except Exception as e:
            raise ValueError(f"Error initializing OpenAI client: {str(e)}")
     
-    def handle_task(self, task_data: Any, **kwargs):
+    def handle_task(self, **kwargs):
         raise NotImplementedError("Agent musk implement handle_task")
     
     async def call_agent(self, agent_to_call: str, task_data: Any):
@@ -37,5 +37,5 @@ class BaseMultiAgentSystem:
     def get_agent(self, agent_name: str) -> BaseAgent:
         return self.agents.get(agent_name)
    
-    def handle_request(self, request_data: Any, **kwargs):
+    def handle_request(self, **kwargs):
         raise NotImplementedError("Agent system musk implement handle_request")

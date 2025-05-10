@@ -52,7 +52,7 @@ def get_formatted_ontology(
                 output_lines.append(f"  - examples: {examples}")
             output_lines.append("")
 
-    return "\n".join(output_lines) if output_lines else "No content to display."
+    return "\n".join(output_lines) if output_lines else ""
 
 
 # def get_formatted_ontology(ontology: dict) -> str:

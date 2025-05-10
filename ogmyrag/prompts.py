@@ -353,7 +353,7 @@ PROMPT["ONTOLOGY_CONSTRUCTION"] = """
 You are a non-taxonomic, relationship-driven ontology construction agent. You are provided with a document describing {document_desc}, and your task is to extend the existing ontology using its content. Follow the guidelines, steps, and output format strictly.
 
 Guidelines:
-	1. Only extract entities and relationships that directly serve the ontology's purpose: {ontology_purpose}. Discard irrelevant content.
+	1. Only extract entities and relationships that directly serve the ontology's purpose: {ontology_purpose}.
 
 	2. Identify non-taxonomic, meaningful relationships (e.g., Company hasSubsidiary Company) that reflect interconnections relevant to the purpose.
 		- Relationships may occur between entities of the same or different types.
@@ -750,10 +750,10 @@ Guidelines:
 		{{
 			\"PersonalityA\": {{
 				\"TaskA\": {{
-					\"Easy\": \"QuestionA\",
-					\"Moderate\": \"QuestionB\",
-					\"Difficult\": \"QuestionC\",
-					\"Extremely Difficult\": \"QuestionD\"
+					\"Easy\": [\"QuestionA\"],
+					\"Moderate\": [\"QuestionB\"],
+					\"Difficult\": [\"QuestionC\"],
+					\"Extremely Difficult\": [\"QuestionD\"]
 				}}
 			}}
 		}}
@@ -778,6 +778,10 @@ Guidelines
   
    3. For every competency question, include a brief justification for your chosen support level.
    
+   4. Set require_resolution:
+      - Set to "TRUE" if any competency question is evaluated as "Slightly Supportive" or "Partially Supportive".
+      - Set to "FALSE" otherwise
+   
    4. Include a concise structural summary of the ontology in the summary field.
 
 	5. You must produce output strictly in the format below.
@@ -795,7 +799,8 @@ Guidelines
                ]
             }}
          }},
-         \"summary\": \"\"
+         \"summary\": \"\",
+         \"require_resolution\": 
 		}}
   
 Steps:
@@ -808,11 +813,10 @@ Steps:
 
    3. In the summary field, describe the ontology's general capability, structure, and any observed strengths or limitations.
 
-Ontology:
-{ontology}
-
 Competency Questions:
 {competency_questions}
 
-You now understand the guidelines, ontology, and competency questions. Please evaluate the ontology based on the guidelines and provide the output in the required format.
+You now understand the guidelines and competency questions. Please evaluate the ontology based on the guidelines and provide the output in the required format.
+
+Ontology:
 """
