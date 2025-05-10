@@ -45,8 +45,8 @@ class CQGenerationAgent(BaseAgent):
          )
         user_prompt = "You now understand the guidelines. Please generate the competency questions accordingly."
         
-        ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
-        
+      #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+        ontology_construction_logger.info(f"CQGenerationAgent is called")
         try:
             response = await fetch_responses_openai(
                 model="gpt-4.1-mini",
@@ -55,11 +55,11 @@ class CQGenerationAgent(BaseAgent):
                 temperature=0,
                 max_output_tokens=32768
             )
-            ontology_construction_logger.info(f"Competency questions generation response details:\n{get_formatted_openai_response(response)}")
+            ontology_construction_logger.info(f"CQGenerationAgent:\nCompetency questions generation response details:\n{get_formatted_openai_response(response)}")
             
             return response.output_text   
         except Exception as e:
-            ontology_construction_logger.error(f"CQ generation failed: {str(e)}")
+            ontology_construction_logger.error(f"CQGenerationAgent:\nCQ generation failed: {str(e)}")
             return ""
    
 class OntologyConstructionAgent(BaseAgent):
@@ -87,7 +87,9 @@ class OntologyConstructionAgent(BaseAgent):
         
         user_prompt=kwargs.get("source_text", "NA") or "NA"
         
-        ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+        ontology_construction_logger.info(f"OntologyConstructionAgent is called")
+        
+      #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
 
         try:
             response = await fetch_responses_openai(
@@ -97,11 +99,11 @@ class OntologyConstructionAgent(BaseAgent):
                 temperature=0,
                 max_output_tokens=32768
             )
-            ontology_construction_logger.info(f"Ontology construction response details:\n{get_formatted_openai_response(response)}")
+            ontology_construction_logger.info(f"OntologyConstructionAgent\nOntology construction response details:\n{get_formatted_openai_response(response)}")
             
             return response.output_text
         except Exception as e:
-            ontology_construction_logger.error(f"Ontology construction failed: {str(e)}")
+            ontology_construction_logger.error(f"OntologyConstructionAgent\nOntology construction failed: {str(e)}")
             return ""
 
 class OntologyEvaluationAgent(BaseAgent):
@@ -125,7 +127,9 @@ class OntologyEvaluationAgent(BaseAgent):
            exclude_relationship_fields=["llm-guidance", "is_stable"]
          )
         
-        ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+      #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+
+        ontology_construction_logger.info(f"OntologyEvaluationAgent is called")
 
         try:
             response = await fetch_responses_openai(
@@ -141,11 +145,11 @@ class OntologyEvaluationAgent(BaseAgent):
                 max_output_tokens=50000,
                 tools=[],
             )
-            ontology_construction_logger.info(f"Ontology evaluation response details:\n{get_formatted_openai_response(response)}")
+            ontology_construction_logger.info(f"OntologyEvaluationAgent\nOntology evaluation response details:\n{get_formatted_openai_response(response)}")
             
             return response.output_text
         except Exception as e:
-            ontology_construction_logger.error(f"Ontology evaluation failed: {str(e)}")
+            ontology_construction_logger.error(f"OntologyEvaluationAgent\nOntology evaluation failed: {str(e)}")
             return ""
 
 class OntologyConstructionSystem(BaseMultiAgentSystem):
@@ -178,7 +182,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
          
          self.ontology_purpose = ontology_purpose
         except Exception as e:
-           ontology_construction_logger.error(e)
+           ontology_construction_logger.error(f"OntologyConstructionSystem: {e}")
            raise ValueError(f"Failed to connect to MongoDB: {e}")
     
     async def handle_request(self, **kwargs) -> None:
@@ -204,7 +208,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             document_constraints=document_constraints,
             feedback=feedback
          )
-         ontology_construction_logger.info(f"Ontology is updated, current version: {self.get_current_onto_version()}, refinement round: {refinement_count}")
+         ontology_construction_logger.info(f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}, refinement round: {refinement_count}")
          
          # TODO Step 2: Reduce complexity of the ontology
          
@@ -214,13 +218,13 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
          await self.evaluate_ontology()
          
          if refinement_count == max_refinement: 
-            ontology_construction_logger.info(f"Ontology refinement reached max count ({max_refinement}), manual intervention is required")
+            ontology_construction_logger.info(f"OntologyConstructionSystem\nOntology refinement reached max count ({max_refinement}), manual intervention is required")
             break
          else:
             current_onto_version = self.get_current_onto_version()
             raw_feedback = self.get_unhandled_feedback(onto_version=current_onto_version)
             if not raw_feedback:
-               ontology_construction_logger.info("Ontology refinement is not required")
+               ontology_construction_logger.info("OntologyConstructionSystem\nOntology refinement is not required")
                break
             else:
                refinement_count += 1
@@ -280,7 +284,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
        current_cq_version = self.get_current_cq_version()
        
        # Step 1: Call evaluation agent
-       ontology_construction_logger.info("Evaluating ontology...")
+       ontology_construction_logger.info("OntologyConstructionSystem\nEvaluating ontology...")
        try:
          evaluation_result = await self.agents["OntologyEvaluationAgent"].handle_task(
             ontology=current_onto,
@@ -350,7 +354,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         current_latest_onto = self.onto_storage.read_documents({"is_latest": True})
         return current_latest_onto[0].get("ontology", "") if current_latest_onto else {}
       except Exception as e:
-         ontology_construction_logger.error(f"Error getting ontology: {e}")
+         ontology_construction_logger.error(f"OntologyConstructionSystem\nError getting ontology: {e}")
          return {}
    
     def get_current_cq(self) -> str:
@@ -358,7 +362,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         current_latest_cq = self.cq_storage.read_documents({"is_latest": True})
         return current_latest_cq[0].get("competency_questions", "") if current_latest_cq else {}
       except Exception as e:
-         ontology_construction_logger.error(f"Error getting cq: {e}")
+         ontology_construction_logger.error(f"OntologyConstructionSystem\nError getting cq: {e}")
          return {}
       
     def get_unhandled_feedback(self, onto_version: str) -> dict:
@@ -368,7 +372,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
          )
          return feedback_entry[0].get("feedback") if feedback_entry else {}
        except Exception as e:
-         ontology_construction_logger.error(f"Error getting unhandled feedback: {e}")
+         ontology_construction_logger.error(f"OntologyConstructionSystem\nError getting unhandled feedback: {e}")
          return {}
    
     def get_current_onto_version(self) -> str:
@@ -376,7 +380,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         current_latest_onto = self.onto_storage.read_documents({"is_latest": True})
         return current_latest_onto[0].get("version", "1.0.0") if current_latest_onto else "1.0.0"
       except Exception as e:
-         ontology_construction_logger.error(f"Error getting ontology version: {e}")
+         ontology_construction_logger.error(f"OntologyConstructionSystem\nError getting ontology version: {e}")
          return "1.0.0"
       
     def get_current_cq_version(self) -> str:
@@ -384,6 +388,6 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         current_latest_cq = self.cq_storage.read_documents({"is_latest": True})
         return current_latest_cq[0].get("version", "1.0.0") if current_latest_cq else "1.0.0"
       except Exception as e:
-         ontology_construction_logger.error(f"Error getting cq version: {e}")
+         ontology_construction_logger.error(f"OntologyConstructionSystem\nError getting cq version: {e}")
          return "1.0.0"
 
