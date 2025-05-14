@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import asyncio
 
+from bson import ObjectId
+
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
-from ..util import get_formatted_ontology, get_formatted_openai_response
+from ..util import get_formatted_ontology, get_formatted_openai_response, get_clean_json, get_formatted_current_datetime
 from ..storage import MongoDBStorage
 
 from ..base import (
@@ -15,7 +17,9 @@ from ..base import (
 )
 
 from .graph_construction_util import (
-   get_formatted_entities_and_relationships_for_db
+   get_formatted_entities_and_relationships_for_db,
+   get_formatted_entities_for_display,
+   get_formatted_relationships_for_display
 )
 
 graph_construction_logger = logging.getLogger("graph_construction")
@@ -69,6 +73,55 @@ class EntityRelationshipExtractionAgent(BaseAgent):
             graph_construction_logger.error(f"EntityRelatonshipExtractionAgent\nEntity-relationship extraction failed: {str(e)}")
             return ""
 
+class EntityRelationshipMergerAgent(BaseAgent):
+    """
+    An agent responsible for merging entities and relationships.
+    """
+    async def handle_task(self, **kwargs) -> str:
+      """
+      Parameters:
+         entities (list): The entitites.
+         relationships (list): The relationships.
+      """
+      system_prompt = PROMPT["ENTITY_RELATIONSHIP_MERGER"]
+      
+      formatted_entities_relationships = []  
+      formattted_entities = get_formatted_entities_for_display(kwargs.get("entities", []) or [])
+      formattted_relationships = get_formatted_relationships_for_display(kwargs.get("relationships", []) or [])
+      
+      formatted_entities_relationships.append("Entities:")
+      formatted_entities_relationships.append(formattted_entities)
+      formatted_entities_relationships.append("Relationships:")
+      formatted_entities_relationships.append(formattted_relationships)
+      formatted_entities_relationships = "\n".join(formatted_entities_relationships)
+      
+      graph_construction_logger.info(f"GraphConstructionSystem\nEntities and relationships read from MongoDB:\n{formatted_entities_relationships}")
+        
+      #   graph_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+
+      graph_construction_logger.info(f"EntityRelationshipMergerAgent is called")
+
+      try:
+         response = await fetch_responses_openai(
+            model="o4-mini",
+            system_prompt=system_prompt,
+            user_prompt=formatted_entities_relationships,
+            text={
+               "format": {"type": "text"}
+            },
+            reasoning={
+               "effort": "medium"
+            },
+            max_output_tokens=100000,
+            tools=[],
+         )
+         graph_construction_logger.info(f"EntityRelationshipMergerAgent\nEntity-relationship merger response details:\n{get_formatted_openai_response(response)}")
+         
+         return response.output_text
+      except Exception as e:
+         graph_construction_logger.error(f"EntityRelationshipMergerAgent\nEntity-relationship merger failed: {str(e)}")
+         return ""
+
 class GraphConstructionSystem(BaseMultiAgentSystem):
     def __init__(
        self,
@@ -79,7 +132,8 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
       ):
         super().__init__(
             {
-               "EntityRelationshipExtractionAgent": EntityRelationshipExtractionAgent("EntityRelationshipExtractionAgent")
+               "EntityRelationshipExtractionAgent": EntityRelationshipExtractionAgent("EntityRelationshipExtractionAgent"),
+               "EntityRelationshipMergerAgent": EntityRelationshipMergerAgent("EntityRelationshipMergerAgent")
             }
         )
         
@@ -214,4 +268,77 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
          except Exception as e:
             graph_construction_logger.error(f"GraphConstructionSystem\nError while updating the 'is_parsed' status of documents:{e}")
             raise ValueError(f"Failed to update the 'is_parsed' status of documents: {e}")
-    
+         
+    async def resolve_duplicated_entities_relationships(self):
+      #  Step 1 : Read the entities and relationships from the MongoDB
+      try:
+         graph_construction_logger.info("GraphConstructionSystem\nReading entities and relationships...")
+         
+         entities = self.entity_storage.read_documents({"to_be_deleted": False})
+         relationships = self.relationship_storage.read_documents({"to_be_deleted": False})
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while reading entities and relationships from MongoDB:{e}")
+         raise ValueError(f"Failed to read entities and relationships from MongoDB: {e}")
+      
+      # Step 2 : Calling LLM to merge the entities and relationships
+      try:
+         graph_construction_logger.info("GraphConstructionSystem\nMerging entities and relationships...")
+         if not entities and not relationships:
+            graph_construction_logger.info("GraphConstructionSystem\nNo entities and relationships found. Skipping merging.")
+            raise ValueError(f"No entities and relationships found.") 
+         
+         raw_response = await self.agents["EntityRelationshipMergerAgent"].handle_task(
+            entities=entities,
+            relationships=relationships
+         )
+         graph_construction_logger.info(f"GraphConstructionSystem\nMerged entities and relationships response details:\n{raw_response}")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while merging entities and relationships:{e}")
+         raise ValueError(f"Failed to merge entities and relationships: {e}")
+
+      # Step 3 : Remove and insert the merged entities and relationships into MongoDB
+      try:
+         graph_construction_logger.info("GraphConstructionSystem\nUploading merged entities and relationships...")
+         
+         merge_response = get_clean_json(raw_response)
+         entities_to_be_removed = merge_response.get("entities_to_be_removed", [])
+         relationships_to_be_removed = merge_response.get("relationships_to_be_removed", []) 
+         entities_to_be_modified = merge_response.get("entities_to_be_modified", {})
+         relationships_to_be_modified = merge_response.get("relationships_to_be_modified", {})
+         
+         for entity_id in entities_to_be_removed:
+            self.entity_storage.update_document({"_id": ObjectId(entity_id)}, {"to_be_deleted": True})
+         
+         for relationship_id in relationships_to_be_removed:
+            self.relationship_storage.update_document({"_id": ObjectId(relationship_id)}, {"to_be_deleted": True})
+
+         for entity_id, new_description in entities_to_be_modified.items():
+            self.entity_storage.update_document(
+               {"_id": ObjectId(entity_id)},
+               {"description": new_description, "last_modified_at": get_formatted_current_datetime("Asia/Kuala_Lumpur")}
+            )
+
+         for rel_id, updates in relationships_to_be_modified.items():
+            update_fields = {}
+            if "description" in updates:
+                  update_fields["description"] = updates["description"]
+            if "source" in updates:
+                  update_fields["source"] = updates["source"]
+            if "target" in updates:
+                  update_fields["target"] = updates["target"]
+            if "valid_date" in updates:
+                  update_fields["valid_date"] = updates["valid_date"]
+            if "invalid_date" in updates:
+                  update_fields["invalid_date"] = updates["invalid_date"]
+            if "temporal_note" in updates:
+                  update_fields["temporal_note"] = updates["temporal_note"]
+            update_fields["last_modified_at"] = get_formatted_current_datetime("Asia/Kuala_Lumpur")
+
+            self.relationship_storage.update_document(
+               {"_id": ObjectId(rel_id)},
+               update_fields
+            )
+         graph_construction_logger.info("GraphConstructionSystem\nSuccessfully updated merged entities and relationships.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while uploading merged entities and relationships:{e}")
+         raise ValueError(f"Failed to upload merged entities and relationships: {e}")

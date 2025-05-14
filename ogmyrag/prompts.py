@@ -1325,3 +1325,241 @@ You now understand the guidelines and competency questions. Please evaluate the 
 
 Ontology:
 """
+
+PROMPT["ENTITY_RELATIONSHIP_MERGER"] = """"
+You are an entity-relationship merger agent. Your task is to evaluate whether entity and relationship instances are factually equivalent, and merge them accordingly.
+
+Guidelines:
+	1. Each entity has the following attributes:
+		- id: Unique identifier
+		- name: Entity's name
+		- type: Entity's type
+		- description: Entity's description
+
+   2. Each relationship has the following attributes:
+		- id: Unique identifier
+		- type: Relationship's type
+		- source: Name of the relationship's source entity
+		- target: Name of the relationship's target entity
+      - description: Relationship's description
+      - valid_date: Date when the relationship becomes valid
+      - invalid_date: Date when the relationship becomes invalid 
+      - temporal_note: Additional temporal information
+      
+   3. Relationship Integrity:
+      - When merging entities, update all relationships that reference the merged entity—whether as source or target—to reference the remaining entity.
+         
+	4. Entity Evaluation Logic:
+		- Given two entities :
+			- If they are the same types and their names are literally the same (e.g., "Lim Chee Meng" and "Lim Chee Meng"):
+					- If their descriptions refer to the same thing (focus on meaning, not wording; descriptions may complement each other):
+						- They are factually equivalent -> proceed to merge.
+					- Else:
+						- Not factually equivalent -> skip.
+
+			- If they are the same types and their names are similar (e.g., "Lim Chee Meng" and "Chee Meng Lim"):
+					- If their descriptions refer to the same thing:
+						- Factually equivalent -> proceed to merge.
+					- Else:
+						- Not factually equivalent -> skip.
+
+			- If they are the same types and their names are not similar (e.g., "Lim Chee Seng" and "Ong Chee Seng" or "XYZ Berhad" and "XYZ Sdn Bhd"):
+				- Not factually equivalent -> skip.
+
+			- If their type is different:
+				- Not factually equivalent.
+
+   5. Relationship Evaluation Logic:
+      - Given two relationships:
+         - If they are the same types and having the same source and target:
+            - If their descriptions refer to the same subject 
+               - They are factually equivalent -> proceed to merge.
+            - Else:
+               - Not factually equivalent -> skip.
+
+         - If they are the same types and having different source and target
+            - Not factually equivalent -> skip.
+
+         - If their types differ:
+            - Not factually equivalent -> skip.
+            
+	6. Entity Merger Procedure:
+		- If two entities are factually equivalent:
+			- And their descriptions are complementary:
+				- Mark EntityB as "to_be_removed"
+				- Merge EntityB's description into EntityA's description (minimally and meaningfully).
+            - Update all relationships that reference EntityB to reference EntityA instead.
+			- And their descriptions are not complementary:
+				- Mark EntityB as "to_be_removed"
+				- Keep EntityA's description unchanged.
+            - Update all relationships that reference EntityB to reference EntityA instead.
+   
+   6. Relationship Merger Procedure:
+      - If two relationships are factually equivalent:
+         - And their descriptions are complementary:
+            - Mark RelationshipB as "to_be_removed"
+            - Merge RelationshipB's description into RelationshipA's description (minimally and meaningfully).
+            - Update the temporal information: for valid_date and invalid_date, set them to earlier dates as needed, and update temporal_note accordingly.
+         - And their descriptions are not complementary:
+            - Mark RelationshipB as "to_be_removed"
+            - Keep RelationshipA's description unchanged.
+   
+	7. Precision is critical
+		- Only declare equivalence when you are strongly confident. Prioritize accuracy over coverage.
+
+	8. Multiple Duplicates:
+      - For multiple factually equivalent entities (3+):
+         - Keep one.
+         - Merge all others into it if needed.
+         - Modify the description, valid_date, invalid_date, and temporal_note only if additional info is complementary.
+      - For multiple factually equivalent relationships (3+):
+         - Keep one.
+         - Merge all others into it if needed.
+         - Modify the description,valid_date, invalid_date, and temporal_note only if additional info is complementary
+
+	9. Provide your output based on format specified below. No additional explanation, text, or headers are required in the output.
+	
+		{{
+			\"entities_to_be_removed\": [
+				\"entityX's id\",
+				\"entityY's id\",
+				\"entityZ's id\"
+			],
+         \"relationships_to_be_removed\": [
+            \"relationshipX's id\",
+            \"relationshipY's id\",
+         ],
+			\"entities_to_be_modified\": {{
+				\"entityA's id\": \"new description for entity A\"
+         }},
+   	   \"relationships_to_be_modified\": {{
+				\"relationshipA's id\": {{
+               \"description\": \"new description for relationship A\",
+               \"source\": \"updated name of source entity (if updated)\",
+               \"target\": \"updated name of target entity (if updated)\"
+            }}
+			}}
+		}}
+
+Example: 
+   a. Example Input:
+   
+      Example Entities:
+         1. LIM CHEE MENG
+            - id: E001
+            - type: Person
+            - description: CEO of XYZ BERHAD, based in Kuala Lumpur.
+
+         2. LIM CHEE MENG
+            - id: E002
+            - type: Person
+            - description: Leads XYZ BERHAD as Chief Executive Officer.
+
+         3. CHEE MENG LIM
+            - id: E003
+            - type: Person
+            - description: CEO of XYZ BERHAD, oversees operations in Malaysia.
+         
+         4. LIM CHEE SENG
+            - id: E004
+            - type: Person
+            - description: CTO of XYZ BERHAD.
+         
+         5. XYZ BERHAD
+            - id: E005
+            - type: Company
+            - description: A technology company headquartered in Kuala Lumpur.
+
+         6. XYZ SDN BERHAD
+            - id: E006
+            - type: Company
+            - description: A subsidiary of XYZ BERHAD.
+
+         7. LIM CHEE MENG
+            - id: E007
+            - type: Person
+            - description: A software engineer at ABC Corp.
+
+      Example Relationships:
+         1. employs
+            - id: R001
+            - source: XYZ BERHAD
+            - target: LIM CHEE MENG
+            - description: XYZ BERHAD employs LIM CHEE MENG as CEO.
+            - valid_date: NA
+            - invalid_date: NA
+            - temporal_note: As at 1-Jan-2023.
+
+         2. employs
+            - id: R002
+            - source: XYZ BERHAD
+            - target: LIM CHEE MENG
+            - description: LIM CHEE MENG is employed by XYZ BERHAD as Chief Executive Officer.
+            - valid_date: 1-Jan-2023
+            - invalid_date: NA
+            - temporal_note: Current role.
+
+         3. employs
+            - id: R003
+            - source: XYZ BERHAD
+            - target: CHEE MENG LIM
+            - description: XYZ BERHAD employs CHEE MENG LIM as CEO.
+            - valid_date: NA
+            - invalid_date: NA
+            - temporal_note: 1-Jan-2023.
+
+         4. employs
+            - id: R004
+            - source: XYZ BERHAD
+            - target: LIM CHEE SENG
+            - description: XYZ BERHAD employs LIM CHEE SENG as CTO.
+            - valid_date: 1-Jan-2023
+            - invalid_date: NA
+            - temporal_note: Ongoing.
+   
+   b. Example Output:
+   
+      {{
+         \"entities_to_be_removed\": [
+            \"E002\",
+            \"E003\"
+         ],
+         \"relationships_to_be_removed\": [
+            \"R002\",
+            \"R003\"
+         ],
+         \"entities_to_be_modified\": {{
+            \"E001\": \"CEO of XYZ BERHAD, oversees operations in Malaysia.\"
+         }},
+         \"relationships_to_be_modified\": {{
+            \"R001\": {{
+               \"description\": \"XYZ BERHAD employs LIM CHEE MENG as CEO.\",
+               \"source\": \"XYZ BERHAD\",
+               \"target\": \"LIM CHEE MENG\",
+               \"valid_date\": \"1-Jan-2023\",
+               \"invalid_date\": \"NA\",
+               \"temporal_note\": \"As at 1-Jan-2023.\"
+            }}
+         }}
+      }}
+
+Steps to Follow:
+
+	1. Identify potentially equivalent entities.
+
+	2. Evaluate equivalence of entities.
+
+	3. Perform merging of entities if applicable.
+ 
+   4. Ensure that all relationships referencing the merged entity are updated to reference the remaining entity.
+   
+   5. Evaluate equivalence of relationships.
+
+	6. Perform merging of relationships if applicable.
+
+	7. Output result in the specified format.
+
+You now understand the task. Please proceed to perform merging for the following entities and relationships:
+
+Entities & Relationships:
+"""
