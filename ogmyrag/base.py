@@ -2,8 +2,12 @@ from __future__ import annotations
 import os
 import inspect
 import openai
-from typing import Any
+from typing import Any, TypedDict
 
+class MongoStorageConfig(TypedDict):
+    connection_uri: str
+    database_name: str
+    collection_name: str
 
 class BaseAgent:
     def __init__(self, agent_name: str):

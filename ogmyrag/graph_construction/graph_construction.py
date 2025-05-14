@@ -1,176 +1,217 @@
+from __future__ import annotations
+
 import logging
-import json
-from typing import Any
+import asyncio
 
-from ..util import get_normalized_string, get_formatted_current_datetime
+from ..prompts import PROMPT
+from ..llm import fetch_responses_openai
+from ..util import get_formatted_ontology, get_formatted_openai_response
+from ..storage import MongoDBStorage
 
-app_logger = logging.getLogger("og-myrag")
-
-def get_formatted_entities_relationships_parsing_query(
-   prompt_template: str,
-   ontology: str,
-   source_txt_definitions: str,
-   tuple_delimeter: str = "<|>"
-   ) -> str:
-   return prompt_template.format(
-    ontology = ontology,
-    source_text_definitions = source_txt_definitions,
-    tuple_delimiter = tuple_delimeter,
+from ..base import (
+   BaseAgent, 
+   BaseMultiAgentSystem, 
+   MongoStorageConfig
 )
 
-def get_formatted_entities_and_relationships(response_string:str):
-   formatted_entities = []
-   formatted_relationships = []
-   try:
-      response_data = json.loads(response_string)
-      formatted_entities = get_formatted_entities(response_data.get("entities", []))
-      formatted_relationships = get_formatted_relationships(response_data.get("relationships", []))
-   except json.JSONDecodeError as e:
-      app_logger.info("Failed to parse JSON:", e)
-   return formatted_entities, formatted_relationships
+from .graph_construction_util import (
+   get_formatted_entities_and_relationships_for_db
+)
 
-def get_formatted_company_data(
-   document: str,
-   document_name: str,
-   document_type: str,
-   company_name: str,
-   timezone_str: str = "Asia/Kuala_Lumpur"
-   )-> dict[str, Any]:
-   return {
-      "name": get_normalized_string(document_name),
-      "type": get_normalized_string(document_type),
-      "from_company": get_normalized_string(company_name),
-      "created_at": get_formatted_current_datetime(timezone_str),
-      "is_parsed" : False,
-      "content": document
-   }
+graph_construction_logger = logging.getLogger("graph_construction")
 
-def get_formatted_entities(
-   entities: list[str], 
-   delimiter: str = "<|>",
-   timezone_str: str = "Asia/Kuala_Lumpur"
-   ) -> list[dict[str, Any]]:
-      app_logger.info(f"Formatting {len(entities)} entity(ies) with delimiter '{delimiter}'")
-      
-      formatted_entities = []
-      
-      for entity in entities:
-         parts = entity.split(delimiter)
-         if(len(parts) == 3):
-            formatted_entity = get_formatted_entity(
-               entity_name = get_normalized_string(parts[1]), 
-               entity_type = get_normalized_string(parts[0]), 
-               entity_description = parts[2].strip(),
-               timezone = timezone_str
+class EntityRelationshipExtractionAgent(BaseAgent):
+    """
+    An agent responsible for extracting entities and relationships from document given.
+    """
+    async def handle_task(self, **kwargs) -> str:
+        """
+         Parameters:
+            ontology (dict): The ontology.
+            source_text (str): The source text to be parsed.
+            source_text_publish_date (str): The date when the source text was published.
+            source_text_constraints (str): The constraints to adhere while parsing the source text.
+        """
+        formatted_ontology = get_formatted_ontology(
+           data=kwargs.get("ontology",{}) or {},
+           exclude_entity_fields=["is_stable"], 
+           exclude_relationship_fields=["is_stable"]
+        )
+        
+        system_prompt = PROMPT["ENTITIES_RELATIONSHIPS_PARSING"].format(
+           ontology=formatted_ontology,
+           document_publish_date=kwargs.get("source_text_publish_date", "NA") or "NA",
+           document_constraints=kwargs.get("source_text_constraints", "NA") or "NA",
+        )
+        
+      #   graph_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+
+        graph_construction_logger.info(f"EntityRelatonshipExtractionAgent is called")
+
+        try:
+            response = await fetch_responses_openai(
+                model="o4-mini",
+                system_prompt=system_prompt,
+                user_prompt=kwargs.get("source_text", "NA") or "NA",
+                text={
+                  "format": {"type": "text"}
+                },
+                reasoning={
+                  "effort": "medium"
+                },
+                max_output_tokens=100000,
+                tools=[],
             )
-            formatted_entities.append(formatted_entity)
-         else:
-            app_logger.error(f"Invalid entity format: {entity}. Expected format: '<entity_type>{delimiter}<entity_name>{delimiter}<entity_description>'.")
+            graph_construction_logger.info(f"EntityRelatonshipExtractionAgent\nEntity-relationship extraction response details:\n{get_formatted_openai_response(response)}")
             
-      return formatted_entities
-   
-def get_formatted_entity(
-   entity_type: str, 
-   entity_name: str, 
-   entity_description: str,
-   timezone: str
-   ) -> dict[str, Any]:
-      return {
-         "name": entity_name,
-         "type": entity_type,
-         "description": entity_description,
-         "created_at": get_formatted_current_datetime(timezone),
-         "last_modified_at": get_formatted_current_datetime(timezone),
-         "inserted_into_vectordb_at": "",
-         "inserted_into_graphdb_at": "",
-      }
+            return response.output_text
+        except Exception as e:
+            graph_construction_logger.error(f"EntityRelatonshipExtractionAgent\nEntity-relationship extraction failed: {str(e)}")
+            return ""
+
+class GraphConstructionSystem(BaseMultiAgentSystem):
+    def __init__(
+       self,
+       ontology_config: MongoStorageConfig,
+       disclosure_config: MongoStorageConfig,
+       entity_config: MongoStorageConfig,
+       relationship_config: MongoStorageConfig,
+      ):
+        super().__init__(
+            {
+               "EntityRelationshipExtractionAgent": EntityRelationshipExtractionAgent("EntityRelationshipExtractionAgent")
+            }
+        )
+        
+        try:
+         self.onto_storage = MongoDBStorage(ontology_config["connection_uri"])
+         self.onto_storage.use_database(ontology_config["database_name"])
+         self.onto_storage.use_collection(ontology_config["collection_name"])
+         
+         self.disclosure_storage = MongoDBStorage(disclosure_config["connection_uri"])
+         self.disclosure_storage.use_database(disclosure_config["database_name"])
+         self.disclosure_storage.use_collection(disclosure_config["collection_name"])
+         
+         self.entity_storage = MongoDBStorage(entity_config["connection_uri"])
+         self.entity_storage.use_database(entity_config["database_name"])
+         self.entity_storage.use_collection(entity_config["collection_name"])
+         
+         self.relationship_storage = MongoDBStorage(relationship_config["connection_uri"])
+         self.relationship_storage.use_database(relationship_config["database_name"])
+         self.relationship_storage.use_collection(relationship_config["collection_name"])
       
-      
-def get_formatted_relationships(
-   relationships: list[str], 
-   delimiter: str = "<|>",
-   timezone_str: str = "Asia/Kuala_Lumpur"
-   ) -> list[dict[str, Any]]:
-      app_logger.info(f"Formatting {len(relationships)} relationship(s) with delimiter '{delimiter}'")
-      
-      formatted_relationships = []
-      
-      for relationship in relationships:
-         parts = relationship.split(delimiter)
-         if(len(parts) == 4):
-            formatted_relationship = get_formatted_relationship(
-               relationship_type = parts[2].strip(), 
-               relationship_source = get_normalized_string(parts[0]), 
-               relationship_target = get_normalized_string(parts[1]),
-               relationship_description = parts[3].strip(),
-               timezone = timezone_str
+        except Exception as e:
+           graph_construction_logger.error(f"GraphConstructionSystem: {e}")
+           raise ValueError(f"Failed to intialize GraphConstructionSystem: {e}")
+    
+    async def insert_entities_relationships_from_unparsed_documents_into_mongodb(
+       self,
+       from_company: str,
+       type: str,
+       published_at: str,
+       exclude_documents: list[str],
+      ) -> None:
+         """
+         Insert the entities and relationships extracted from specified documents into MongoDB.
+         """
+         # Step 1 : Prepare the ontology
+         try:
+           graph_construction_logger.info("GraphConstructionSystem\nPreparing ontology...")
+           latest_onto = self.onto_storage.read_documents({"is_latest": True})[0].get("ontology", {}) or {}
+           formatted_ontology = get_formatted_ontology(
+              data=latest_onto,
+              exclude_entity_fields=["is_stable"],
+              exclude_relationship_fields=["is_stable"]
             )
-            formatted_relationships.append(formatted_relationship)
-         else:
-            app_logger.error(f"Invalid relationship format: {relationship}. Expected format: '<relationship_source>{delimiter}<relationship_target>{delimiter}<relationship_type>{delimiter}<relationship_description>'.")
-            
-      return formatted_relationships
-   
-def get_formatted_relationship(
-   relationship_type: str, 
-   relationship_source: str, 
-   relationship_target: str, 
-   relationship_description: str,
-   timezone: str
-   ) -> dict[str, Any]:
-      return {
-         "type": relationship_type,
-         "source": relationship_source,
-         "target": relationship_target,
-         "description": relationship_description,
-         "created_at": get_formatted_current_datetime(timezone),
-         "last_modified_at": get_formatted_current_datetime(timezone),
-         "inserted_into_graphdb_at": "",
-      }
+           graph_construction_logger.info(f"GraphConstructionSystem\nOntology used for extraction\n\n{formatted_ontology}")
+         except Exception as e:
+            graph_construction_logger.error(f"GraphConstructionSystem\nError while preparing ontology:{e}")
+            raise ValueError(f"Failed to prepare ontology: {e}")
+         
+         # Step 2 : Read the constraints from the disclosure storage
+         try:
+            graph_construction_logger.info("GraphConstructionSystem\nPreparing constraints...")
+            constraints = []
+            raw_document_constraints= self.disclosure_storage.read_documents({
+               "from_company": from_company.strip().upper(),
+               "type": "CONSTRAINTS",
+               "published_at": published_at
+            })
+            for doc in raw_document_constraints:
+               constraints.append(doc.get("content", ""))
+            formatted_constraints = "\n".join(constraints)
+            graph_construction_logger.info(f"GraphConstructionSystem\nConstraints used for extraction\n\n{formatted_constraints}")
+         except Exception as e:
+            graph_construction_logger.error(f"GraphConstructionSystem\nError while preparing constraints:{e}")
+            raise ValueError(f"Failed to prepare constraints: {e}") 
+         
+         # Step 3 : Read the unparsed documents from the disclosure storage
+         try:
+            graph_construction_logger.info("GraphConstructionSystem\nPreparing unparsed documents...")
+            unparsed_documents = []
+            raw_documents = self.disclosure_storage.read_documents({
+               "from_company": from_company.strip().upper(),
+               "type": type.strip().upper(),
+               "published_at": published_at,
+               "is_parsed": False
+            })
+            for i, doc in enumerate(raw_documents, start=1):
+               name = doc.get("name", "")
+               if name not in exclude_documents:
+                  unparsed_documents.append(doc.get("content", ""))
+                  graph_construction_logger.info(f"GraphConstructionSystem\nDocuments to be parsed: {i}. {name}")
+         except Exception as e:
+            graph_construction_logger.error(f"GraphConstructionSystem\nError while preparing unparsed documents:{e}")
+            raise ValueError(f"Failed to prepare unparsed documents: {e}")
+         
+         # Step 4 : Calling LLM to extract entities and relationships from the documents
+         try:
+            graph_construction_logger.info("GraphConstructionSystem\nExtracting entities and relationships from unparsed documents...")
+            if not unparsed_documents:
+               graph_construction_logger.info("GraphConstructionSystem\nNo unparsed documents found. Skipping extraction.")
+               raise ValueError(f"No unparsed documents found.") 
+            tasks = [
+              self.agents["EntityRelationshipExtractionAgent"].handle_task(
+                  ontology=latest_onto,
+                  source_text=doc,
+                  source_text_publish_date=published_at,
+                  source_text_constraints=formatted_constraints,
+              )
+              for doc in unparsed_documents
+            ]
+            extraction_agent_responses = await asyncio.gather(*tasks)
+         except Exception as e:
+            graph_construction_logger.error(f"GraphConstructionSystem\nError while extracting entities and relationships:{e}")
+            raise ValueError(f"Failed to extract entities and relationships: {e}")
+        
+         # Step 5 : Insert the entities and relationships into MongoDB
+         try:
+            graph_construction_logger.info("GraphConstructionSystem\nInserting entities and relationships into MongoDB...")
+            for response in extraction_agent_responses:
+               formatted_entities, formatted_relationships = get_formatted_entities_and_relationships_for_db(response)
+               if formatted_entities:
+                  for formatted_entity in formatted_entities:
+                     self.entity_storage.create_document(formatted_entity)
+               if formatted_relationships:
+                  for formatted_relationship in formatted_relationships:
+                     self.relationship_storage.create_document(formatted_relationship)
+            graph_construction_logger.info(f"GraphConstructionSystem\nSuccessfully inserted {len(formatted_entities)} entity(ies) and {len(formatted_relationships)} relationship(s) into MongoDB.")
+         except Exception as e:
+            graph_construction_logger.error(f"GraphConstructionSystem\nError while inserting entities and relationships into MongoDB:{e}")
+            raise ValueError(f"Failed to insert entities and relationships into MongoDB: {e}")
 
-def get_formatted_entity_for_vectordb(
-   entity: dict[str, Any], 
-   timezone="Asia/Kuala_Lumpur"
-   ) -> dict[str, Any]:
-   return {
-      "id": str(entity["_id"]),
-      "name": entity["name"], 
-      "namespace": entity["type"],
-      "metadata": {
-         "entity_name": entity["name"],
-         "description": entity["description"],
-         "created_at": get_formatted_current_datetime(timezone),
-         "last_modified_at": get_formatted_current_datetime(timezone),
-      }
-   }
-
-def get_formatted_entity_for_graphdb(
-   entity: dict[str, Any], 
-   timezone="Asia/Kuala_Lumpur"
-) -> dict[str, Any]:
-   return {
-      "id": str(entity["_id"]),
-      "name": entity["name"], 
-      "description": entity["description"],
-      "created_at": get_formatted_current_datetime(timezone),
-      "last_modified_at": get_formatted_current_datetime(timezone),
-   }
-   
-def get_formatted_relationship_for_graphdb(
-   relationship: dict[str, Any], 
-   timezone="Asia/Kuala_Lumpur"
-) -> dict[str, Any]:
-   return {
-      "source_id": relationship["source_entity_id"], 
-      "target_id": relationship["target_entity_id"],
-      "type": relationship["type"],
-      "properties": {
-         "id": str(relationship["_id"]),
-         "source_entity_name": relationship["source"],
-         "target_entity_name": relationship["target"],
-         "description": relationship["description"],
-         "created_at": get_formatted_current_datetime(timezone),
-         "last_modified_at": get_formatted_current_datetime(timezone),
-      },
-  
-   }
+         # Step 6 : Update the unparsed documents in the disclosure storage
+         try:
+            graph_construction_logger.info("GraphConstructionSystem\nUpdating the 'is_parsed' status of documents...")
+            for document in raw_documents:
+               current_name = document.get("name", "")
+               if current_name not in exclude_documents:
+                  self.disclosure_storage.update_document(
+                     {"_id": document["_id"]},
+                     {"is_parsed": True}
+                  )
+                  graph_construction_logger.info(f"GraphConstructionSystem\nUpdated the 'is_parsed' status of {current_name}.")
+         except Exception as e:
+            graph_construction_logger.error(f"GraphConstructionSystem\nError while updating the 'is_parsed' status of documents:{e}")
+            raise ValueError(f"Failed to update the 'is_parsed' status of documents: {e}")
+    

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 
 from typing import TypedDict
@@ -9,22 +8,16 @@ from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import get_formatted_ontology, get_formatted_openai_response, get_clean_json
 from ..storage import MongoDBStorage
-from ..base import BaseAgent, BaseMultiAgentSystem
+from ..base import BaseAgent, BaseMultiAgentSystem, MongoStorageConfig
 from .ontology_construction_util import (
    get_new_version,
    get_formatted_cq_for_db,
    get_formatted_ontology_for_db,
    get_formatted_feedback_for_db,
-   get_formatted_cq_for_display,
-   get_formatted_feedback_for_display
+   get_formatted_cq_for_display
 )
 
 ontology_construction_logger = logging.getLogger("ontology_construction")
-
-class StorageConfig(TypedDict):
-    connection_uri: str
-    database_name: str
-    collection_name: str
     
 class CQGenerationAgent(BaseAgent):
     """
@@ -262,9 +255,9 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
     def __init__(
        self, 
        ontology_purpose: str,
-       ontology_config: StorageConfig, 
-       cq_config: StorageConfig,
-       feedback_config: StorageConfig
+       ontology_config: MongoStorageConfig, 
+       cq_config: MongoStorageConfig,
+       feedback_config: MongoStorageConfig
        ):
         super().__init__(
             {
@@ -291,7 +284,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
          self.ontology_purpose = ontology_purpose
         except Exception as e:
            ontology_construction_logger.error(f"OntologyConstructionSystem: {e}")
-           raise ValueError(f"Failed to connect to MongoDB: {e}")
+           raise ValueError(f"Failed to initialize OntologyConstructionSystem: {e}")
     
     async def handle_request(self, **kwargs) -> None:
       """
