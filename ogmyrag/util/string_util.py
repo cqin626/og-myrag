@@ -40,9 +40,9 @@ def get_formatted_ontology(
         relationships = data.get("relationships", {})
         output_lines.append("Relationships:")
         for idx, (relation, details) in enumerate(relationships.items(), start=1):
-            source = details.get("source", "")
-            target = details.get("target", "")
-            output_lines.append(f"  {idx}. {source} {relation} {target}")
+            output_lines.append(f"  {idx}. {relation}")
+            output_lines.append(f"  - source: {details.get('source', '')}")
+            output_lines.append(f"  - target: {details.get('target', '')}")
             if "llm-guidance" not in exclude_relationship_fields:
                 output_lines.append(f"  - llm-guidance: {details.get('llm-guidance', '')}")
             if "is_stable" not in exclude_relationship_fields:
