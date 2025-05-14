@@ -82,6 +82,8 @@ def get_formatted_ontology_for_db(
    purpose: str, 
    version: str,
    cq_version: str,
+   modification_justification: dict = {},
+   modification_note: str = "",
    timezone: str = "Asia/Kuala_Lumpur"
    ) -> dict[str, Any]:
       return {
@@ -89,6 +91,8 @@ def get_formatted_ontology_for_db(
         "created_at": get_formatted_current_datetime(timezone),
 		"model_used": model,
 		"onto_purpose": purpose,
+        "modification_justification": modification_justification,
+        "modification_note": modification_note,
         "is_latest": True,
 		"version": version,
         "cq_version": cq_version

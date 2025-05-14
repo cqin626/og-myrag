@@ -1,4 +1,6 @@
 import asyncio
+import json
+import re
 from functools import wraps
 
 def limit_concurrency(max_concurrent_tasks: int):
@@ -11,3 +13,21 @@ def limit_concurrency(max_concurrent_tasks: int):
                 return await func(*args, **kwargs)
         return wrapper
     return decorator
+
+def get_clean_json(text: str) -> dict:
+    # Step 1: Trim whitespace
+    text = text.strip()
+
+    # Step 2: Remove Markdown-style code block (```json ... ```)
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+
+    # Step 3: Extract JSON object between first '{' and last '}'
+    try:
+        start = text.index('{')
+        end = text.rindex('}') + 1
+        json_str = text[start:end]
+        return json.loads(json_str)
+    except (ValueError, json.JSONDecodeError) as e:
+        print(f"[Error] JSON parsing failed: {e}")
+        return {}

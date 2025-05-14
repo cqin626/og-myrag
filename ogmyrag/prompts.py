@@ -353,30 +353,38 @@ PROMPT["ONTOLOGY_CONSTRUCTION"] = """
 You are a non-taxonomic, relationship-driven ontology construction agent. You are provided with a document describing {document_desc}, and your task is to extend the existing ontology using its content. Follow the guidelines, steps, and output format strictly.
 
 Guidelines:
-	1. Only extract entities and relationships that directly serve the ontology's purpose: {ontology_purpose}.
+	1. Preserve purpose
+      - Only extract entities and relationships that directly support the ontology's stated purpose: "{ontology_purpose}", and complement the existing ontology provided below.
 
-	2. Identify non-taxonomic, meaningful relationships (e.g., Company hasSubsidiary Company) that reflect interconnections relevant to the purpose.
+	2. Focus on non-taxonomic, unidirectional relationships relationships
+      - Identify non-taxonomic, unidirectional relationships (e.g., Company hasSubsidiary Company) that reflect interconnections relevant to the purpose. 
+      - Relationships are directed from source to target entity
 		- Relationships may occur between entities of the same or different types.
 		- Do not include taxonomic/classification relationships.
+      - Do not include source or target entity names in the relationship name (e.g., use hasSubsidiary, not Company hasSubsidiary Company).
+      - Ensure all new relationships are unidirectional.
 	
 	3. Extract only entities that are necessary to establish valid relationships.
 		- Use general but meaningful types (e.g., Person instead of Justin, avoid types like Entity).
 		- Do not convert names or overly specific attributes into entity types
-
-	4. If the source document includes any specific rules or constraints, honor them during extraction.
 	
-	5. Provided examples are for reference only. Do not reuse example entities or relationships unless they are explicitly present in the source document.
-	
-	6. Do not modify entities or relationships marked as "is_stable": "TRUE". Mark all newly proposed items as "is_stable": "FALSE".
-
-	7. Use feedback as informative, not prescriptive.
-      - Before applying changes based on feedback, think:
-         - "Does this improve alignment with the ontology's purpose?"
-         - "Does this preserve structural and conceptual coherence?"
+	4. Use only what's in the document
+      - Do not reuse example entities or relationships; they are for reference purposes only.
+      - Do not invent or infer entities or relationships beyond what is stated.
+      
+   5. Do not modify existing ontology
+      - You must include all existing entities and relationships unchanged.
+      - Do not edit or reinterpret their definitions or examples.
+      - The "is_stable" field must be set exactly as "FALSE" (in capital letters) for all new entities or relationships.
+         - This indicates that new entries are provisional until reviewed.
+         - You are not permitted to assign "TRUE" to any entity or relationship.
+         - You must preserve the is_stable value of existing entries exactly as is.
  
-   8. If no new valid entities or relationships are found, return the ontology unchanged and include an explanation in the "note" field. Do not fabricate or infer entities or relationships beyond the document.
+   6. Return unchanged ontology if no additions are found
+      - If no valid additions can be made, return the ontology unchanged and include a brief explanation in the "note" field.
 	
-	9. You must follow the output format shown and include all existing and new entities and relationships in your output. 
+	7. You must follow the output format shown and include all existing and new entities and relationships in your output. 
+      - Return only a raw JSON object. Do not include anything before or after it, not even 'json' or code block markers.
 
 		Output Format:
 		{{
@@ -418,26 +426,22 @@ Guidelines:
 			- examples: Illustrative examples showing correct usage, including edge cases.
 
 Steps:
-	1. Review the current ontology, its stated purpose, and any provided feedback.
+   1. Review the current ontology and its stated purpose.
 
-	2. Identify new, valid non-taxonomic relationships from the document that align with the ontology purpose.
+   2. Identify new, valid non-taxonomic relationships from the document that align with the ontology's purpose and complement existing relationships.
 
-	3. Define any required entity types that support the relationships.
+   3. Define any additional entity types necessary to support the newly identified relationships.
 
-	4. Avoid duplication of any entity or relationship already in the ontology.
+   4. Include the existing ontology without modifying any of its attributes.
 
-	5. Preserve stability: unchanged components must retain "is_stable": "TRUE".
-
-	6. If applicable, incorporate feedback in a way that enhances precision without undermining structural integrity.
-
-Example Input:
-	a. Source text:
+Example:
+	a. Example Source Text:
 	“Dr Tan Hui Mei is currently serving as the independent director of ABC Berhad, which is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.”
 
-	b. Existing ontology:
+	b. Example Ontology:
 	Empty
 	
-	c. Output:
+	c. Example Output:
 		{{
 			\"entities\": {{
 				\"Person\": {{
@@ -498,42 +502,45 @@ Example Input:
 Actual Ontology:
 {ontology}
 
-Document Constraints:
-{document_constraints}
-
-Feedback:
-{feedback}
-
-You now understand your role, the constraints, and the evaluation criteria. Proceed to extend the ontology using the provided document and return the result using the specified format.
+You now understand the guidelines and existing ontology. Proceed to extend the ontology using the provided document and return the result using the specified format.
 
 Document:
+"""
+
+PROMPT["ONTOLOGY_RECONSTRUCTION"] = """
+Many entities and unidirectional relationships were missed in the previous extraction. Please reprocess the text carefully and extract additional relevant information to extend the ontology, ensuring all relationships are unidirectional and support the ontology's purpose.
 """
 
 PROMPT["ONTOLOGY_COMPLEXITY_REDUCTION"] = """
 You are a non-taxonomic, relationship-driven ontology complexity reduction agent. Your task is to minimize the number of entities and relationships in the ontology without compromising its intended purpose.
 
 Guidelines:
-	
-	1. All reductions must preserve the ontology's ability to serve its defined purpose: {ontology_purpose}.
+ 
+	1. All reductions must preserve the ontology's ability to serve its purpose: '{ontology_purpose}'
  
 	2. Do not remove any entities or relationships with "is_stable": "TRUE". Only consider reduction for elements marked "is_stable": "FALSE".
    
-	3. When removing a relationship, check whether its associated entities (source or target) are involved in any other relationships:
+   3. Do not remove an entity or relationship solely because it is removable. Remove it only if it does not align with the purpose of the ontology.
+   
+	4. When removing a relationship, check whether its associated entities (source or target) are involved in any other relationships:
       - If an associated entity becomes orphaned (no longer part of any relationship), remove the entity as well.
       - If the entity is used elsewhere, retain the entity.
       
-   4. When removing an entity, check whether it is involved in any required relationship.
+   5. When removing an entity, check whether it is involved in any required relationship.
       - If all related relationships are removable, you may proceed to remove the entity.
       - If any related relationship is not removable, do not remove it.
 
-   5. Do not alter the structure, content, or attributes of any retained entities or relationships.
+   6. Do not alter the structure, content, or attributes of any retained entities or relationships.
+      - The "is_stable" attribute must be output exactly as "TRUE" or "FALSE", in all capital letters.
+      - You have no right to modify the value of the "is_stable" column; you must output it exactly as it is.
 
-   6. For every entity or relationship removed, include a brief explanation in the appropriate section of the output.
+   7. For every entity or relationship removed, include a brief explanation in the appropriate section of the output.
 
-   7. If no reduction is possible, return the ontology unchanged and explain why in the "note" field.
+   8. If no reduction is possible, return the ontology unchanged and explain why in the "note" field.
 	
-	8. Your output must exactly match the structure shown below.
-		
+	9. Your output must exactly match the structure shown below.
+		- Return only a raw JSON object. Do not include anything before or after it, not even 'json' or code block markers.
+  
       {{
          \"updated_ontology\": {{
             \"entities\": {{
@@ -560,87 +567,246 @@ Guidelines:
                }}
             }}
          }},
-         \"removed_entities\": [
-            {{
-               \"EntityM\": \"Explanation\"
-            }}
-         ],
-         \"removed_relationships\": [
-            {{
-               \"RelationshipN\": \"Explanation\"
-            }}
-         ],
+         \"removed_entities\": {{
+            \"EntityM\": \"Explanation\"
+         }}
+         ,
+         \"removed_relationships\": {{
+            \"RelationshipN\": \"Explanation\"
+         }},
          \"note\": \"\"
 		}}
   
 Steps:
-   1. Understand the ontology's function. Focus only on entities and relationships marked "is_stable": "FALSE".
+   1. Understand the ontology's purpose
+      - Familiarize yourself with the overall structure and objective of the ontology to ensure meaningful simplification.
 
-   2. Check if each relationship can be removed without breaking logical structure. If removal leads to orphaned entities, mark those entities for removal as well.
+   2. Identify removable entities and relationships
+      - Focus only on those marked with "is_stable": "FALSE" to reduce complexity
+      
+   3. Evaluate each relationship for safe removal
+      - Check whether the relationship is aligned with the purpose of the ontology
+      - Ensure that removing a relationship does not break the logical integrity of the ontology.
+      - If a relationship's removal results in an orphaned entity (i.e., an entity left without any connections), remove that entity as well.
 
-   3. Ensure an entity is not involved in any non-removable relationship before removal. 
-   
-   4. Validate that the resulting ontology still supports all required use cases.
-   
-   5. Provide brief, clear justifications for each removed element.
-   
+   4. Check entity involvement before removal
+      - Do not remove any entity that is still part of a retained relationship.
+
+   5. Provide concise justifications
+      - Clearly explain the reason for each removed entity or relationship.
+
+   6. Include all retained elements
+      - Include all retained entities and relationships in the updated_ontology column.
+
+Example:
+   a. Example Ontology Purpose:
+
+      This ontology is designed for the Human Resources (HR) domain. It models the key entities and relationships involved in managing employees, roles, and organizational structure within a corporate environment. The purpose is to support extraction of structured HR-related data (e.g., employee records, reporting lines, and role responsibilities) from unstructured documents such as HR manuals, resumes, company policies, and internal communications.
+
+   b. Example Ontology:
+
+      Entities:
+         1. Employee
+         - definition: An individual employed by the organization on a full-time, part-time, or contract basis.
+         - llm-guidance: Extract named individuals explicitly mentioned as employees or staff members. Avoid general terms like "people" - or "personnel" unless specific.
+         - is_stable: FALSE
+         - examples: ["John Tan", "Nur Aisyah", "Michael Lee"]
+         
+         2. Department
+         - definition: A functional unit within the organization responsible for specific tasks or operations.
+         - llm-guidance: Extract organizational units like Finance, Human Resources, or IT when referenced as departments.
+         - is_stable: FALSE
+         - examples: ["Finance Department", "IT Department"]
+         
+         3. Role
+         - definition: The position or job title held by an employee within the organization.
+         - llm-guidance: Extract roles when an individual's position is specified. Do not confuse with departments.
+         - is_stable: FALSE
+         - examples: ["Software Engineer", "HR Manager", "Financial Analyst"]
+         
+         4. Manager
+         - definition: An employee with supervisory responsibilities over others in a department or project.
+         - llm-guidance: Extract individuals referred to as managers or heads of teams.
+         - is_stable: FALSE
+         - examples: ["Lim Wei Seng", "Head of Operations"]
+         
+         5. Contract
+         - definition: A formal agreement defining employment terms between the employee and the organization.
+         - llm-guidance: Extract documents or references to employment agreements, not general policies.
+         - is_stable: FALSE
+         - examples: ["Employment Contract", "12-Month Internship Agreement"]
+         
+         6. Organization
+         - definition: The company or legal entity employing the individuals.
+         - llm-guidance: Extract the name of the organization, especially if mentioned as the employer.
+         - is_stable: TRUE
+         - examples: ["FutureTech Sdn Bhd", "GreenHive Berhad"]
+      
+      Relationships:
+         1. Employee worksIn Department
+         - llm-guidance: Use when an employee is assigned to or part of a specific department.
+         - is_stable: FALSE
+         - examples: ["John Tan worksIn IT Department"]
+         
+         2. Employee holdsRole Role
+         - llm-guidance: Use when a job title or position is attributed to an employee.
+         - is_stable: FALSE
+         - examples: ["Nur Aisyah holdsRole HR Manager"]
+         
+         3. Manager supervises Employee
+         - llm-guidance: Use when someone is explicitly stated as the supervisor, manager, or head of another person.
+         - is_stable: FALSE
+         - examples: ["Lim Wei Seng supervises Michael Lee"]
+         
+         4.Organization employs Employee
+         - llm-guidance: Use when an employee is identified as being employed by the organization.
+         - is_stable: FALSE
+         - examples: ["GreenHive Berhad employs Nur Aisyah"]
+         
+         5. Employee hasContract Contract
+         - llm-guidance: Use when an employment contract is mentioned in relation to an employee.
+         - is_stable: FALSE
+         - examples: ["Michael Lee hasContract Employment Contract"]
+
+   C. Example Output:
+      {{
+         \"updated_ontology\": {{
+            \"entities\": {{
+               \"Employee\": {{
+                  \"definition\": \"An individual employed by the organization on a full-time, part-time, or contract basis.\",
+                  \"llm-guidance\": \"Extract named individuals explicitly mentioned as employees or staff members. Avoid general terms like 'people' or 'personnel' unless specific.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"John Tan\", \"Nur Aisyah\", \"Michael Lee\"]
+               }},
+               \"Department\": {{
+                  \"definition\": \"A functional unit within the organization responsible for specific tasks or operations.\",
+                  \"llm-guidance\": \"Extract organizational units like Finance, Human Resources, or IT when referenced as departments.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Finance Department\", \"IT Department\"]
+               }},
+               \"Role\": {{
+                  \"definition\": \"The position or job title held by an employee within the organization.\",
+                  \"llm-guidance\": \"Extract roles when an individual's position is specified. Do not confuse with departments.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Software Engineer\", \"HR Manager\", \"Financial Analyst\"]
+               }},
+               \"Organization\": {{
+                  \"definition\": \"The company or legal entity employing the individuals.\",
+                  \"llm-guidance\": \"Extract the name of the organization, especially if mentioned as the employer.\",
+                  \"is_stable\": \"TRUE\",
+                  \"examples\": [\"FutureTech Sdn Bhd\", \"GreenHive Berhad\"]
+               }}
+            }},
+            \"relationships\": {{
+               \"worksIn\": {{
+                  \"source\": \"Employee\",
+                  \"target\": \"Department\",
+                  \"llm-guidance\": \"Use when an employee is assigned to or part of a specific department.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"John Tan worksIn IT Department\"]
+               }},
+               \"holdsRole\": {{
+                  \"source\": \"Employee\",
+                  \"target\": \"Role\",
+                  \"llm-guidance\": \"Use when a job title or position is attributed to an employee.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Nur Aisyah holdsRole HR Manager\"]
+               }},
+               \"employs\": {{
+                  \"source\": \"Organization\",
+                  \"target\": \"Employee\",
+                  \"llm-guidance\": \"Use when an employee is identified as being employed by the organization.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"GreenHive Berhad employs Nur Aisyah\"]
+               }}
+            }}
+         }},
+         \"removed_entities\": {{
+            \"Manager\": \"Removed because it is redundant; supervisory relationships can be modeled using Employee with the 'holdsRole' relationship to indicate managerial roles.\",
+            \"Contract\": \"Removed because it is not essential for the ontology's purpose of modeling employee records, roles, and organizational structure. Contract details are secondary and can be handled outside the ontology.\"
+         }},
+         \"removed_relationships\": {{
+            \"supervises\": \"Removed because it relies on the Manager entity, which is redundant. Supervisory relationships can be inferred using 'holdsRole' with roles like 'Manager'.\",
+            \"hasContract\": \"Removed because the Contract entity is not essential, and this relationship does not directly support the core HR data extraction purpose.\"
+         }},
+         \"note\": \"\"
+      }}
+
+You have now received the guidelines. Proceed to analyze and reduce the ontology strictly according to the instructions and return the output in the required format only.
+
 Ontology:
-{Ontology}
-
-You have now received the guidelines and the ontology. Proceed to analyze and reduce the ontology strictly according to the instructions and return the output in the required format only.
 """
 
 PROMPT["ONTOLOGY_CLARITY_ENHANCEMENT"] = """
-You are a non-taxonomic, relationship-driven ontology clarity enhancement agent. Your task is to refine the ontology to ensure all entity and relationship names, definitions, guidance, and examples are clear, intuitive, unambiguous, and free from jargon — without compromising the ontology's intended purpose.
+You are an ontology clarity enhancement agent specialized in non-taxonomic, relationship-driven models. Your task is to refine the ontology to ensure that all entity and relationship names, definitions, LLM-guidance, and examples are clear, intuitive, general, unambiguous, and free of jargon—while preserving the ontology's intended purpose.
 
 Guidelines
-   1. All modifications must preserve the ontology's ability to fulfill its intended purpose: {ontology_purpose}.
+   1. Preserve Purpose
+      - All changes must maintain the ontology's ability to fulfill its intended purpose: {ontology_purpose}.
 
-   2. Do not modify any entity or relationship where "is_stable" is "TRUE". Only evaluate and modify those where "is_stable" is "FALSE".
-
-   3. For each unstable entity:
-
-      a. Name
-         - Should be clear, general (but not too broad or too specific).
-         - Should avoid jargon or counterintuitive terms.
-         - Example: Replace "ListedIssuer" with "ListedCompany".
-
-      b. Definition
-         - Must be concise, specific, and unambiguous.
-
-      c. LLM-Guidance
-         - Should include extraction rules that promote consistency and clarity.
-         - Examples:
-            - Remove honorifics (e.g., "Mr.", "Dr.") from person names.
-            - Extract only meaningful location names from long addresses.
-
-      d. Examples
-         - Must represent realistic, typical use cases of the entity.
-
-   4. For each unstable relationship:
-
-      a. Name
-         - Must be clearly distinct and intuitive.
-         - Use camelCase (e.g., hasSubsidiary, isPartOf).
+   2. Respect Stability Flags
+      - Do not modify any entity or relationship where is_stable is "TRUE".
+      - Only evaluate and modify those marked "FALSE".
+      - Output the is_stable field exactly as "TRUE" or "FALSE" (uppercase only).
+      - You must not alter the value of the is_stable field.
       
-      b. Source/Target Entities
-         - Must reference valid entity types in the ontology.
+   3. Entities
+      - For each entity where is_stable is "FALSE":
+         a. Name
+            - Should be clear, general (but not too broad or too specific).
+            - Should avoid jargon or counterintuitive terms.
+            - Example: Replace "ListedIssuer" with "ListedCompany".
 
-      c. LLM-Guidance
-         - Must clearly describe when and how to apply the relationship.
+         b. Definition
+            - Should be concise, general, and unambiguous.
 
-      d. Examples
-         - Must clearly illustrate how this relationship is applied.
+         c. LLM-Guidance
+            - Provide clear rules to ensure consistent and accurate extraction.
+            - Examples:
+               - Remove honorifics (e.g., "Mr.", "Dr.") from person names.
+               - Extract only meaningful location names from long addresses.
 
-   5. Include a short reason for each change in the modified_entities and modified_relationships sections of the output.
-      - Example: "ListedIssuer's name": "ListedCompany is more intuitive and avoids financial jargon".
+         d. Examples
+            - Provide realistic, representative examples.
 
-   6. All unmodified entities and relationships must appear exactly as-is in the updated_ontology output, with their original "is_stable" values intact.
+   4. Relationships
+      - For each relationship where is_stable is "FALSE":
+         a. Name
+            - Must be intuitive, clearly distinct, and imply unidirectional flow (e.g., hasSubsidiary, isPartOf). 
+            - Use camelCase (e.g., hasSubsidiary, isPartOf).
+            - Do not include source or target entity names in the relationship name (e.g., use hasSubsidiary, not CompanyHasSubsidiaryCompany).
+         
+         b. Source/Target Entities
+            - Must reference valid entity types in the ontology.
 
-   7. If no changes are made, output the original ontology unchanged. Provide a short justification in the note field.
+         c. LLM-Guidance
+            - Must clearly describe when and how to apply the relationship.
 
-   8. Your output must strictly follow this structure:
+         d. Examples
+            - Must clearly illustrate how this relationship is applied.
+            
+   5. Ensure Consistency and Clarity
+      - All definitions and LLM guidance must be distinct, consistent, and unambiguous across the ontology.
+      - Akk examples must match the definitions and LLM guidance.
+      
+   6. Optional Flagging for Removal
+      - You may flag entities or relationships that could be removed, with a justification in the "note" field after clarity improvements are made.
+      - Do not remove them yourself, as you are not authorized to do so.
    
+   7. Documenting Changes
+      - For each change, provide a short explanation under modified_entities or modified_relationships.
+      - Example: "ListedIssuer's name": "ListedCompany is more intuitive and avoids financial jargon."
+
+   8. Unchanged Elements
+      - All entities and relationships that are not modified must appear exactly as-is in updated_ontology, with their original is_stable values intact.
+
+   9. No Valid Modifications
+      - If no changes are necessary, return the ontology unchanged and provide a reason in the "note" field.
+      - You are not required to modify every unstable element. If an element is valid, even if marked unstable, no change is needed.
+
+   10. Your output must strictly follow this structure:
+      - Return only a raw JSON object. Do not include anything before or after it, not even 'json' or code block markers.
+      
       {{
          \"updated_ontology\": {{
             \"entities\": {{
@@ -667,39 +833,210 @@ Guidelines
                }}
             }}
          }},
-         \"modified_entities\": [
-            {{
-               \"EntityM's name\": \"Explanation\",
-               \"EntityM's definition\": \"Explanation\"
-            }}
-         ],
-         \"modified_relationships\": [
-            {{
-               \"RelationshipN's definition\": \"Explanation\"
-            }}
-         ],
+         \"modified_entities\": {{
+            \"EntityM's name\": \"Explanation\",
+            \"EntityM's definition\": \"Explanation\"
+         }},
+         \"modified_relationships\": {{
+            \"RelationshipN's definition\": \"Explanation\"
+         }},
          \"note\": \"\"
       }}
 
 Steps
-   1. Begin by reading {ontology_purpose} to understand what the ontology is meant to achieve.
+   1. Understand Purpose
+      - Begin by reviewing {ontology_purpose} to understand the intended function of the ontology.
 
-   2. For each entity or relationship where "is_stable": "FALSE":
-      - Review and revise names, definitions, guidance, and examples to eliminate ambiguity or complexity.
+   2. Review Unstable Elements
+      - For each entity or relationship where is_stable is "FALSE", assess and revise as needed to improve clarity and usability.
+      - Update definitions, guidance, and examples to align, ensuring example synchronization.
+      - Confirm that each relationship references valid source and target entities and has clear application rules.
 
-   3. Ensure all relationships link valid source and target entities and are clearly defined.
+   3. Document All Modifications
+      - Record each change along with a brief explanation in the appropriate section.
 
-   4. If a change is made, include:
-      - The modified name or aspect.
-      - A clear and short explanation in the modified_entities or modified_relationships section.
+   4. Output the Full Ontology
+      - Return the complete ontology under updated_ontology, including both modified and unmodified items.
+      - If no changes were necessary, return the full original ontology with a brief explanation in the "note".
 
-   5. Output the complete ontology under updated_ontology, including unchanged elements.
-      - If no modifications were needed, output everything as-is with a brief reason in note.
+Example:
+   a. Example Ontology Purpose
+      The ontology is designed to model the organizational structure and key operational relationships within a technology company. It supports the extraction of structured data from corporate documents such as annual reports, employee handbooks, and press releases to enable analysis of company hierarchies, product development, and strategic partnerships. The ontology powers a knowledge graph for querying relationships like employee roles, department functions, and product ownership.
+      
+   b. Example Ontology
+   
+      Entities:
+         1. StaffMember
+         - definition: An individual employed by the technology company, including full-time, part-time, or contract workers.
+         - llm-guidance: Extract named individuals explicitly identified as employees or staff. Exclude generic references like "workers" unless specific.
+         - is_stable: FALSE
+         - examples: ["Alice"]
+         
+         2. Division
+         - definition: A functional unit within the company responsible for specific operations or tasks.
+         - llm-guidance: Extract units like "Research & Development" or "Marketing" when referred to as divisions or departments.
+         - is_stable: FALSE
+         - examples: ["R&D Division", "Marketing Division"]
+         
+         3. JobTitle
+         - definition: The position or role held by a staff member within the company.
+         - llm-guidance: Extract specific job titles or positions attributed to individuals, such as "Engineer" or "Manager". Avoid confusing with divisions.
+         - is_stable: FALSE
+         - examples: ["Software Engineer", "Product Manager", "Marketing Director"]
+         
+         4. ProductItem
+         - definition: A product developed or offered by the company.
+         - llm-guidance: Extract specific products mentioned in company documents, such as software or hardware.
+         - is_stable: FALSE
+         - examples: ["CloudSync Software", "SmartDevice X"]
+         
+         5. ExternalPartner
+         - definition: An external organization collaborating with the company on projects or business activities.
+         - llm-guidance: Extract names of organizations explicitly mentioned as partners or collaborators.
+         - is_stable: FALSE
+         - examples: ["TechCorp Ltd", "Innovate Solutions"]
+         
+         6. Company
+         - definition: The technology company itself, as a legal or operational entity.
+         - llm-guidance: Extract the company name when mentioned as the employer or primary entity.
+         - is_stable: TRUE
+         - examples: ["NexGen Technologies"]
+
+      Relationships:
+         1. StaffMember worksIn Division
+         - llm-guidance: Use when a staff member is assigned to or works within a specific division.
+         - is_stable: FALSE
+         - examples: ["Alice Wong worksIn R&D Division"]
+         
+         2. StaffMember holdsJobTitle JobTitle
+         - llm-guidance: Use when a specific job title or position is attributed to a staff member.
+         - is_stable: FALSE
+         - examples: ["Bob Tan holdsJobTitle Software Engineer"]
+         
+         3. Division developsProduct ProductItem
+         - llm-guidance: Use when a division is responsible for creating or managing a specific product or service.
+         - is_stable: FALSE
+         - examples: ["R&D Division developsProduct CloudSync Software"]
+         
+         4. Company collaboratesWith ExternalPartner
+         - llm-guidance: Use when the company is explicitly described as partnering or collaborating with an external organization.
+         - is_stable: FALSE
+         - examples: ["NexGen Technologies collaboratesWith TechCorp Ltd"]
+         
+         5. Company employs StaffMember
+         - llm-guidance: Use when a staff member is identified as being employed by the company.
+         - is_stable: TRUE
+         - examples: ["NexGen Technologies employs Alice Wong"]
+
+   c. Example Output
+      {{
+         \"updated_ontology\": {{
+            \"entities\": {{
+               \"Employee\": {{
+                  \"definition\": \"An individual working for the technology company, including full-time, part-time, or contract employees.\",
+                  \"llm-guidance\": \"Extract full names of individuals identified as employees or staff, excluding honorifics (e.g., 'Mr.', 'Dr.').\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Alice Wong\", \"Bob Tan\", \"Clara Lim\"]
+               }},
+               \"Department\": {{
+                  \"definition\": \"A unit within the company responsible for specific functions or operations.\",
+                  \"llm-guidance\": \"Extract named units like 'Research & Development' or 'Marketing' when referred to as departments or divisions. Exclude vague terms like 'team' unless clearly a department.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Research & Development\", \"Marketing\"]
+               }},
+               \"Role\": {{
+                  \"definition\": \"The job or position held by an employee within the company.\",
+                  \"llm-guidance\": \"Extract specific job titles like 'Engineer' or 'Manager' attributed to individuals. Do not confuse with department names.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Software Engineer\", \"Product Manager\", \"Marketing Director\"]
+               }},
+               \"Product\": {{
+                  \"definition\": \"A product created or provided by the company.\",
+                  \"llm-guidance\": \"Extract named products, such as software or hardware, mentioned in company documents.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"CloudSync Software\", \"SmartDevice X\"]
+               }},
+               \"Partner\": {{
+                  \"definition\": \"An external organization working with the company on projects or business activities.\",
+                  \"llm-guidance\": \"Extract names of organizations explicitly identified as partners or collaborators in company documents.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"TechCorp Ltd\", \"Innovate Solutions\"]
+               }},
+               \"Company\": {{
+                  \"definition\": \"The technology company itself, as a legal or operational entity.\",
+                  \"llm-guidance\": \"Extract the company name when mentioned as the employer or primary entity.\",
+                  \"is_stable\": \"TRUE\",
+                  \"examples\": [\"NexGen Technologies\"]
+               }}
+            }},
+            \"relationships\": {{
+               \"worksIn\": {{
+                  \"source\": \"Employee\",
+                  \"target\": \"Department\",
+                  \"llm-guidance\": \"Apply when an employee is explicitly stated to work in a specific department, such as 'Alice is in R&D'.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Alice Wong worksIn Research & Development\"]
+               }},
+               \"hasRole\": {{
+                  \"source\": \"Employee\",
+                  \"target\": \"Role\",
+                  \"llm-guidance\": \"Apply when an employee is assigned a specific job title, such as 'Bob is a Software Engineer'.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Bob Tan hasRole Software Engineer\"]
+               }},
+               \"develops\": {{
+                  \"source\": \"Department\",
+                  \"target\": \"Product\",
+                  \"llm-guidance\": \"Apply when a department is responsible for creating or managing a specific product, such as 'R&D developed CloudSync'.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"Research & Development develops CloudSync Software\"]
+               }},
+               \"partnersWith\": {{
+                  \"source\": \"Company\",
+                  \"target\": \"Partner\",
+                  \"llm-guidance\": \"Apply when the company is explicitly described as collaborating with an external organization, such as 'NexGen partners with TechCorp'.\",
+                  \"is_stable\": \"FALSE\",
+                  \"examples\": [\"NexGen Technologies partnersWith TechCorp Ltd\"]
+               }},
+               \"employs\": {{
+                  \"source\": \"Company\",
+                  \"target\": \"Employee\",
+                  \"llm-guidance\": \"Use when a staff member is identified as being employed by the company.\",
+                  \"is_stable\": \"TRUE\",
+                  \"examples\": [\"NexGen Technologies employs Alice Wong\"]
+               }}
+            }}
+         }},
+         \"modified_entities\": {{
+            \"StaffMember's name\": \"Changed to 'Employee' for greater clarity and intuitiveness, as 'Employee' is a more commonly understood term.\",
+            \"StaffMember's definition\": \"Simplified to focus on the core concept of individuals working for the company, removing redundant employment type details.\",
+            \"StaffMember's llm-guidance\": \"Added instruction to exclude honorifics for consistency in name extraction.\",
+            \"StaffMember's examples\": \"Ensure that examples are aligned with the updated definitions and llm-guidance.\",
+            \"Division's name\": \"Changed to 'Department' for simplicity and to align with common corporate terminology.\",
+            \"Division's definition\": \"Streamlined to emphasize functional units, avoiding overlap with other entities.\",
+            \"Division's llm-guidance\": \"Clarified to exclude vague terms like 'team' to ensure precise extraction.\",
+            \"JobTitle's name\": \"Changed to 'Role' for brevity and clarity, as 'Role' is more intuitive.\",
+            \"JobTitle's definition\": \"Simplified to focus on the concept of a job or position.\",
+            \"ProductItem's name\": \"Changed to 'Product' for simplicity and to avoid unnecessary specificity.\",
+            \"ProductItem's definition\": \"Streamlined to cover products concisely.\",
+            \"ExternalPartner's name\": \"Changed to 'Partner' for brevity and clarity, as the external nature is implied in the definition.\",
+            \"ExternalPartner's definition\": \"Clarified to focus on collaboration, avoiding redundancy.\"
+         }},
+         \"modified_relationships\": {{
+            \"worksIn's llm-guidance\": \"Clarified to emphasize explicit statements of department assignment for accurate application.\",
+            \"holdsJobTitle's name\": \"Changed to 'hasRole' to align with the renamed 'Role' entity and for brevity.\",
+            \"holdsJobTitle's llm-guidance\": \"Simplified to focus on clear attribution of job titles.\",
+            \"developsProduct's name\": \"Changed to 'develops' for simplicity and to avoid redundancy with the 'Product' entity name.\",
+            \"developsProduct's llm-guidance\": \"Clarified to ensure the relationship is applied only when a department is explicitly responsible for a product.\",
+            \"collaboratesWith's name\": \"Changed to 'partnersWith' for intuitiveness and to reflect a common term for business collaborations.\",
+            \"collaboratesWith's llm-guidance\": \"Clarified to require explicit mention of partnership for accurate application.\"
+         }},
+         \"note\": \"\"
+      }}
+
+You have now received the guidelines. Proceed to analyze and modify the ontology strictly according to the instructions and return the output in the required format only.
 
 Ontology: 
-{ontology}
-
-You have now received the guidelines and the ontology. Proceed to analyze and modify the ontology strictly according to the instructions and return the output in the required format only.
 """
 
 PROMPT["ONTOLOGY_CQ_GENERATION"] = """

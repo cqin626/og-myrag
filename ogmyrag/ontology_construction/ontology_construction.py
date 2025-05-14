@@ -7,7 +7,7 @@ from typing import TypedDict
 
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
-from ..util import get_formatted_ontology, get_formatted_openai_response
+from ..util import get_formatted_ontology, get_formatted_openai_response, get_clean_json
 from ..storage import MongoDBStorage
 from ..base import BaseAgent, BaseMultiAgentSystem
 from .ontology_construction_util import (
@@ -66,23 +66,20 @@ class OntologyConstructionAgent(BaseAgent):
     """
     An agent responsible for constructing ontology based on source text and feedback.
     """
-    async def handle_task(self, **kwargs) -> dict:
+    async def handle_task(self, **kwargs) -> str:
         """
          Parameters:
             source_text (str): The source text to parse.
             document_desc (str): A description of the source text.
-            document_constraints (str): Constraints to apply while parsing the source text.
             ontology (dict): The existing ontology.
-            feedback (str): Feedback on the ontology.
+            requires_reconstruct (bool): Whether to parse twice
         """
-        formatted_ontology = get_formatted_ontology(kwargs.get("ontology",{}) or {})
+        formatted_ontology = get_formatted_ontology(data=kwargs.get("ontology",{}) or {})
         
         system_prompt = PROMPT["ONTOLOGY_CONSTRUCTION"].format(
            ontology=formatted_ontology,
            ontology_purpose=self.agent_system.ontology_purpose,
            document_desc=kwargs.get("document_desc", "NA") or "NA",
-           document_constraints=kwargs.get("document_constraints", "NA") or "NA",
-           feedback=kwargs.get("feedback", "NA") or "NA",
         )
         
         user_prompt=kwargs.get("source_text", "NA") or "NA"
@@ -93,24 +90,133 @@ class OntologyConstructionAgent(BaseAgent):
 
         try:
             response = await fetch_responses_openai(
-                model="gpt-4.1-mini",
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                temperature=0,
-                max_output_tokens=32768
+            model="o4-mini",
+               system_prompt=system_prompt,
+               user_prompt=user_prompt,
+               text={
+                  "format": {"type": "text"}
+               },
+               reasoning={
+                  "effort": "medium"
+               },
+               max_output_tokens=100000,
+               tools=[],
             )
             ontology_construction_logger.info(f"OntologyConstructionAgent\nOntology construction response details:\n{get_formatted_openai_response(response)}")
+            ontology_construction_logger.info(f"OntologyConstructionAgent\nOntology construction output text:\n{get_formatted_ontology(get_clean_json(response.output_text))}")
+            
+            if(kwargs.get("requires_reconstruct", False) or False):
+               new_response = await fetch_responses_openai(
+               model="o4-mini",
+                  user_prompt=PROMPT["ONTOLOGY_RECONSTRUCTION"],
+                  text={
+                     "format": {"type": "text"}
+                  },
+                  reasoning={
+                     "effort": "medium"
+                  },
+                  previous_response_id=response.id,
+                  max_output_tokens=100000,
+                  tools=[],
+               )
+               
+               
+               ontology_construction_logger.info(f"OntologyConstructionAgent\nOntology reconstruction response details:\n{get_formatted_openai_response(new_response)}")
+               ontology_construction_logger.info(f"OntologyConstructionAgent\nOntology reconstruction output text:\n{get_formatted_ontology(get_clean_json(new_response.output_text))}")
+               
+               return new_response.output_text
+            else:
+               return response.output_text
+        except Exception as e:
+            ontology_construction_logger.error(f"OntologyConstructionAgent\nOntology construction failed: {str(e)}")
+            return ""
+
+class OntologyComplexityReductionAgent(BaseAgent):
+    """
+    An agent responsible for reducing the complexity of the ontology.
+    """
+    async def handle_task(self, **kwargs) -> str:
+        """ 
+        Parameters:
+          ontology (dict): The existing ontology.
+        """
+        formatted_ontology = get_formatted_ontology(data=kwargs.get("ontology",{}) or {})
+        
+        system_prompt = PROMPT["ONTOLOGY_COMPLEXITY_REDUCTION"].format(ontology_purpose=self.agent_system.ontology_purpose)
+        
+        user_prompt=formatted_ontology
+        
+        ontology_construction_logger.info(f"OntologyComplexityReductionAgent is called")
+        
+      #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+
+        try:
+            response = await fetch_responses_openai(
+                model="o4-mini",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                text={
+                  "format": {"type": "text"}
+                },
+                reasoning={
+                  "effort": "medium"
+                },
+                max_output_tokens=50000,
+                tools=[],
+            )
+            ontology_construction_logger.info(f"OntologyComplexityReductionAgent\nOntology complexity reduction response details:\n{get_formatted_openai_response(response)}")
             
             return response.output_text
         except Exception as e:
-            ontology_construction_logger.error(f"OntologyConstructionAgent\nOntology construction failed: {str(e)}")
+            ontology_construction_logger.error(f"OntologyComplexityReductionAgent\nOntology complexity reduction failed: {str(e)}")
+            return ""
+         
+class OntologyClarityEnhancementAgent(BaseAgent):
+    """
+    An agent responsible for enhancing the clarity of the ontology.
+    """
+    async def handle_task(self, **kwargs) -> str:
+        """ 
+        Parameters:
+          ontology (dict): The existing ontology.
+        """
+        formatted_ontology = get_formatted_ontology(data=kwargs.get("ontology",{}) or {})
+        
+        system_prompt = PROMPT["ONTOLOGY_CLARITY_ENHANCEMENT"].format(ontology_purpose=self.agent_system.ontology_purpose)
+        
+        user_prompt=formatted_ontology
+        
+        ontology_construction_logger.info(f"OntologyClarityEnhancementAgent is called")
+        
+      #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+
+        try:
+            response = await fetch_responses_openai(
+               model="o4-mini",
+               system_prompt=system_prompt,
+               user_prompt=user_prompt,
+               text={
+                  "format": {"type": "text"}
+               },
+               reasoning={
+                  "effort": "medium"
+               },
+               max_output_tokens=50000,
+               tools=[],
+            )
+            
+            ontology_construction_logger.info(f"OntologyClarityEnhancementAgent\nOntology clarity enhancement response details:\n{get_formatted_openai_response(response)}")
+            
+            return response.output_text
+        except Exception as e:
+            ontology_construction_logger.error(f"OntologyClarityEnhancementAgent\nOntology clarity enhancement failed: {str(e)}")
             return ""
 
 class OntologyEvaluationAgent(BaseAgent):
     """
     An agent responsible for evaluating ontology based on task-driven competency questions.
     """
-    async def handle_task(self, **kwargs) -> dict:
+    async def handle_task(self, **kwargs) -> str:
         """
          Parameters:
             ontology (dict): The ontology.
@@ -122,7 +228,7 @@ class OntologyEvaluationAgent(BaseAgent):
         )
         
         user_prompt= get_formatted_ontology(
-           kwargs.get("ontology",{}) or {},
+           data=kwargs.get("ontology",{}) or {},
            exclude_entity_fields=["llm-guidance", "is_stable"],
            exclude_relationship_fields=["llm-guidance", "is_stable"]
          )
@@ -164,7 +270,9 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             {
                "CQGenerationAgent": CQGenerationAgent("CQGenerationAgent"),
                "OntologyConstructionAgent": OntologyConstructionAgent("OntologyConstructionAgent"),
-               "OntologyEvaluationAgent": OntologyEvaluationAgent("OntologyEvaluationAgent")                            
+               "OntologyEvaluationAgent": OntologyEvaluationAgent("OntologyEvaluationAgent"),
+               "OntologyComplexityReductionAgent": OntologyComplexityReductionAgent("OntologyComplexityReductionAgent"),
+               "OntologyClarityEnhancementAgent": OntologyClarityEnhancementAgent("OntologyClarityEnhancementAgent")
             }
         )
         try:
@@ -189,54 +297,21 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
       """
        Parameters:
          source_text (str): Source text to parse.
-         document_desc (str): Description of source text
-         document_constraints (str): Constraints while parsing the source text
-         max_refinement (int): Maximum count of refinement
+         document_desc (str): Description of source text.
+         requires_reconstruct (bool): Whether to reconstruct the ontology
       """
       source_text = kwargs.get("source_text","NA") or "NA"
       document_desc = kwargs.get("document_desc","NA") or "NA"
-      document_constraints = kwargs.get("document_constraints", "NA") or "NA"
-      max_refinement = kwargs.get("max_refinement", 2) or 2
-      feedback = "NA"
-      refinement_count = 0
+      requires_reconstruct = kwargs.get("requires_reconstruct",False) or False
       
-      while True:
-         # Step 1: Update ontology
-         await self.update_ontology(
-            source_text=source_text,
-            document_desc=document_desc,
-            document_constraints=document_constraints,
-            feedback=feedback
-         )
-         ontology_construction_logger.info(f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}, refinement round: {refinement_count}")
-         
-         # TODO Step 2: Reduce complexity of the ontology
-         
-         # TODO Step 3: Enhance clarity of the ontology
-         
-         # Step 4: Evaluate the ontology
-         await self.evaluate_ontology()
-         
-         if refinement_count == max_refinement: 
-            ontology_construction_logger.info(f"OntologyConstructionSystem\nOntology refinement reached max count ({max_refinement}), manual intervention is required")
-            break
-         else:
-            current_onto_version = self.get_current_onto_version()
-            raw_feedback = self.get_unhandled_feedback(onto_version=current_onto_version)
-            if not raw_feedback:
-               ontology_construction_logger.info("OntologyConstructionSystem\nOntology refinement is not required")
-               break
-            else:
-               refinement_count += 1
-               feedback = get_formatted_feedback_for_display(raw_feedback)
-               self.feedback_storage.update_document({"is_handled": False, "feedback_for_onto_version": current_onto_version}, {"is_handled": True})
+      await self.update_ontology(source_text=source_text,document_desc=document_desc, requires_reconstruct=requires_reconstruct)
+      ontology_construction_logger.info(f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}")
       
     async def update_ontology(
        self,
        source_text: str,
        document_desc: str,
-       document_constraints: str,
-       feedback: str
+       requires_reconstruct: bool
        ):
          current_onto = self.get_current_onto()
          current_onto_version = self.get_current_onto_version()
@@ -244,21 +319,24 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
          
          # Step 1: Call construction agent
          try:
-            new_onto = await self.agents["OntologyConstructionAgent"].handle_task(
+            raw_response = await self.agents["OntologyConstructionAgent"].handle_task(
                source_text=source_text,
                ontology=current_onto,
                document_desc=document_desc,
-               document_constraints=document_constraints,
-               feedback=feedback,
+               requires_reconstruct=requires_reconstruct
             )
-            if not new_onto:
+            if not raw_response:
                raise ValueError("Ontology construction returned no output.")
          except Exception as e:
             raise ValueError(f"Error while constructing ontology: {e}")
          
          # Step 2: Format response into json
          try:
-            current_onto = json.loads(new_onto)
+            response = get_clean_json(raw_response)
+            entities = response.pop("entities", {})
+            relationships = response.pop("relationships", {})
+            note = response.pop("note","")
+            
          except Exception as e:
             raise ValueError(f"Error while converting ontology to json: {e}")
 
@@ -267,9 +345,145 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             self.onto_storage.update_document({"is_latest": True}, {"is_latest": False})
             self.onto_storage.create_document(
                get_formatted_ontology_for_db(
-                  ontology=current_onto,
-                  model="gpt-4.1-mini",
+                  ontology= {
+                     "entities": entities,
+                     "relationships": relationships
+                  },
+                  model="o4-mini",
+                  modification_note=note,
                   purpose=self.ontology_purpose,
+                  version=get_new_version(current_version=current_onto_version, update_type="PATCH"),
+                  cq_version=current_cq_version
+               )
+            )
+         except Exception as e:
+            raise ValueError(f"Error while uploading ontology: {e}")
+   
+    async def minimize_ontology(self) -> None:
+         current_onto = self.get_current_onto()
+         current_onto_version = self.get_current_onto_version()
+         current_cq_version = self.get_current_cq_version()
+         
+         # Step 1: Call complexity reduction agent
+         try:
+            raw_response = await self.agents["OntologyComplexityReductionAgent"].handle_task(ontology=current_onto)
+            if not raw_response:
+               raise ValueError("Ontology minimization returned no output.")
+         except Exception as e:
+            raise ValueError(f"Error while minimizing ontology: {e}")
+         
+         # Step 2: Format response into json
+         try:
+            response = get_clean_json(raw_response)
+            
+            updated_ontology = response.get("updated_ontology", {})
+            entities = updated_ontology.pop("entities", {})
+            relationships = updated_ontology.pop("relationships", {})
+            
+            removed_entities = response.pop("removed_entities", [])
+            removed_relationships = response.pop("removed_relationships", [])
+            note = response.pop("note", "")
+         except Exception as e:
+            raise ValueError(f"Error while converting ontology to json: {e}")
+
+         # Step 3: Upload minimized ontology to db
+         try:
+            self.onto_storage.update_document({"is_latest": True}, {"is_latest": False})
+            self.onto_storage.create_document(
+               get_formatted_ontology_for_db(
+                  ontology = {
+                     "entities": entities,
+                     "relationships": relationships
+                  },
+                  modification_note=note,
+                  modification_justification= {
+                     "removed_entities": removed_entities, 
+                     "removed_relationships": removed_relationships
+                  },
+                  model="o4-mini",
+                  purpose=self.ontology_purpose,
+                  version=get_new_version(current_version=current_onto_version, update_type="PATCH"),
+                  cq_version=current_cq_version
+               )
+            )
+            ontology_construction_logger.info(f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}")
+         except Exception as e:
+            raise ValueError(f"Error while uploading ontology: {e}")
+         
+    async def enhance_ontology_clarity(self) -> None:
+         current_onto = self.get_current_onto()
+         current_onto_version = self.get_current_onto_version()
+         current_cq_version = self.get_current_cq_version()
+         
+         # Step 1: Call clarity enhancement agent
+         try:
+            raw_response = await self.agents["OntologyClarityEnhancementAgent"].handle_task(ontology=current_onto)
+            if not raw_response:
+               raise ValueError("Ontology clarity enhancement returned no output.")
+         except Exception as e:
+            raise ValueError(f"Error while enhancing ontology: {e}")
+         
+         # Step 2: Format response into json
+         try:
+            response = get_clean_json(raw_response)
+            
+            updated_ontology = response.get("updated_ontology", {})
+            entities = updated_ontology.pop("entities", {})
+            relationships = updated_ontology.pop("relationships", {})
+            
+            modified_entities = response.pop("modified_entities", [])
+            modified_relationships = response.pop("modified_relationships", [])
+            note = response.pop("note", "")
+         except Exception as e:
+            raise ValueError(f"Error while converting ontology to json: {e}")
+
+         # Step 3: Upload enhanced ontology to db
+         try:
+            self.onto_storage.update_document({"is_latest": True}, {"is_latest": False})
+            self.onto_storage.create_document(
+               get_formatted_ontology_for_db(
+                  ontology= {
+                     "entities": entities,
+                     "relationships": relationships
+                  },
+                  modification_justification={
+                     "modified_entities": modified_entities, 
+                     "modified_relationships": modified_relationships
+                  },
+                  modification_note=note,
+                  model="o4-mini",
+                  purpose=self.ontology_purpose,
+                  version=get_new_version(current_version=current_onto_version, update_type="PATCH"),
+                  cq_version=current_cq_version
+               )
+            )
+            ontology_construction_logger.info(f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}")
+         except Exception as e:
+            raise ValueError(f"Error while uploading ontology: {e}")
+         
+    async def create_onto_manually(self, new_onto: dict):
+         current_onto_version = self.get_current_onto_version()
+         current_cq_version = self.get_current_cq_version()
+         
+         try:
+            entities = new_onto.pop("entities", {})
+            relationships = new_onto.pop("relationships", {})
+            note = new_onto.pop("note","")
+            
+         except Exception as e:
+            raise ValueError(f"Error parsing relevant information: {e}")
+
+         try:
+            self.onto_storage.update_document({"is_latest": True}, {"is_latest": False})
+            self.onto_storage.create_document(
+               get_formatted_ontology_for_db(
+                  ontology= {
+                     "entities": entities,
+                     "relationships": relationships
+                  },
+                  model="NA",
+                  modification_note=note,
+                  purpose="NA",
                   version=get_new_version(current_version=current_onto_version, update_type="PATCH"),
                   cq_version=current_cq_version
                )
@@ -297,7 +511,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
          
        # Step 2: Format response into json
        try:
-         evaluation_result = json.loads(evaluation_result)
+         evaluation_result = get_clean_json(evaluation_result)
        except Exception as e:
          raise ValueError(f"Error while converting evaluation result to json: {e}")
          
@@ -337,7 +551,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
          raise ValueError(f"Error while generating competency questions: {e}")
             
       formatted_cq_record = get_formatted_cq_for_db(
-         cq=json.loads(new_cq),
+         cq=get_clean_json(new_cq),
          model="gpt-4.1-mini",
          purpose=self.ontology_purpose,
          version=get_new_version(current_version=current_version, update_type=update_type)

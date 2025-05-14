@@ -92,7 +92,7 @@ async def fetch_completion_openai(
 async def fetch_responses_openai(
    model: str, 
    user_prompt: str,
-   system_prompt: str | None,
+   system_prompt: str = "",
    **kwargs
    ) -> str:
     client = get_openai_async_client_instance()
