@@ -88,6 +88,48 @@ class PineconeStorage:
             pinecone_logger.error(f"Error while creating vectors: {e}")
             raise
     
+    async def create_vectors_without_namespace(self, items: list[dict[str, Any]]) -> None:
+        """
+        Asynchronously embed multiple texts and upsert them to Pinecone using a single default namespace.
+        Each item must have: 'id', 'name', and optionally 'metadata'.
+        """
+        pinecone_logger.info("Starting vector creation process (no namespace).")
+
+        missing_fields = [item for item in items if not all(k in item for k in ("id", "name"))]
+        if missing_fields:
+            pinecone_logger.error("Validation failed. Required fields are missing.")
+            raise ValueError(f"Missing required fields in one or more items: {missing_fields}")
+
+        data = [(item["id"], item["name"], item.get("metadata", {})) for item in items]
+        pinecone_logger.info(f"{len(data)} items passed validation. Beginning embedding...")
+
+        try:
+            ids, names, metadata_list = zip(*data)
+
+            # Embed texts asynchronously
+            embedding_responses = await tqdm_asyncio.gather(*[
+                self._embed_text(name) for name in names
+            ], desc="Embedding texts")
+
+            # Prepare vector list
+            vectors = [{
+                "id": id,
+                "values": embedding,
+                "metadata": metadata
+            } for id, embedding, metadata in zip(ids, embedding_responses, metadata_list)]
+
+            # Use default namespace if required, or omit if not needed
+            DEFAULT_NAMESPACE = ""
+
+            pinecone_logger.info(f"Upserting {len(vectors)} vectors to Pinecone...")
+            self.index.upsert(vectors=vectors, namespace=DEFAULT_NAMESPACE)
+
+            pinecone_logger.info(f"Successfully created {len(items)} vectors in Pinecone (no namespace).")
+
+        except Exception as e:
+            pinecone_logger.error(f"Error while creating vectors (no namespace): {e}")
+            raise
+    
     async def get_similar_results(
         self, 
         query_texts: str | list[str], 

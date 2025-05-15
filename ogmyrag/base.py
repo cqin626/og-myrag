@@ -9,6 +9,20 @@ class MongoStorageConfig(TypedDict):
     database_name: str
     collection_name: str
 
+class PineconeStorageConfig(TypedDict):
+    index_name: str
+    pinecone_api_key: str
+    pinecone_environment: str
+    pinecone_cloud: str
+    pinecone_metric: str
+    pinecone_dimensions: str
+    openai_api_key: str
+
+class Neo4jStorageConfig(TypedDict):
+    uri: str
+    user: str
+    password: str
+    
 class BaseAgent:
     def __init__(self, agent_name: str):
         self.agent_name = agent_name

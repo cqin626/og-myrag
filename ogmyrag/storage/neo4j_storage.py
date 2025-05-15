@@ -32,33 +32,33 @@ class Neo4jStorage:
         except Exception as e:
             neo4j_logger.error(f"Failed to insert entities: {str(e)}")
             raise
-
+    
     def insert_relationships(self, relationships: list[dict]):
-        """Insert a list of relationships from JSON to the graph."""
+        """Insert a list of relationships from JSON to the graph based on entity names."""
         try:
             with self.driver.session() as session:
                 for rel in relationships:
-                    source_id = rel.get('source_id')
-                    target_id = rel.get('target_id')
+                    source_name = rel.get('source_name')
+                    target_name = rel.get('target_name')
                     rel_type = rel.get('type')
                     properties = rel.get('properties', {})
 
-                    if not all([source_id, target_id, rel_type]):
+                    if not all([source_name, target_name, rel_type]):
                         neo4j_logger.warning(f"Skipping invalid relationship: {rel}")
                         continue
 
                     query = (
                         f"MATCH (a), (b) "
-                        f"WHERE a.id = $source_id AND b.id = $target_id "
+                        f"WHERE a.name = $source_name AND b.name = $target_name "
                         f"CREATE (a)-[r:{rel_type} $props]->(b)"
                     )
-                    session.run(query, source_id=source_id, target_id=target_id, props=properties)
-                
+                    session.run(query, source_name=source_name, target_name=target_name, props=properties)
+
                 neo4j_logger.info(f"Successfully inserted {len(relationships)} relationship(s)")
         except Exception as e:
             neo4j_logger.error(f"Failed to insert relationships: {str(e)}")
             raise
-
+    
     def update_node(self, node_id: str, properties: dict):
         """Update a particular node with new properties."""
         try:

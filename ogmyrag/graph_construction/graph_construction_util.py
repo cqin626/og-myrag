@@ -110,11 +110,10 @@ def get_formatted_entity_for_vectordb(
    return {
       "id": str(entity["_id"]),
       "name": entity["name"], 
-      "namespace": entity["type"],
       "metadata": {
          "entity_name": entity["name"],
+         "entity_type": entity["type"],
          "description": entity["description"],
-         "created_at": get_formatted_current_datetime(timezone),
          "last_modified_at": get_formatted_current_datetime(timezone),
       }
    }
@@ -127,7 +126,6 @@ def get_formatted_entity_for_graphdb(
       "id": str(entity["_id"]),
       "name": entity["name"], 
       "description": entity["description"],
-      "created_at": get_formatted_current_datetime(timezone),
       "last_modified_at": get_formatted_current_datetime(timezone),
    }
    
@@ -136,15 +134,15 @@ def get_formatted_relationship_for_graphdb(
    timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
    return {
-      "source_id": relationship["source_entity_id"], 
-      "target_id": relationship["target_entity_id"],
+      "source_name": relationship["source"], 
+      "target_name": relationship["target"],
       "type": relationship["type"],
       "properties": {
          "id": str(relationship["_id"]),
-         "source_entity_name": relationship["source"],
-         "target_entity_name": relationship["target"],
          "description": relationship["description"],
-         "created_at": get_formatted_current_datetime(timezone),
+         "valid_date": relationship["valid_date"],
+         "invalid_date": relationship["invalid_date"],
+         "temporal_note": relationship["temporal_note"],
          "last_modified_at": get_formatted_current_datetime(timezone),
       },
    }

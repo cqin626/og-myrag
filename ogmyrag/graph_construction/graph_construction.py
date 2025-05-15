@@ -4,22 +4,28 @@ import logging
 import asyncio
 
 from bson import ObjectId
+from collections import defaultdict
 
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import get_formatted_ontology, get_formatted_openai_response, get_clean_json, get_formatted_current_datetime
-from ..storage import MongoDBStorage
+from ..storage import MongoDBStorage, PineconeStorage, Neo4jStorage
 
 from ..base import (
    BaseAgent, 
    BaseMultiAgentSystem, 
-   MongoStorageConfig
+   MongoStorageConfig,
+   PineconeStorageConfig,
+   Neo4jStorageConfig
 )
 
 from .graph_construction_util import (
    get_formatted_entities_and_relationships_for_db,
    get_formatted_entities_for_display,
-   get_formatted_relationships_for_display
+   get_formatted_relationships_for_display,
+   get_formatted_entity_for_vectordb,
+   get_formatted_entity_for_graphdb,
+   get_formatted_relationship_for_graphdb
 )
 
 graph_construction_logger = logging.getLogger("graph_construction")
@@ -129,6 +135,8 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
        disclosure_config: MongoStorageConfig,
        entity_config: MongoStorageConfig,
        relationship_config: MongoStorageConfig,
+       entity_vector_config: PineconeStorageConfig,
+       graphdb_config: Neo4jStorageConfig
       ):
         super().__init__(
             {
@@ -153,7 +161,17 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
          self.relationship_storage = MongoDBStorage(relationship_config["connection_uri"])
          self.relationship_storage.use_database(relationship_config["database_name"])
          self.relationship_storage.use_collection(relationship_config["collection_name"])
-      
+
+         self.entity_vector_storage = PineconeStorage(**entity_vector_config)
+         
+         self.graph_storage = Neo4jStorage(**graphdb_config)
+         
+         entities = self.entity_storage.read_documents()
+         for entity in entities:
+            self.entity_storage.update_document(
+               {"_id": entity["_id"]},
+               {"inserted_into_graphdb_at": ""}
+            )
         except Exception as e:
            graph_construction_logger.error(f"GraphConstructionSystem: {e}")
            raise ValueError(f"Failed to intialize GraphConstructionSystem: {e}")
@@ -342,3 +360,116 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
       except Exception as e:
          graph_construction_logger.error(f"GraphConstructionSystem\nError while uploading merged entities and relationships:{e}")
          raise ValueError(f"Failed to upload merged entities and relationships: {e}")
+   
+    async def insert_entities_into_pinecone(self):
+      try:
+         formatted_entities = []
+         entities = self.entity_storage.read_documents({"to_be_deleted": False, "inserted_into_vectordb_at": ""})
+         
+         if not entities:
+            graph_construction_logger.info("GraphConstructionSystem\nNo entities found. Skipping insertion into Pinecone.")
+            raise ValueError(f"No entities found.")
+         
+         for entity in entities:
+            formatted_entities.append(get_formatted_entity_for_vectordb(entity))
+            
+         await self.entity_vector_storage.create_vectors_without_namespace(formatted_entities)
+         
+         for entity in entities:
+            self.entity_storage.update_document(
+               {"_id": entity["_id"]},
+               {"inserted_into_vectordb_at": get_formatted_current_datetime("Asia/Kuala_Lumpur")}
+            )
+         
+         graph_construction_logger.info(f"GraphConstructionSystem\nUpdated {len(entities)} entity(ies) with inserted_into_vectordb_at field.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while inserting entities into Pinecone:{e}")
+         raise ValueError(f"Failed to insert entities into Pinecone: {e}")
+      
+    def insert_entities_into_neo4j(self):
+      try:
+         graph_construction_logger.info(f"GraphConstructionSystem\nReading entities from MongoDB...")
+         
+         raw_entities = self.entity_storage.read_documents({"inserted_into_graphdb_at": "", "to_be_deleted": False})
+         
+         if not raw_entities:
+            graph_construction_logger.info(f"GraphConstructionSystem\nNo entities that have not been uploaded to Neo4j.")
+            raise ValueError(f"No entities that have not been uploaded to Neo4j.")
+         
+         graph_construction_logger.info(f"GraphConstructionSystem\nRead {len(raw_entities)} entity(ies) that have not been uploaded to Neo4j.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while reading entities from MongoDB:{e}")
+         raise ValueError(f"Failed to read entities from MongoDB: {e}")
+      
+      try:
+         graph_construction_logger.info(f"GraphConstructionSystem\nInserting {len(raw_entities)} entity(ies) into Neo4j...")
+         
+         grouped_entities = defaultdict(list)
+         for raw_entity in raw_entities:
+            entity_type = raw_entity["type"]
+            grouped_entities[entity_type].append(raw_entity)
+
+         for entity_type, entities in grouped_entities.items():
+            formatted_entities = [get_formatted_entity_for_graphdb(e) for e in entities]
+            self.graph_storage.insert_entities(
+               entities=formatted_entities,
+               label=entity_type
+            )
+         graph_construction_logger.info(f"GraphConstructionSystem\nSuccessfully inserted {len(raw_entities)} entity(ies) into Neo4j.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while inserting entity(ies) into Neo4j:{e}")
+         raise ValueError(f"Failed to insert entity(ies) into Neo4j: {e}")
+      
+      try:
+         graph_construction_logger.info(f"GraphConstructionSystem\nUpdating {len(raw_entities)} entity(ies) with 'inserted_into_graphdb_at' field.")
+         for entity in raw_entities:
+            self.entity_storage.update_document(
+               {"_id": entity["_id"]},
+               {"inserted_into_graphdb_at": get_formatted_current_datetime("Asia/Kuala_Lumpur")}
+            )
+         graph_construction_logger.info(f"GraphConstructionSystem\nUpdated {len(raw_entities)} entity(ies) with 'inserted_into_graphdb_at' field.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while updating entity(ies) with 'inserted_into_graphdb_at' field:{e}")
+         raise ValueError(f"Failed to update entity(ies) with 'inserted_into_graphdb_at' field: {e}")
+   
+    def insert_relationships_into_neo4j(self):
+      try:
+         graph_construction_logger.info(f"GraphConstructionSystem\nReading relationships from MongoDB...")
+         
+         raw_relationships = self.relationship_storage.read_documents({"inserted_into_graphdb_at": "", "to_be_deleted": False})
+         
+         if not raw_relationships:
+            graph_construction_logger.info(f"GraphConstructionSystem\nNo relationships that have not been uploaded to Neo4j.")
+            raise ValueError(f"No relationships that have not been uploaded to Neo4j.")
+         
+         graph_construction_logger.info(f"GraphConstructionSystem\nRead {len(raw_relationships)} relationship(s) that have not been uploaded to Neo4j.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while reading relationships from MongoDB:{e}")
+         raise ValueError(f"Failed to read relationships from MongoDB: {e}")
+
+      try:
+         graph_construction_logger.info(f"GraphConstructionSystem\nInserting {len(raw_relationships)} relationship(s) into Neo4j...")
+         
+         formatted_relationships = []
+         for raw_relationship in raw_relationships:
+            formatted_relationships.append(get_formatted_relationship_for_graphdb(raw_relationship))
+         
+         self.graph_storage.insert_relationships(formatted_relationships)
+         graph_construction_logger.info(f"GraphConstructionSystem\nSuccessfully inserted {len(raw_relationships)} entity(ies) into Neo4j.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while inserting relationship(s) into Neo4j:{e}")
+         raise ValueError(f"Failed to insert relationship(s) into Neo4j: {e}")
+
+      try:
+         graph_construction_logger.info(f"GraphConstructionSystem\nUpdating {len(raw_relationships)} relationship(s) with 'inserted_into_graphdb_at' field.")
+         for relationship in raw_relationships:
+            self.relationship_storage.update_document(
+               {"_id": relationship["_id"]},
+               {"inserted_into_graphdb_at": get_formatted_current_datetime("Asia/Kuala_Lumpur")}
+            )
+         graph_construction_logger.info(f"GraphConstructionSystem\nUpdated {len(raw_relationships)} relationship(s) with 'inserted_into_graphdb_at' field.")
+      except Exception as e:
+         graph_construction_logger.error(f"GraphConstructionSystem\nError while updating relationship(s) with 'inserted_into_graphdb_at' field:{e}")
+         raise ValueError(f"Failed to update relationship(s) with 'inserted_into_graphdb_at' field: {e}")
+   
+      
