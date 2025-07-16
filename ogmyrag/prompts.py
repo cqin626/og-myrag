@@ -552,7 +552,7 @@ Guidelines:
                
                - Define the attributes for the relationship as described in Guideline 4 and append it to the relationships list
                
-            - Output all newly extracted entities and relationships using the structure defined in Guideline 5
+            - Output all newly extracted entities and relationships using the structure defined in Guideline 6
    
    2. Relationship Extraction Criteria
       - Only extract a relationship if all of the following conditions are met:
@@ -592,7 +592,12 @@ Guidelines:
       - `llm-guidance`: Specific instructions on when and how to use this relationship.
       - `examples`: At least 2 representative examples, including edge cases.
 
-   5. Output Format
+   5. Cross-Referencing Consistency
+      - All mentions of an entity instance-whether in examples for entities or relationships, must strictly follow the llm-guidance and definition of that entity type.
+      - Do not introduce formatting inconsistencies that violate the original extraction rules defined for the entity. For example, if the llm-guidance for Person states that honorifics should be excluded, all other instances of Person must adhere to this rule as well.
+      - This ensures consistency in entity resolution and prevents semantic drift within the ontology and downstream knowledge graph.
+   
+   6. Output Format
       - Ensure all `source` and `target` references in `relationships` match keys in the `entities` dictionary.
       - Do not repeat entities or relationships already present in the current ontology.
       - Return only the following raw JSON structure — no explanations, comments, or code block formatting:
@@ -718,14 +723,19 @@ Guidelines:
       - If two entities represent the same conceptual category (e.g., Company and Organization are both legal entities), merge them into one entity and differentiate roles using distinct relationships, not attributes.
       - If multiple relationships express roles of the same type (e.g., hasExecutiveDirector, hasManagingDirector), consider collapsing them into one or two generic relationships (e.g., hasDirector, hasChairman) if their distinction cannot be preserved without attributes. Only do so when at least 70 percents of their semantic meaning overlaps.
       - If several relationships share the same source and target type (e.g., Company -> Organization for auditors, sponsors, underwriters), and their semantics are similar, collapse rarely used ones into more general types or remove entirely if redundant.
+      
+   5. Cross-Referencing Consistency
+      - All mentions of an entity instance-whether in examples for entities or relationships, must strictly follow the llm-guidance and definition of that entity type.
+      - Do not introduce formatting inconsistencies that violate the original extraction rules defined for the entity. For example, if the llm-guidance for Person states that honorifics should be excluded, all other instances of Person must adhere to this rule as well.
+      - This ensures consistency in entity resolution and prevents semantic drift within the ontology and downstream knowledge graph.
    
-   5. Document Changes
+   6. Document Changes
       - Each modification should be recorded along with their rationale as shown in the output format in guideline 6 and example in guideline 7.
       - If no simplifications are necessary, return the current ontology unchanged and provide:
          "modification_made": [],
          "modification_rationale": ["No simplifications necessary. Current ontology is already optimal."]
 		
-	6. Output Format
+	7. Output Format
 		- Unchanged entities and relationships must be returned in the same structure and wording as in the current ontology. Do not reformat or rename unchanged elements.
 		- Return only the following raw JSON structure - no explanations, comments, or code block formatting:
   
@@ -756,7 +766,7 @@ Guidelines:
             \"modification_rationale\": []
 			}}
       
-    7. Example
+    8. Example
        a. Ontology Purpose
        To construct a knowledge graph of Malaysian public companies that captures key organizational roles and structural information to support governance analysis, such as identifying board members, corporate relationships, and geographic presence.
        
