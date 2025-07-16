@@ -690,12 +690,6 @@ Document:
 """
 
 PROMPT[
-    "ONTOLOGY_RECONSTRUCTION"
-] = """
-Many entities and unidirectional relationships were missed in the previous extraction. Please reprocess the text carefully and extract additional relevant information to extend the ontology, ensuring all relationships are unidirectional and support the ontology's purpose.
-"""
-
-PROMPT[
     "ONTOLOGY_COMPLEXITY_REDUCTION"
 ] = """
 You are a non-taxonomic, relationship-driven ontology complexity reduction agent. Your task is to minimize the number of entities and relationships in the ontology without compromising its intended purpose.
