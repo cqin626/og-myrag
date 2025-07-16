@@ -690,231 +690,251 @@ Document:
 """
 
 PROMPT[
-    "ONTOLOGY_COMPLEXITY_REDUCTION"
+    "ONTOLOGY_SIMPLIFICATION"
 ] = """
-You are a non-taxonomic, relationship-driven ontology complexity reduction agent. Your task is to minimize the number of entities and relationships in the ontology without compromising its intended purpose.
+You are an ontology simplification agent. Your task is to simplify an ontology according to the listed guidelines.
 
 Guidelines:
- 
-	1. All reductions must preserve the ontology's ability to serve its purpose: '{ontology_purpose}'
- 
-	2. Do not remove any entities or relationships with "is_stable": "TRUE". Only consider reduction for elements marked "is_stable": "FALSE".
-   
-   3. Do not remove an entity or relationship solely because it is removable. Remove it only if it does not align with the purpose of the ontology.
-   
-	4. When removing a relationship, check whether its associated entities (source or target) are involved in any other relationships:
-      - If an associated entity becomes orphaned (no longer part of any relationship), remove the entity as well.
-      - If the entity is used elsewhere, retain the entity.
-      
-   5. When removing an entity, check whether it is involved in any required relationship.
-      - If all related relationships are removable, you may proceed to remove the entity.
-      - If any related relationship is not removable, do not remove it.
-
-   6. Do not alter the structure, content, or attributes of any retained entities or relationships.
-      - The "is_stable" attribute must be output exactly as "TRUE" or "FALSE", in all capital letters.
-      - You have no right to modify the value of the "is_stable" column; you must output it exactly as it is.
-
-   7. For every entity or relationship removed, include a brief explanation in the appropriate section of the output.
-
-   8. If no reduction is possible, return the ontology unchanged and explain why in the "note" field.
+	1. Adherence to Ontology Purpose
+		- All your simplification must support the stated ontology purpose.
 	
-	9. Your output must exactly match the structure shown below.
-		- Return only a raw JSON object. Do not include anything before or after it, not even 'json' or code block markers.
+	2. Simplification Constraints
+		1. No Introduction of Attributes:  
+			- You must NOT introduce any new attributes or properties (e.g., roleType, engagementType, etc.) beyond the existing ones during the simplification process.
+		
+		2. Allowed Simplification Methods:
+			- Removing redundant or overly granular entities or relationships.
+			- Flattening contextual or nested structures into direct relationships.
+			- Merging semantically similar concepts.
+
+		3. Preferable Modeling
+			- You must favor unidirectional, relationship-centric modeling, aligning with the system's graph-based architecture.
+
+	3. High LLM Extractability
+		- Your simplified ontology should make entity and relation extraction easier by using surface-level, explainable names and structures.
+
+	4. How to Think
+      - If an entity has no independent identity or behavior outside of its relationship to another (e.g., Committee only exists inside Company), model it as a relationship rather than an entity.
+      - If two entities represent the same conceptual category (e.g., Company and Organization are both legal entities), merge them into one entity and differentiate roles using distinct relationships, not attributes.
+      - If multiple relationships express roles of the same type (e.g., hasExecutiveDirector, hasManagingDirector), consider collapsing them into one or two generic relationships (e.g., hasDirector, hasChairman) if their distinction cannot be preserved without attributes. Only do so when at least 70 percents of their semantic meaning overlaps.
+      - If several relationships share the same source and target type (e.g., Company -> Organization for auditors, sponsors, underwriters), and their semantics are similar, collapse rarely used ones into more general types or remove entirely if redundant.
+   
+   5. Document Changes
+      - Each modification should be recorded along with their rationale as shown in the output format in guideline 6 and example in guideline 7.
+      - If no simplifications are necessary, return the current ontology unchanged and provide:
+         "modification_made": [],
+         "modification_rationale": ["No simplifications necessary. Current ontology is already optimal."]
+		
+	6. Output Format
+		- Unchanged entities and relationships must be returned in the same structure and wording as in the current ontology. Do not reformat or rename unchanged elements.
+		- Return only the following raw JSON structure - no explanations, comments, or code block formatting:
   
-      {{
-         \"updated_ontology\": {{
-            \"entities\": {{
-               \"EntityA\": {{
-                  \"definition\": \"\",
-                  \"llm-guidance\": \"\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": []
+			{{
+            \"updated_ontology\": {{
+               \"entities\": {{
+                  \"EntityA\": {{
+                     \"definition\": \"\",
+                     \"llm-guidance\": \"\",
+                     \"examples\": []
+                  }},
+                  \"EntityB\": {{
+                     \"definition\": \"\",
+                     \"llm-guidance\": \"\",
+                     \"examples\": []
+                  }}
                }},
-               \"EntityB\": {{
-                  \"definition\": \"\",
-                  \"llm-guidance\": \"\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": []
+               \"relationships\": {{
+                  \"RelationshipA\": {{
+                     \"source\": \"EntityA\",
+                     \"target\": \"EntityB\",
+                     \"llm-guidance\": \"\",
+                     \"examples\": []
+                  }}
                }}
             }},
-            \"relationships\": {{
-               \"RelationshipA\": {{
-                  \"source\": \"EntityA\",
-                  \"target\": \"EntityB\",
-                  \"llm-guidance\": \"\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": []
+            \"modification_made\": [],
+            \"modification_rationale\": []
+			}}
+      
+    7. Example
+       a. Ontology Purpose
+       To construct a knowledge graph of Malaysian public companies that captures key organizational roles and structural information to support governance analysis, such as identifying board members, corporate relationships, and geographic presence.
+       
+       b. Current Ontology
+          Entities:
+             1. Person
+             - definition: An individual human who may hold a position or role within a company.
+             - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
+             - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
+             
+             2. Company 
+             - definition: A legally registered business entity involved in commercial or professional activities.
+             - llm-guidance: Extract full legal names of organizations registered as companies. Identify names ending in legal suffixes such as 'Berhad', 'Sdn Bhd', or 'Inc.' Do not include registration numbers or addresses.
+             - examples: ABC Berhad, Apple Inc., United Gomax Sdn Bhd
+             
+             3. Organization
+             - definition: A legal entity that provides formal services to a company, such as audit, legal, underwriting, or advisory support.
+             - llm-guidance: Extract the full legal names of professional service providers engaged by the company in an official capacity. Look for legal suffixes and known firm structures.
+             - examples: Baker Tilly Monteiro Heng PLT, Acclime Corporate Services Sdn Bhd, Malacca Securities Sdn Bhd
+             
+             4. Committee
+             - definition: A governance structure within a company assigned to a specific oversight area, such as audit or remuneration.
+             - llm-guidance: Extract names of internal committees such as 'Audit Committee' or 'Remuneration Committee'. 
+             - examples: Audit and Risk Committee, Remuneration Committee, Nomination Committee
+          
+          Relationships:
+             1. hasIndependentDirector
+             - source: Company
+             - target: Person
+             - llm-guidance: Use this when a person is described as the independent director of a company.
+             - examples: Banana Inc. hasIndependentDirector John Chua
+             
+             2. hasExecutiveDirector
+             - source: Company
+             - target: Person
+             - llm-guidance: Use when a person is explicitly labeled an Executive Director of the company.
+             - examples: Banana Inc. hasExecutiveDirector John Chua
+             
+             3. hasManagingDirector
+             - source: Company
+             - target: Person
+             - llm-guidance: Use when a person holds the role of Managing Director in a company.
+             - examples: Banana Inc. hasManagingDirector John Chua
+             
+             4. hasIndependentNonExecutiveDirector
+             - source: Company
+             - target: Person
+             - llm-guidance: Use when a person is referred to as an Independent Non-Executive Director.
+             - examples: Banana Inc. hasIndependentNonExecutiveDirector John Chua
+             
+             5. hasChairman
+             - source: Company
+             - target: Person
+             - llm-guidance: Use when a person is referred to as the Chairman of the company.
+             - examples: Banana Inc. hasChairman John Chua
+             
+             6. hasBoardCommittee
+             - source: Company
+             - target: Committee
+             - llm-guidance: Use when a committee is formally established under the company.
+             - examples: Banana Inc. hasBoardCommittee Remuneration Committee
+             
+             7. hasChairperson
+             - source: Committee
+             - target: Person
+             - llm-guidance: Use when a person is the Chairperson of a specific committee.
+             - examples: Remuneration Committee hasChairperson Emily Johnson
+             
+             8. hasMember
+             - source: Committee
+             - target: Person
+             - llm-guidance: Use when a person is a formal member of the committee.
+             - examples: Audit Committee hasMember Tan Hui Mei
+             
+             9. hasAuditor
+             - source: Company
+             - target: Organization
+             - llm-guidance: Use when an audit firm is appointed to verify the company's financial statements.
+             - examples: Banana Inc. hasAuditor Baker Tilly Monteiro Heng PLT
+             
+             10. hasSponsor
+             - source: Company
+             - target: Organization
+             - llm-guidance: Use when a sponsor organization is appointed to guide a listing or fundraising process.
+             - examples: Banana Inc. hasSponsor Malacca Securities Sdn Bhd
+             
+             11. hasShareRegistrar
+             - source: Company
+             - target: Organization
+             - llm-guidance: Use when an organization serves as the company's registrar for shareholder-related matters.
+             - examples: Banana Inc. hasShareRegistrar Boardroom Share Registrars Sdn. Bhd.
+             
+             12. hasIssuingHouse
+             - source: Company
+             - target: Organization
+             - llm-guidance: Use when an issuing house is engaged to manage the issuance process.
+             - examples: Banana Inc. hasIssuingHouse Malaysian Issuing House Sdn Bhd
+             
+             13. listedOn
+             - source: Company
+             - target: StockMarket
+             - llm-guidance: Use when a company is listed or seeks listing on a recognized stock market.
+             - examples: Banana Inc. listedOn ACE Market of Bursa Malaysia
+       
+       c. Output:
+         {{
+           \"updated_ontology\": {{
+             \"entities\": {{
+               \"Person\": {{
+                 \"definition\": \"An individual human who may hold a governance or operational role within a legal entity.\",
+                 \"llm-guidance\": \"Extract full names of individuals. Remove professional titles and honorifics. Focus only on persons mentioned in the context of corporate roles or functions.\",
+                 \"examples\": [\"Tan Hui Mei\", \"Emily Johnson\", \"Priya Ramesh\"]
+               }},
+               \"LegalEntity\": {{
+                 \"definition\": \"A formally registered company or service provider involved in listing, audit, legal, or governance functions.\",
+                 \"llm-guidance\": \"Extract legal names of companies and organizations with suffixes such as Sdn Bhd, Berhad, PLT. Include both issuers and third-party service firms.\",
+                 \"examples\": [\"ABC Berhad\", \"Malacca Securities Sdn Bhd\", \"Baker Tilly Monteiro Heng PLT\"]
                }}
-            }}
-         }},
-         \"removed_entities\": {{
-            \"EntityM\": \"Explanation\"
+             }},
+             \"relationships\": {{
+               \"hasDirector\": {{
+                 \"source\": \"LegalEntity\",
+                 \"target\": \"Person\",
+                 \"llm-guidance\": \"Use when a person is described as a director, whether executive, non-executive, or managing.\",
+                 \"examples\": [\"ABC Berhad hasDirector Tan Hui Mei\"]
+               }},
+               \"hasChairman\": {{
+                 \"source\": \"LegalEntity\",
+                 \"target\": \"Person\",
+                 \"llm-guidance\": \"Use when a person is described as the Chairman of the entity.\",
+                 \"examples\": [\"ABC Berhad hasChairman Emily Johnson\"]
+               }},
+               \"hasCommitteeMember\": {{
+                 \"source\": \"LegalEntity\",
+                 \"target\": \"Person\",
+                 \"llm-guidance\": \"Use when a person is listed as part of any board-level committee (e.g., Audit, Nomination, Remuneration).\",
+                 \"examples\": [\"ABC Berhad hasCommitteeMember Priya Ramesh\"]
+               }},
+               \"hasAuditor\": {{
+                 \"source\": \"LegalEntity\",
+                 \"target\": \"LegalEntity\",
+                 \"llm-guidance\": \"Use when a legal entity is appointed as an auditor to another legal entity.\",
+                 \"examples\": [\"ABC Berhad hasAuditor Baker Tilly Monteiro Heng PLT\"]
+               }},
+               \"hasSponsor\": {{
+                 \"source\": \"LegalEntity\",
+                 \"target\": \"LegalEntity\",
+                 \"llm-guidance\": \"Use when a sponsor organization assists with listing or corporate transactions.\",
+                 \"examples\": [\"ABC Berhad hasSponsor Malacca Securities Sdn Bhd\"]
+               }},
+               \"listedOn\": {{
+                 \"source\": \"LegalEntity\",
+                 \"target\": \"StockMarket\",
+                 \"llm-guidance\": \"Use when a legal entity is listed or intends to be listed on an exchange.\",
+                 \"examples\": [\"ABC Berhad listedOn Main Market of Bursa Malaysia\"]
+               }}
+             }}
+           }},
+           \"modification_made\": [
+             \"Merged 'Company' and 'Organization' into 'LegalEntity'\",
+             \"Removed 'Committee' as an entity and flattened its use into 'hasCommitteeMember'\",
+             \"Collapsed 'hasExecutiveDirector', 'hasManagingDirector', and 'hasIndependentNonExecutiveDirector' into 'hasDirector'\",
+             \"Removed 'hasBoardCommittee', 'hasChairperson', 'hasMember', 'hasShareRegistrar', and 'hasIssuingHouse'\"
+           ],
+           \"modification_rationale\": [
+             \"Company and Organization both represent legal entities differentiated only by contextual roles. Merging them improves schema simplicity and reduces extraction ambiguity.\",
+             \"Committee is only meaningful in the context of the company and its members; it was better modeled through direct relationships.\",
+             \"Various director roles were semantically overlapping and extractable from context. A single relationship simplifies structure while maintaining meaning.\",
+             \"Low-usage or redundant roles like Share Registrar and Issuing House add complexity with limited analytical value and can be handled in downstream processes if needed.\"
+           ]
          }}
-         ,
-         \"removed_relationships\": {{
-            \"RelationshipN\": \"Explanation\"
-         }},
-         \"note\": \"\"
-		}}
-  
-Steps:
-   1. Understand the ontology's purpose
-      - Familiarize yourself with the overall structure and objective of the ontology to ensure meaningful simplification.
-
-   2. Identify removable entities and relationships
-      - Focus only on those marked with "is_stable": "FALSE" to reduce complexity
-      
-   3. Evaluate each relationship for safe removal
-      - Check whether the relationship is aligned with the purpose of the ontology
-      - Ensure that removing a relationship does not break the logical integrity of the ontology.
-      - If a relationship's removal results in an orphaned entity (i.e., an entity left without any connections), remove that entity as well.
-
-   4. Check entity involvement before removal
-      - Do not remove any entity that is still part of a retained relationship.
-
-   5. Provide concise justifications
-      - Clearly explain the reason for each removed entity or relationship.
-
-   6. Include all retained elements
-      - Include all retained entities and relationships in the updated_ontology column.
-
-Example:
-   a. Example Ontology Purpose:
-
-      This ontology is designed for the Human Resources (HR) domain. It models the key entities and relationships involved in managing employees, roles, and organizational structure within a corporate environment. The purpose is to support extraction of structured HR-related data (e.g., employee records, reporting lines, and role responsibilities) from unstructured documents such as HR manuals, resumes, company policies, and internal communications.
-
-   b. Example Ontology:
-
-      Entities:
-         1. Employee
-         - definition: An individual employed by the organization on a full-time, part-time, or contract basis.
-         - llm-guidance: Extract named individuals explicitly mentioned as employees or staff members. Avoid general terms like "people" - or "personnel" unless specific.
-         - is_stable: FALSE
-         - examples: ["John Tan", "Nur Aisyah", "Michael Lee"]
          
-         2. Department
-         - definition: A functional unit within the organization responsible for specific tasks or operations.
-         - llm-guidance: Extract organizational units like Finance, Human Resources, or IT when referenced as departments.
-         - is_stable: FALSE
-         - examples: ["Finance Department", "IT Department"]
-         
-         3. Role
-         - definition: The position or job title held by an employee within the organization.
-         - llm-guidance: Extract roles when an individual's position is specified. Do not confuse with departments.
-         - is_stable: FALSE
-         - examples: ["Software Engineer", "HR Manager", "Financial Analyst"]
-         
-         4. Manager
-         - definition: An employee with supervisory responsibilities over others in a department or project.
-         - llm-guidance: Extract individuals referred to as managers or heads of teams.
-         - is_stable: FALSE
-         - examples: ["Lim Wei Seng", "Head of Operations"]
-         
-         5. Contract
-         - definition: A formal agreement defining employment terms between the employee and the organization.
-         - llm-guidance: Extract documents or references to employment agreements, not general policies.
-         - is_stable: FALSE
-         - examples: ["Employment Contract", "12-Month Internship Agreement"]
-         
-         6. Organization
-         - definition: The company or legal entity employing the individuals.
-         - llm-guidance: Extract the name of the organization, especially if mentioned as the employer.
-         - is_stable: TRUE
-         - examples: ["FutureTech Sdn Bhd", "GreenHive Berhad"]
-      
-      Relationships:
-         1. Employee worksIn Department
-         - llm-guidance: Use when an employee is assigned to or part of a specific department.
-         - is_stable: FALSE
-         - examples: ["John Tan worksIn IT Department"]
-         
-         2. Employee holdsRole Role
-         - llm-guidance: Use when a job title or position is attributed to an employee.
-         - is_stable: FALSE
-         - examples: ["Nur Aisyah holdsRole HR Manager"]
-         
-         3. Manager supervises Employee
-         - llm-guidance: Use when someone is explicitly stated as the supervisor, manager, or head of another person.
-         - is_stable: FALSE
-         - examples: ["Lim Wei Seng supervises Michael Lee"]
-         
-         4.Organization employs Employee
-         - llm-guidance: Use when an employee is identified as being employed by the organization.
-         - is_stable: FALSE
-         - examples: ["GreenHive Berhad employs Nur Aisyah"]
-         
-         5. Employee hasContract Contract
-         - llm-guidance: Use when an employment contract is mentioned in relation to an employee.
-         - is_stable: FALSE
-         - examples: ["Michael Lee hasContract Employment Contract"]
+You now understand the guidelines. Proceed to construct the ontology using the provided document and strictly following the stated guidelines.
 
-   C. Example Output:
-      {{
-         \"updated_ontology\": {{
-            \"entities\": {{
-               \"Employee\": {{
-                  \"definition\": \"An individual employed by the organization on a full-time, part-time, or contract basis.\",
-                  \"llm-guidance\": \"Extract named individuals explicitly mentioned as employees or staff members. Avoid general terms like 'people' or 'personnel' unless specific.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"John Tan\", \"Nur Aisyah\", \"Michael Lee\"]
-               }},
-               \"Department\": {{
-                  \"definition\": \"A functional unit within the organization responsible for specific tasks or operations.\",
-                  \"llm-guidance\": \"Extract organizational units like Finance, Human Resources, or IT when referenced as departments.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Finance Department\", \"IT Department\"]
-               }},
-               \"Role\": {{
-                  \"definition\": \"The position or job title held by an employee within the organization.\",
-                  \"llm-guidance\": \"Extract roles when an individual's position is specified. Do not confuse with departments.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Software Engineer\", \"HR Manager\", \"Financial Analyst\"]
-               }},
-               \"Organization\": {{
-                  \"definition\": \"The company or legal entity employing the individuals.\",
-                  \"llm-guidance\": \"Extract the name of the organization, especially if mentioned as the employer.\",
-                  \"is_stable\": \"TRUE\",
-                  \"examples\": [\"FutureTech Sdn Bhd\", \"GreenHive Berhad\"]
-               }}
-            }},
-            \"relationships\": {{
-               \"worksIn\": {{
-                  \"source\": \"Employee\",
-                  \"target\": \"Department\",
-                  \"llm-guidance\": \"Use when an employee is assigned to or part of a specific department.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"John Tan worksIn IT Department\"]
-               }},
-               \"holdsRole\": {{
-                  \"source\": \"Employee\",
-                  \"target\": \"Role\",
-                  \"llm-guidance\": \"Use when a job title or position is attributed to an employee.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Nur Aisyah holdsRole HR Manager\"]
-               }},
-               \"employs\": {{
-                  \"source\": \"Organization\",
-                  \"target\": \"Employee\",
-                  \"llm-guidance\": \"Use when an employee is identified as being employed by the organization.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"GreenHive Berhad employs Nur Aisyah\"]
-               }}
-            }}
-         }},
-         \"removed_entities\": {{
-            \"Manager\": \"Removed because it is redundant; supervisory relationships can be modeled using Employee with the 'holdsRole' relationship to indicate managerial roles.\",
-            \"Contract\": \"Removed because it is not essential for the ontology's purpose of modeling employee records, roles, and organizational structure. Contract details are secondary and can be handled outside the ontology.\"
-         }},
-         \"removed_relationships\": {{
-            \"supervises\": \"Removed because it relies on the Manager entity, which is redundant. Supervisory relationships can be inferred using 'holdsRole' with roles like 'Manager'.\",
-            \"hasContract\": \"Removed because the Contract entity is not essential, and this relationship does not directly support the core HR data extraction purpose.\"
-         }},
-         \"note\": \"\"
-      }}
+Ontology Purpose:
+{ontology_purpose}
 
-You have now received the guidelines. Proceed to analyze and reduce the ontology strictly according to the instructions and return the output in the required format only.
-
-Ontology:
+Current Ontology:
 """
 
 PROMPT[
