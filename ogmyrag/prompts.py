@@ -581,9 +581,9 @@ Guidelines:
 
    3. Entity Attributes (for each new entity):
       - `entity_name`: A meaningful noun phrase that is neither too generic (e.g., "Entity") nor too specific (e.g., "Justin"), but expresses a reusable concept (e.g., "Person").
-      - `definition`: A clear and comprehensive description of the entity type.
+      - `definition`: A clear, general, and comprehensive description of the entity type.
       - `llm-guidance`: Instructions on how to consistently detect or infer this entity in various contexts.
-      - `examples`: At least 3 representative examples, including edge cases.
+      - `examples`: At least 2 representative examples, including edge cases.
 
    4. Relationship Attributes (for each valid relationship):
       - `relationship_name`: A concise verb phrase in camelCase (e.g., `hasPartner`).
@@ -688,7 +688,7 @@ You now understand the guidelines. Proceed to construct the ontology using the p
 Ontology Purpose:
 {ontology_purpose}
 
-Curreny Ontology:
+Current Ontology:
 {current_ontology}
 
 Document:
@@ -730,7 +730,7 @@ Guidelines:
       - This ensures consistency in entity resolution and prevents semantic drift within the ontology and downstream knowledge graph.
    
    6. Document Changes
-      - Each modification should be recorded along with their rationale as shown in the output format in guideline 6 and example in guideline 7.
+      - Each modification should be recorded along with their rationale as shown in the output format in guideline 7 and example in guideline 8.
       - If no simplifications are necessary, return the current ontology unchanged and provide:
          "modification_made": [],
          "modification_rationale": ["No simplifications necessary. Current ontology is already optimal."]
@@ -791,7 +791,12 @@ Guidelines:
              - definition: A governance structure within a company assigned to a specific oversight area, such as audit or remuneration.
              - llm-guidance: Extract names of internal committees such as 'Audit Committee' or 'Remuneration Committee'. 
              - examples: Audit and Risk Committee, Remuneration Committee, Nomination Committee
-          
+            
+            5. StockMarket
+            - definition: A formal exchange where securities of listed companies are traded.
+            - llm-guidance: Extract full names of official stock exchanges or markets mentioned in the context of public company listings.
+            - examples: Main Market of Bursa Malaysia, ACE Market of Bursa Malaysia
+  
           Relationships:
              1. hasIndependentDirector
              - source: Company
@@ -884,6 +889,11 @@ Guidelines:
                  \"definition\": \"A formally registered company or service provider involved in listing, audit, legal, or governance functions.\",
                  \"llm-guidance\": \"Extract legal names of companies and organizations with suffixes such as Sdn Bhd, Berhad, PLT. Include both issuers and third-party service firms.\",
                  \"examples\": [\"ABC Berhad\", \"Malacca Securities Sdn Bhd\", \"Baker Tilly Monteiro Heng PLT\"]
+               }},
+               \"StockMarket\": {{
+                 \"definition\": \"A formal exchange where securities of listed companies are traded.\",
+                 \"llm-guidance\": \"Extract full names of official stock exchanges or markets mentioned in the context of public company listings.\",
+                 \"examples\": [\"Main Market of Bursa Malaysia\", \"ACE Market of Bursa Malaysia\"]
                }}
              }},
              \"relationships\": {{
@@ -939,7 +949,7 @@ Guidelines:
            ]
          }}
          
-You now understand the guidelines. Proceed to construct the ontology using the provided document and strictly following the stated guidelines.
+You now understand the guidelines. Please proceed to simplify the ontology according to them.
 
 Ontology Purpose:
 {ontology_purpose}
@@ -950,305 +960,214 @@ Current Ontology:
 PROMPT[
     "ONTOLOGY_CLARITY_ENHANCEMENT"
 ] = """
-You are an ontology clarity enhancement agent specialized in non-taxonomic, relationship-driven models. Your task is to refine the ontology to ensure that all entity and relationship names, definitions, LLM-guidance, and examples are clear, intuitive, general, unambiguous, and free of jargon—while preserving the ontology's intended purpose.
+You are an ontology clarity enhancement agent specializing in non-taxonomic, relationship-driven models. Your task is to refine the ontology to ensure all attributes of entities and relationships meet defined criteria and consistently support the ontology's purpose.
 
-Guidelines
-   1. Preserve Purpose
-      - All changes must maintain the ontology's ability to fulfill its intended purpose: {ontology_purpose}.
-
-   2. Respect Stability Flags
-      - Do not modify any entity or relationship where is_stable is "TRUE".
-      - Only evaluate and modify those marked "FALSE".
-      - Output the is_stable field exactly as "TRUE" or "FALSE" (uppercase only).
-      - You must not alter the value of the is_stable field.
+Guidelines:
+   1. Clarity Enhancement Logic
+      - For each entity in the ontology:
+         - For each attribute:
+            - If it does not meet the criteria in Guideline 2:
+               - Update its content.
+               - Update any affected relationships (e.g., entity name changes that impact source/target).
+               - Log the change and rationale as stated in Guideline 4.
       
-   3. Entities
-      - For each entity where is_stable is "FALSE":
-         a. Name
-            - Should be clear, general (but not too broad or too specific).
-            - Should avoid jargon or counterintuitive terms.
-            - Example: Replace "ListedIssuer" with "ListedCompany".
+      - For each relationship in the ontology:
+         -For each attribute:
+            - If it does not meet the criteria in Guideline 3:
+               - Update its content.
+               - Log the change and rationale as stated in Guideline 4.
+               
+   2. Entity Attributes (for each new entity):
+      - `entity_name`: A meaningful noun phrase that is neither too generic (e.g., "Entity") nor too specific (e.g., "Justin"), but expresses a reusable concept (e.g., "Person").
+      - `definition`: A clear, general, and comprehensive description of the entity type.
+      - `llm-guidance`: Instructions on how to consistently detect or infer this entity in various contexts.
+      - `examples`: At least 2 representative examples, including edge cases.
 
-         b. Definition
-            - Should be concise, general, and unambiguous.
-
-         c. LLM-Guidance
-            - Provide clear rules to ensure consistent and accurate extraction.
-            - Examples:
-               - Remove honorifics (e.g., "Mr.", "Dr.") from person names.
-               - Extract only meaningful location names from long addresses.
-
-         d. Examples
-            - Provide realistic, representative examples.
-
-   4. Relationships
-      - For each relationship where is_stable is "FALSE":
-         a. Name
-            - Must be intuitive, clearly distinct, and imply unidirectional flow (e.g., hasSubsidiary, isPartOf). 
-            - Use camelCase (e.g., hasSubsidiary, isPartOf).
-            - Do not include source or target entity names in the relationship name (e.g., use hasSubsidiary, not CompanyHasSubsidiaryCompany).
-         
-         b. Source/Target Entities
-            - Must reference valid entity types in the ontology.
-
-         c. LLM-Guidance
-            - Must clearly describe when and how to apply the relationship.
-
-         d. Examples
-            - Must clearly illustrate how this relationship is applied.
-            
-   5. Ensure Consistency and Clarity
-      - All definitions and LLM guidance must be distinct, consistent, and unambiguous across the ontology.
-      - Akk examples must match the definitions and LLM guidance.
-      
-   6. Optional Flagging for Removal
-      - You may flag entities or relationships that could be removed, with a justification in the "note" field after clarity improvements are made.
-      - Do not remove them yourself, as you are not authorized to do so.
+   3. Relationship Attributes (for each valid relationship):
+      - `relationship_name`: A concise verb phrase in camelCase (e.g., `hasPartner`).
+      - `source`: The entity from which the relationship originates.
+      - `target`: The entity to which the relationship points.
+      - `llm-guidance`: Specific instructions on when and how to use this relationship.
+      - `examples`: At least 2 representative examples, including edge cases.
    
-   7. Documenting Changes
-      - For each change, provide a short explanation under modified_entities or modified_relationships.
-      - Example: "ListedIssuer's name": "ListedCompany is more intuitive and avoids financial jargon."
-
-   8. Unchanged Elements
-      - All entities and relationships that are not modified must appear exactly as-is in updated_ontology, with their original is_stable values intact.
-
-   9. No Valid Modifications
-      - If no changes are necessary, return the ontology unchanged and provide a reason in the "note" field.
-      - You are not required to modify every unstable element. If an element is valid, even if marked unstable, no change is needed.
-
-   10. Your output must strictly follow this structure:
-      - Return only a raw JSON object. Do not include anything before or after it, not even 'json' or code block markers.
+   4. Document Changes
+      - Each modification should be recorded along with their rationale as shown in the output format in guideline 7 and example in guideline 8.
+      - If no clarity enhancements are necessary, return the current ontology unchanged and provide:
+         "modification_made": [],
+         "modification_rationale": ["No clarity enhancement necessary. Current ontology is already optimal."]
+   
+   5. Adherence to Ontology Purpose
+		- All your clarity enhancement made must support the stated ontology purpose.
       
-      {{
-         \"updated_ontology\": {{
-            \"entities\": {{
-               \"EntityA\": {{
-                  \"definition\": \"\",
-                  \"llm-guidance\": \"\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": []
+   6. Cross-Referencing Consistency
+      - All mentions of an entity instance-whether in examples for entities or relationships, must strictly follow the llm-guidance and definition of that entity type.
+      - Do not introduce formatting inconsistencies that violate the original extraction rules defined for the entity. For example, if the llm-guidance for Person states that honorifics should be excluded, all other instances of Person must adhere to this rule as well.
+      - This ensures consistency in entity resolution and prevents semantic drift within the ontology and downstream knowledge graph.
+   
+ 	7. Output Format
+		- Unchanged entities and relationships must be returned in the same structure and wording as in the current ontology. Do not reformat or rename unchanged elements.
+		- Return only the following raw JSON structure - no explanations, comments, or code block formatting:
+      
+         {{
+            \"updated_ontology\": {{
+               \"entities\": {{
+                  \"EntityA\": {{
+                     \"definition\": \"\",
+                     \"llm-guidance\": \"\",
+                     \"examples\": []
+                  }},
+                  \"EntityB\": {{
+                     \"definition\": \"\",
+                     \"llm-guidance\": \"\",
+                     \"examples\": []
+                  }}
                }},
-               \"EntityB\": {{
-                  \"definition\": \"\",
-                  \"llm-guidance\": \"\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": []
+               \"relationships\": {{
+                  \"RelationshipA\": {{
+                     \"source\": \"EntityA\",
+                     \"target\": \"EntityB\",
+                     \"llm-guidance\": \"\",
+                     \"examples\": []
+                  }}
                }}
             }},
-            \"relationships\": {{
-               \"RelationshipA\":{{
-                  \"source\": \"EntityA\",
-                  \"target\": \"EntityB\",
-                  \"llm-guidance\": \"\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": []
-               }}
-            }}
-         }},
-         \"modified_entities\": {{
-            \"EntityM's name\": \"Explanation\",
-            \"EntityM's definition\": \"Explanation\"
-         }},
-         \"modified_relationships\": {{
-            \"RelationshipN's definition\": \"Explanation\"
-         }},
-         \"note\": \"\"
-      }}
+            \"modification_made\": [],
+            \"modification_rationale\": []
+			}}
 
-Steps
-   1. Understand Purpose
-      - Begin by reviewing {ontology_purpose} to understand the intended function of the ontology.
-
-   2. Review Unstable Elements
-      - For each entity or relationship where is_stable is "FALSE", assess and revise as needed to improve clarity and usability.
-      - Update definitions, guidance, and examples to align, ensuring example synchronization.
-      - Confirm that each relationship references valid source and target entities and has clear application rules.
-
-   3. Document All Modifications
-      - Record each change along with a brief explanation in the appropriate section.
-
-   4. Output the Full Ontology
-      - Return the complete ontology under updated_ontology, including both modified and unmodified items.
-      - If no changes were necessary, return the full original ontology with a brief explanation in the "note".
-
-Example:
-   a. Example Ontology Purpose
-      The ontology is designed to model the organizational structure and key operational relationships within a technology company. It supports the extraction of structured data from corporate documents such as annual reports, employee handbooks, and press releases to enable analysis of company hierarchies, product development, and strategic partnerships. The ontology powers a knowledge graph for querying relationships like employee roles, department functions, and product ownership.
+   8. Example
+      a. Ontology Purpose
+      To construct a knowledge graph of Malaysian public companies that captures key organizational roles and structural information to support governance analysis, such as identifying board members, corporate relationships, and geographic presence.
       
-   b. Example Ontology
-   
-      Entities:
-         1. StaffMember
-         - definition: An individual employed by the technology company, including full-time, part-time, or contract workers.
-         - llm-guidance: Extract named individuals explicitly identified as employees or staff. Exclude generic references like "workers" unless specific.
-         - is_stable: FALSE
-         - examples: ["Alice"]
+      b. Current Ontology
+        Entities:
+         1. Person
+         - definition: An individual human who may hold a governance or operational role within a legal entity.
+         - llm-guidance: Extract full names of individuals. Remove professional titles and honorifics. 
+         - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
+
+         2. LegalEntity
+         - definition: A formally registered company or service provider involved in listing, audit, legal, or governance functions.
+         - llm-guidance: Extract legal names of companies and organizations with suffixes such as Sdn Bhd, Berhad, PLT. Include both issuers and third-party service firms.
+         - examples: ABC Berhad, Malacca Securities Sdn Bhd, Baker Tilly Monteiro Heng PLT
          
-         2. Division
-         - definition: A functional unit within the company responsible for specific operations or tasks.
-         - llm-guidance: Extract units like "Research & Development" or "Marketing" when referred to as divisions or departments.
-         - is_stable: FALSE
-         - examples: ["R&D Division", "Marketing Division"]
-         
-         3. JobTitle
-         - definition: The position or role held by a staff member within the company.
-         - llm-guidance: Extract specific job titles or positions attributed to individuals, such as "Engineer" or "Manager". Avoid confusing with divisions.
-         - is_stable: FALSE
-         - examples: ["Software Engineer", "Product Manager", "Marketing Director"]
-         
-         4. ProductItem
-         - definition: A product developed or offered by the company.
-         - llm-guidance: Extract specific products mentioned in company documents, such as software or hardware.
-         - is_stable: FALSE
-         - examples: ["CloudSync Software", "SmartDevice X"]
-         
-         5. ExternalPartner
-         - definition: An external organization collaborating with the company on projects or business activities.
-         - llm-guidance: Extract names of organizations explicitly mentioned as partners or collaborators.
-         - is_stable: FALSE
-         - examples: ["TechCorp Ltd", "Innovate Solutions"]
-         
-         6. Company
-         - definition: The technology company itself, as a legal or operational entity.
-         - llm-guidance: Extract the company name when mentioned as the employer or primary entity.
-         - is_stable: TRUE
-         - examples: ["NexGen Technologies"]
+         3. StockMarket
+         - definition: A formal exchange where securities of listed companies are traded.
+         - llm-guidance: Extract full names of official stock exchanges or markets mentioned in the context of public company listings.
+         - examples: Main Market of Bursa Malaysia, ACE Market of Bursa Malaysia
 
       Relationships:
-         1. StaffMember worksIn Division
-         - llm-guidance: Use when a staff member is assigned to or works within a specific division.
-         - is_stable: FALSE
-         - examples: ["Alice Wong worksIn R&D Division"]
-         
-         2. StaffMember holdsJobTitle JobTitle
-         - llm-guidance: Use when a specific job title or position is attributed to a staff member.
-         - is_stable: FALSE
-         - examples: ["Bob Tan holdsJobTitle Software Engineer"]
-         
-         3. Division developsProduct ProductItem
-         - llm-guidance: Use when a division is responsible for creating or managing a specific product or service.
-         - is_stable: FALSE
-         - examples: ["R&D Division developsProduct CloudSync Software"]
-         
-         4. Company collaboratesWith ExternalPartner
-         - llm-guidance: Use when the company is explicitly described as partnering or collaborating with an external organization.
-         - is_stable: FALSE
-         - examples: ["NexGen Technologies collaboratesWith TechCorp Ltd"]
-         
-         5. Company employs StaffMember
-         - llm-guidance: Use when a staff member is identified as being employed by the company.
-         - is_stable: TRUE
-         - examples: ["NexGen Technologies employs Alice Wong"]
+         1. hasDirector
+         - source: LegalEntity
+         - target: Person
+         - llm-guidance: Use when a person is described as a director, whether executive, non-executive, or managing.
+         - examples: ABC Berhad hasDirector Tan Hui Mei
 
-   c. Example Output
-      {{
-         \"updated_ontology\": {{
-            \"entities\": {{
-               \"Employee\": {{
-                  \"definition\": \"An individual working for the technology company, including full-time, part-time, or contract employees.\",
-                  \"llm-guidance\": \"Extract full names of individuals identified as employees or staff, excluding honorifics (e.g., 'Mr.', 'Dr.').\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Alice Wong\", \"Bob Tan\", \"Clara Lim\"]
+         2. hasChairman
+         - source: LegalEntity
+         - target: Person
+         - llm-guidance: Use when a person is described as the Chairman of the entity.
+         - examples: ABC Berhad hasChairman Emily Johnson
+
+         3. hasCommitteeMember
+         - source: LegalEntity
+         - target: Person
+         - llm-guidance: Use when a person is listed as part of any board-level committee (e.g., Audit, Nomination, Remuneration).
+         - examples: ABC Berhad hasCommitteeMember Priya Ramesh
+
+         4. hasAuditor
+         - source: LegalEntity
+         - target: LegalEntity
+         - llm-guidance: Use when a legal entity is appointed as an auditor to another legal entity.
+         - examples: ABC Berhad hasAuditor Baker Tilly Monteiro Heng PLT
+
+         5. hasSponsor
+         - source: LegalEntity
+         - target: LegalEntity
+         - llm-guidance: Use when a sponsor organization assists with listing or corporate transactions.
+         - examples: ABC Berhad hasSponsor Malacca Securities Sdn Bhd
+
+         6. listedOn
+         - source: LegalEntity
+         - target: StockMarket
+         - llm-guidance: Use when a legal entity is listed or intends to be listed on an exchange.
+         - examples: ABC Berhad listedOn Main Market of Bursa Malaysia
+      
+      c. Output:
+         {{
+            \"updated_ontology\": {{
+               \"entities\": {{
+                  \"Person\": {{
+                     \"definition\": \"An individual who holds or has held a governance, executive, or board-level role within a corporate legal entity.\",
+                     \"llm-guidance\": \"Extract full names of individuals. Remove professional titles and honorifics (e.g., Mr., Dato', Dr.). \",
+                     \"examples\": [\"Tan Hui Mei\", \"Emily Johnson\", \"Priya Ramesh\"]
+                  }},
+                  \"LegalEntity\": {{
+                     \"definition\": \"A formally registered company or service provider involved in listing, audit, legal, or governance functions.\",
+                     \"llm-guidance\": \"Extract legal names of companies and organizations with suffixes such as Sdn Bhd, Berhad, PLT. Include both issuers and third-party service firms.\",
+                     \"examples\": [\"ABC Berhad\", \"Malacca Securities Sdn Bhd\", \"Baker Tilly Monteiro Heng PLT\"]
+                  }},
+                  \"StockMarket\": {{
+                     \"definition\": \"A formal exchange where securities of listed companies are traded.\",
+                     \"llm-guidance\": \"Extract full names of official stock exchanges or markets mentioned in the context of public company listings.\",
+                     \"examples\": [\"Main Market of Bursa Malaysia\", \"ACE Market of Bursa Malaysia\"]
+                  }}
                }},
-               \"Department\": {{
-                  \"definition\": \"A unit within the company responsible for specific functions or operations.\",
-                  \"llm-guidance\": \"Extract named units like 'Research & Development' or 'Marketing' when referred to as departments or divisions. Exclude vague terms like 'team' unless clearly a department.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Research & Development\", \"Marketing\"]
-               }},
-               \"Role\": {{
-                  \"definition\": \"The job or position held by an employee within the company.\",
-                  \"llm-guidance\": \"Extract specific job titles like 'Engineer' or 'Manager' attributed to individuals. Do not confuse with department names.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Software Engineer\", \"Product Manager\", \"Marketing Director\"]
-               }},
-               \"Product\": {{
-                  \"definition\": \"A product created or provided by the company.\",
-                  \"llm-guidance\": \"Extract named products, such as software or hardware, mentioned in company documents.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"CloudSync Software\", \"SmartDevice X\"]
-               }},
-               \"Partner\": {{
-                  \"definition\": \"An external organization working with the company on projects or business activities.\",
-                  \"llm-guidance\": \"Extract names of organizations explicitly identified as partners or collaborators in company documents.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"TechCorp Ltd\", \"Innovate Solutions\"]
-               }},
-               \"Company\": {{
-                  \"definition\": \"The technology company itself, as a legal or operational entity.\",
-                  \"llm-guidance\": \"Extract the company name when mentioned as the employer or primary entity.\",
-                  \"is_stable\": \"TRUE\",
-                  \"examples\": [\"NexGen Technologies\"]
+               \"relationships\": {{
+                  \"hasDirector\": {{
+                     \"source\": \"LegalEntity\",
+                     \"target\": \"Person\",
+                     \"llm-guidance\": \"Use when a person is described as a director, whether executive, non-executive, or managing.\",
+                     \"examples\": [\"ABC Berhad hasDirector Tan Hui Mei\"]
+                  }},
+                  \"hasChairman\": {{
+                     \"source\": \"LegalEntity\",
+                     \"target\": \"Person\",
+                     \"llm-guidance\": \"Use when a person is described as the Chairman of the entity.\",
+                     \"examples\": [\"ABC Berhad hasChairman Emily Johnson\"]
+                  }},
+                  \"hasCommitteeMember\": {{
+                     \"source\": \"LegalEntity\",
+                     \"target\": \"Person\",
+                     \"llm-guidance\": \"Use when a person is explicitly listed as a serving member of a specific board committee, such as Audit, Nomination, or Remuneration. Avoid using if the committee name or function is ambiguous or missing.\",
+                     \"examples\": [\"ABC Berhad hasCommitteeMember Priya Ramesh\", \"XYZ Berhad hasCommitteeMember Emily Johnson\"]
+                  }},
+                  \"hasAuditor\": {{
+                     \"source\": \"LegalEntity\",
+                     \"target\": \"LegalEntity\",
+                     \"llm-guidance\": \"Use when a legal entity is appointed as an auditor to another legal entity.\",
+                     \"examples\": [\"ABC Berhad hasAuditor Baker Tilly Monteiro Heng PLT\"]
+                  }},
+                  \"hasSponsor\": {{
+                     \"source\": \"LegalEntity\",
+                     \"target\": \"LegalEntity\",
+                     \"llm-guidance\": \"Use when a sponsor organization assists with listing or corporate transactions.\",
+                     \"examples\": [\"ABC Berhad hasSponsor Malacca Securities Sdn Bhd\"]
+                  }},
+                  \"listedOn\": {{
+                     \"source\": \"LegalEntity\",
+                     \"target\": \"StockMarket\",
+                     \"llm-guidance\": \"Use when a legal entity is listed or intends to be listed on an exchange.\",
+                     \"examples\": [\"ABC Berhad listedOn Main Market of Bursa Malaysia\"]
+                  }}
                }}
             }},
-            \"relationships\": {{
-               \"worksIn\": {{
-                  \"source\": \"Employee\",
-                  \"target\": \"Department\",
-                  \"llm-guidance\": \"Apply when an employee is explicitly stated to work in a specific department, such as 'Alice is in R&D'.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Alice Wong worksIn Research & Development\"]
-               }},
-               \"hasRole\": {{
-                  \"source\": \"Employee\",
-                  \"target\": \"Role\",
-                  \"llm-guidance\": \"Apply when an employee is assigned a specific job title, such as 'Bob is a Software Engineer'.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Bob Tan hasRole Software Engineer\"]
-               }},
-               \"develops\": {{
-                  \"source\": \"Department\",
-                  \"target\": \"Product\",
-                  \"llm-guidance\": \"Apply when a department is responsible for creating or managing a specific product, such as 'R&D developed CloudSync'.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"Research & Development develops CloudSync Software\"]
-               }},
-               \"partnersWith\": {{
-                  \"source\": \"Company\",
-                  \"target\": \"Partner\",
-                  \"llm-guidance\": \"Apply when the company is explicitly described as collaborating with an external organization, such as 'NexGen partners with TechCorp'.\",
-                  \"is_stable\": \"FALSE\",
-                  \"examples\": [\"NexGen Technologies partnersWith TechCorp Ltd\"]
-               }},
-               \"employs\": {{
-                  \"source\": \"Company\",
-                  \"target\": \"Employee\",
-                  \"llm-guidance\": \"Use when a staff member is identified as being employed by the company.\",
-                  \"is_stable\": \"TRUE\",
-                  \"examples\": [\"NexGen Technologies employs Alice Wong\"]
-               }}
-            }}
-         }},
-         \"modified_entities\": {{
-            \"StaffMember's name\": \"Changed to 'Employee' for greater clarity and intuitiveness, as 'Employee' is a more commonly understood term.\",
-            \"StaffMember's definition\": \"Simplified to focus on the core concept of individuals working for the company, removing redundant employment type details.\",
-            \"StaffMember's llm-guidance\": \"Added instruction to exclude honorifics for consistency in name extraction.\",
-            \"StaffMember's examples\": \"Ensure that examples are aligned with the updated definitions and llm-guidance.\",
-            \"Division's name\": \"Changed to 'Department' for simplicity and to align with common corporate terminology.\",
-            \"Division's definition\": \"Streamlined to emphasize functional units, avoiding overlap with other entities.\",
-            \"Division's llm-guidance\": \"Clarified to exclude vague terms like 'team' to ensure precise extraction.\",
-            \"JobTitle's name\": \"Changed to 'Role' for brevity and clarity, as 'Role' is more intuitive.\",
-            \"JobTitle's definition\": \"Simplified to focus on the concept of a job or position.\",
-            \"ProductItem's name\": \"Changed to 'Product' for simplicity and to avoid unnecessary specificity.\",
-            \"ProductItem's definition\": \"Streamlined to cover products concisely.\",
-            \"ExternalPartner's name\": \"Changed to 'Partner' for brevity and clarity, as the external nature is implied in the definition.\",
-            \"ExternalPartner's definition\": \"Clarified to focus on collaboration, avoiding redundancy.\"
-         }},
-         \"modified_relationships\": {{
-            \"worksIn's llm-guidance\": \"Clarified to emphasize explicit statements of department assignment for accurate application.\",
-            \"holdsJobTitle's name\": \"Changed to 'hasRole' to align with the renamed 'Role' entity and for brevity.\",
-            \"holdsJobTitle's llm-guidance\": \"Simplified to focus on clear attribution of job titles.\",
-            \"developsProduct's name\": \"Changed to 'develops' for simplicity and to avoid redundancy with the 'Product' entity name.\",
-            \"developsProduct's llm-guidance\": \"Clarified to ensure the relationship is applied only when a department is explicitly responsible for a product.\",
-            \"collaboratesWith's name\": \"Changed to 'partnersWith' for intuitiveness and to reflect a common term for business collaborations.\",
-            \"collaboratesWith's llm-guidance\": \"Clarified to require explicit mention of partnership for accurate application.\"
-         }},
-         \"note\": \"\"
-      }}
+            \"modification_made\": [
+               \"Person\",
+               \"hasCommitteeMember\"
+            ],
+            \"modification_rationale\": [
+               \"Updated definition and llm-guidance for 'Person' to provide clearer disambiguation criteria and exclusion rules for extraction.\",
+               \"Refined llm-guidance for 'hasCommitteeMember' to prevent misuse where board committee membership is not clearly defined, improving precision for edge cases.\"
+            ]
+         }}
 
-You have now received the guidelines. Proceed to analyze and modify the ontology strictly according to the instructions and return the output in the required format only.
+You now understand the guidelines. Please proceed to enhance the clarity of the ontology according to them.
 
-Ontology: 
+Ontology Purpose:
+{ontology_purpose}
+
+Current Ontology:
 """
 
 PROMPT[
