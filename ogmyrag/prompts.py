@@ -1,6 +1,8 @@
 PROMPT = {}
 
-PROMPT["ENTITIES_RELATIONSHIPS_PARSING"] = """
+PROMPT[
+    "ENTITIES_RELATIONSHIPS_PARSING"
+] = """
 You are an entity and relationship extraction agent. Your task is to extract only entities and relationships defined in the given ontology from the source text.
 
 Guidelines
@@ -266,7 +268,9 @@ Actual Document Constraints
 Document
 """
 
-PROMPT["DEFINITIONS_PARSING"] ="""
+PROMPT[
+    "DEFINITIONS_PARSING"
+] = """
 You are an information extraction system. The provided PDF contains word definitions and word usages that carry special meaning within the document's context. Your task is to extract this information and output it as key-value pairs in JSON format. Return only the structured output—no explanations, headers, or additional text.
 Output format example:
    {
@@ -274,7 +278,9 @@ Output format example:
    }
 """
 
-PROMPT["PDF_PARSING"] = """
+PROMPT[
+    "PDF_PARSING"
+] = """
 You are a PDF-to-text converter and interpreter. You are given a PDF, and you must convert it into plain text with absolutely no loss of information. The converted output must preserve 100% of the original meaning of the source document.
 
 For charts, diagrams, tables, or illustrations where direct conversion to text may result in loss of information, you must not ignore these elements. Instead, provide a comprehensive interpretation. This interpretation must fully and accurately convey 100% of the original content and meaning of each visual element.
@@ -284,7 +290,9 @@ You are subject to no performance constraints—there are no limits on file size
 Return only the plain text output—no explanations, metadata, headers, or additional commentary.
 """
 
-PROMPT["QUERY_VALIDATION"] = """
+PROMPT[
+    "QUERY_VALIDATION"
+] = """
 You are an AI front agent tasked with evaluating user queries to determine whether they can be answered using a graph database of publicly listed companies in Malaysia. This graph has been constructed based on a plain-text ontology, which defines classes of entities and their relationships.
 
 Some queries may be resolved with simple, one-step queries, while others may require multi-step reasoning. Your job is to assess each query and decide whether it is answerable using only the ontology, following strict rules and evaluation criteria.
@@ -384,7 +392,9 @@ Ontology:
 You have a complete understanding of the ontology. Follow the evaluation and response rules strictly. Your responses must be concise, accurate, and aligned with the knowledge contained in the graph.
 """
 
-PROMPT["ENTITY_CLASSIFICATION_FOR_VECTOR_SEARCH"] = """
+PROMPT[
+    "ENTITY_CLASSIFICATION_FOR_VECTOR_SEARCH"
+] = """
 You are an AI agent specialized in ontology-based vector search.
 You are provided with an ontology that defines allowed entity types. The ontology is written in plain text. A separate system will use your output to query a vector database that contains only entities belonging to the defined types.
 
@@ -416,7 +426,9 @@ Actual ontology:
 You have now understood the ontology. Now perform your task strictly based on the responsibilities defined.
 """
 
-PROMPT["TEXT_TO_CYPHER"] = """
+PROMPT[
+    "TEXT_TO_CYPHER"
+] = """
 You are an expert at converting natural language queries into Cypher queries for a Neo4j graph database. You are given an ontology written in plain text that defines all available entity types and relationships in the graph. Your task is to generate an accurate Cypher query based on the user's input.
 
 General Rules:
@@ -474,7 +486,9 @@ Ontology:
 You now fully understand the ontology. Follow the general rules and instructions precisely to accomplish your task.
 """
 
-PROMPT["REASONING"] = """
+PROMPT[
+    "REASONING"
+] = """
 You are an expert in reasoning. Your goal is to leverage your reasoning skills along with the available tools to answer a user query related to listed companies in Malaysia. You may make multiple tool calls to arrive at a final answer and use the results from these tools to guide further reasoning or tool usage.
 
 General Rules:
@@ -517,169 +531,173 @@ Ontology:
 You now fully understand the ontology. Follow all rules and instructions to complete your task effectively.
 """
 
-PROMPT["ONTOLOGY_CONSTRUCTION"] = """
-You are a non-taxonomic, relationship-driven ontology construction agent. You are provided with a document describing {document_desc}, and your task is to extend the existing ontology using its content. Follow the guidelines, steps, and output format strictly.
+PROMPT[
+    "ONTOLOGY_CONSTRUCTION"
+] = """
+You are a relationship-driven, non-taxonomic ontology construction agent. Your task is to extend the current ontology by extracting relevant entity and relationship types from the provided source text that fulfill the specific purpose of the ontology.
 
 Guidelines:
-	1. Preserve purpose
-      - Only extract entities and relationships that directly support the ontology's stated purpose: "{ontology_purpose}", and complement the existing ontology provided below.
+	1. Extraction Logic
+      - Follow this logic strictly throughout the process:
 
-	2. Focus on non-taxonomic, unidirectional relationships relationships
-      - Identify non-taxonomic, unidirectional relationships (e.g., Company hasSubsidiary Company) that reflect interconnections relevant to the purpose. 
-      - Relationships are directed from source to target entity
-		- Relationships may occur between entities of the same or different types.
-		- Do not include taxonomic/classification relationships.
-      - Do not include source or target entity names in the relationship name (e.g., use hasSubsidiary, not Company hasSubsidiary Company).
-      - Ensure all new relationships are unidirectional.
-	
-	3. Extract only entities that are necessary to establish valid relationships.
-		- Use general but meaningful types (e.g., Person instead of Justin, avoid types like Entity).
-		- Do not convert names or overly specific attributes into entity types
-	
-	4. Use only what's in the document
-      - Do not reuse example entities or relationships; they are for reference purposes only.
-      - Do not invent or infer entities or relationships beyond what is stated.
+         - For each relationship found in the source text:
+         
+            - If the relationship meets the criteria in Guideline 2:
+            
+               - If the source entity is new (i.e., not already listed in the extracted entities or current ontology):
+                  - Define its attributes based on Guideline 3 and append it to the entities list
+               
+               - If the target entity is new:
+                  - Define its attributes based on Guideline 3 and append it to the entities list
+               
+               - Define the attributes for the relationship as described in Guideline 4 and append it to the relationships list
+               
+            - Output all newly extracted entities and relationships using the structure defined in Guideline 5
+   
+   2. Relationship Extraction Criteria
+      - Only extract a relationship if all of the following conditions are met:
+         1. Ontology Purpose Fulfillment:  
+            It contributes to answering relevant competency questions or supports the analytical goals defined by the ontology.
+
+         2. Non-Redundancy:  
+            It does not duplicate the semantics of any relationship already present in the `relationships` output or the current ontology.
+
+         3. Inference Support:  
+            It enables meaningful reasoning or supports logical inference within the knowledge graph.
+
+         4. Unidirectional:  
+            It must be explicitly directed from a source entity to a target entity (e.g., `hasSubsidiary`).
+
+         5. Role Modeling Preference:  
+            - When a concept could be modeled either as:
+               - Classification (e.g., `Person isA IndependentDirector`) or
+               - Relationship (e.g., `Company hasIndependentDirector Person`)  
+            prefer the relationship form if it improves clarity, scalability, or graph usability.
+
+            - Relationships are strongly preferred when they:
+               - Represent dynamic or contextual roles (e.g., employment, appointments, ownership)
+               - Reflect real-world interconnections between entities
+               - Support multi-role or temporal modeling without duplicating entities
+
+   3. Entity Attributes (for each new entity):
+      - `entity_name`: A meaningful noun phrase that is neither too generic (e.g., "Entity") nor too specific (e.g., "Justin"), but expresses a reusable concept (e.g., "Person").
+      - `definition`: A clear and comprehensive description of the entity type.
+      - `llm-guidance`: Instructions on how to consistently detect or infer this entity in various contexts.
+      - `examples`: At least 3 representative examples, including edge cases.
+
+   4. Relationship Attributes (for each valid relationship):
+      - `relationship_name`: A concise verb phrase in camelCase (e.g., `hasPartner`).
+      - `source`: The entity from which the relationship originates.
+      - `target`: The entity to which the relationship points.
+      - `llm-guidance`: Specific instructions on when and how to use this relationship.
+      - `examples`: At least 2 representative examples, including edge cases.
+
+   5. Output Format
+      - Ensure all `source` and `target` references in `relationships` match keys in the `entities` dictionary.
+      - Do not repeat entities or relationships already present in the current ontology.
+      - Return only the following raw JSON structure — no explanations, comments, or code block formatting:
       
-   5. Do not modify existing ontology
-      - You must include all existing entities and relationships unchanged.
-      - Do not edit or reinterpret their definitions or examples.
-      - The "is_stable" field must be set exactly as "FALSE" (in capital letters) for all new entities or relationships.
-         - This indicates that new entries are provisional until reviewed.
-         - You are not permitted to assign "TRUE" to any entity or relationship.
-         - You must preserve the is_stable value of existing entries exactly as is.
- 
-   6. Return unchanged ontology if no additions are found
-      - If no valid additions can be made, return the ontology unchanged and include a brief explanation in the "note" field.
-	
-	7. You must follow the output format shown and include all existing and new entities and relationships in your output. 
-      - Return only a raw JSON object. Do not include anything before or after it, not even 'json' or code block markers.
-
-		Output Format:
-		{{
-			\"entities\": {{
-            \"EntityA\": {{
-               \"definition\": \"\",
-               \"llm-guidance\": \"\",
-               \"is_stable\": \"FALSE\",
-               \"examples\": []
+         {{
+            \"entities\": {{
+               \"EntityA\": {{
+                  \"definition\": \"\",
+                  \"llm-guidance\": \"\",
+                  \"examples\": []
+               }},
+               \"EntityB\": {{
+                  \"definition\": \"\",
+                  \"llm-guidance\": \"\",
+                  \"examples\": []
+               }}
             }},
-            \"EntityB\": {{
-               \"definition\": \"\",
-               \"llm-guidance\": \"\",
-               \"is_stable\": \"FALSE\",
-               \"examples\": []
-            }}
-         }},
-         \"relationships\": {{
-            \"RelationshipA\": {{
-               \"source\": \"EntityA\",
-               \"target\": \"EntityB\",
-               \"llm-guidance\": \"\",
-               \"is_stable\": \"FALSE\",
-               \"examples\": []
+            \"relationships\": {{
+               \"RelationshipA\": {{
+                  \"source\": \"EntityA\",
+                  \"target\": \"EntityB\",
+                  \"llm-guidance\": \"\",
+                  \"examples\": []
+               }}
             }}
          }}
-         \"note\": \"\"
-		}}
-		
-		Explanation:
-			a. Entity
-			- definition: A concise definition of the entity.
-			- llm-guidance: Clear, unambiguous instructions to ensure consistent parsing across edge cases.
-			- examples: A variety of representative examples, including edge cases where applicable.
-
-			b. Relationship
-			- source, target: Refer to entity types.
-			- llm-guidance: Instructions for when and how to apply this relationship.
-			- examples: Illustrative examples showing correct usage, including edge cases.
-
-Steps:
-   1. Review the current ontology and its stated purpose.
-
-   2. Identify new, valid non-taxonomic relationships from the document that align with the ontology's purpose and complement existing relationships.
-
-   3. Define any additional entity types necessary to support the newly identified relationships.
-
-   4. Include the existing ontology without modifying any of its attributes.
-
-Example:
-	a. Example Source Text:
-	“Dr Tan Hui Mei is currently serving as the independent director of ABC Berhad, which is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.”
-
-	b. Example Ontology:
-	Empty
+  
+      - If no new valid relationship and entiy is found, return:
+         {{
+            \"entities\": {{}},
+            \"relationships\": {{}}
+         }}
 	
-	c. Example Output:
-		{{
-			\"entities\": {{
-				\"Person\": {{
-					\"definition\": \"An individual human associated with a company.\",
-					\"llm-guidance\": \"Extract full names of individuals, removing titles (e.g., 'Dato'', 'Dr.', 'Mr.') or roles (e.g., 'CEO'). For example, 'Dr Tan Hui Mei' becomes 'Tan Hui Mei'.\",
-					\"is_stable\": \"FALSE\",
-					\"examples\": [
-						\"Tan Hui Mei\",
-						\"Emily Johnson\",
-						\"Priya Ramesh\"
-					]
-				}},
-				\"Company\": {{
-					\"definition\": \"A legal business entity engaged in commercial, industrial, or professional activities.\",
-					\"llm-guidance\": \"Extract entities identified as registered businesses with suffixes like 'Sdn Bhd', 'Berhad', or 'Pte Ltd'. Use the full legal name. Do not include the registration number if present.\",
-					\"is_stable\": \"FALSE\",
-					\"examples\": [
-						\"ABC Berhad\",
-						\"Apple Inc.\",
-						\"United Gomax Sdn Bhd\"
-					]
-				}},
-				\"Place\": {{
-					\"definition\": \"A geographic location, such as a city, region, or country.\",
-					\"llm-guidance\": \"Extract one meaningful location such as a city, state, or country. Ignore street names, postal codes, or unit numbers. From '135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.', extract 'Kuala Lumpur'.\",
-					\"is_stable\": \"FALSE\",
-					\"examples\": [
-						\"Kuala Lumpur\",
-						\"Texas\",
-						\"Malaysia\",
-						\"South America\"
-					]
-				}}
-			}},
-			\"relationships\": {{
-				\"hasIndependentDirector\": {{
-					\"source\": \"Company\",
-					\"target\": \"Person\",
-					\"llm-guidance\": \"Use this when a person is described as the independent director of a company.\",
-					\"is_stable\": \"FALSE\",
-					\"examples\": [
-						\"ABC Berhad hasIndependentDirector Tan Hui Mei\"
-					]
-				}},
-				\"headquarteredIn\": {{
-					\"source\": \"Company\",
-					\"target\": \"Place\",
-					\"llm-guidance\": \"Use this when a company is said to be headquartered in a specific location.\",
-					\"is_stable\": \"FALSE\",
-					\"examples\": [
-						"ABC Berhad headquarteredIn Kuala Lumpur"
-					]
-				}}
-			}},
-        \"note\": \"\"
-		}}
-	
-Actual Ontology:
-{ontology}
+   6. Example
+      a. Source Text:
+      “Dr Tan Hui Mei is currently serving as the independent director of ABC Berhad, which is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.”
+      
+      b. Ontology Purpose
+      To construct a knowledge graph of Malaysian public companies that captures key organizational roles and structural information to support governance analysis, such as identifying board members, corporate relationships, and geographic presence.
+      
+      c. Current Ontology
+         Entities:
+            1. Person
+            - definition: An individual human who may hold a position or role within a company.
+            - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
+            - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
+            
+            2. Company 
+            - definition: A legally registered business entity involved in commercial or professional activities.
+            - llm-guidance: Extract full legal names of organizations registered as companies. Identify names ending in legal suffixes such as 'Berhad', 'Sdn Bhd', or 'Inc.' Do not include registration numbers or addresses.
+            - examples: ABC Berhad, Apple Inc., United Gomax Sdn Bhd
+         
+         Relationships:
+            1. hasIndependentDirector
+            - source: Company
+            - target: Person
+            - llm-guidance: Use this when a person is described as the independent director of a company.
+            - examples: Banana Inc. hasIndependentDirector John Chua, 
+         
+      d. Output:
+         {{
+            \"entities\": {{
+               \"Place\": {{
+                  \"definition\": \"A geographic location such as a city, state, country, or region that serves as a meaningful identifier for a company's operational or legal presence.\",
+                  \"llm-guidance\": \"Extract geographic entities at the city, state, country, or continental level. Exclude street names, postal codes, building numbers, or overly specific location details. Prefer higher-level geographic units that contribute to organizational or jurisdictional context.\",
+                  \"examples\": [
+                     \"Kuala Lumpur\",
+                     \"Texas\",
+                     \"Malaysia\",
+                     \"South America\"
+                  ]
+               }}
+            }},
+            \"relationships\": {{
+               \"headquarteredIn\": {{
+                  \"source\": \"Company\",
+                  \"target\": \"Place\",
+                  \"llm-guidance\": \"Use this when a company is said to be headquartered in a specific location.\",
+                  \"examples\": [
+                     "ABC Berhad headquarteredIn Kuala Lumpur"
+                  ]
+               }}
+            }},
+         }}
 
-You now understand the guidelines and existing ontology. Proceed to extend the ontology using the provided document and return the result using the specified format.
+You now understand the guidelines. Proceed to construct the ontology using the provided document and strictly following the stated guidelines.
+
+Ontology Purpose:
+{ontology_purpose}
+
+Curreny Ontology:
+{current_ontology}
 
 Document:
 """
 
-PROMPT["ONTOLOGY_RECONSTRUCTION"] = """
+PROMPT[
+    "ONTOLOGY_RECONSTRUCTION"
+] = """
 Many entities and unidirectional relationships were missed in the previous extraction. Please reprocess the text carefully and extract additional relevant information to extend the ontology, ensuring all relationships are unidirectional and support the ontology's purpose.
 """
 
-PROMPT["ONTOLOGY_COMPLEXITY_REDUCTION"] = """
+PROMPT[
+    "ONTOLOGY_COMPLEXITY_REDUCTION"
+] = """
 You are a non-taxonomic, relationship-driven ontology complexity reduction agent. Your task is to minimize the number of entities and relationships in the ontology without compromising its intended purpose.
 
 Guidelines:
@@ -905,7 +923,9 @@ You have now received the guidelines. Proceed to analyze and reduce the ontology
 Ontology:
 """
 
-PROMPT["ONTOLOGY_CLARITY_ENHANCEMENT"] = """
+PROMPT[
+    "ONTOLOGY_CLARITY_ENHANCEMENT"
+] = """
 You are an ontology clarity enhancement agent specialized in non-taxonomic, relationship-driven models. Your task is to refine the ontology to ensure that all entity and relationship names, definitions, LLM-guidance, and examples are clear, intuitive, general, unambiguous, and free of jargon—while preserving the ontology's intended purpose.
 
 Guidelines
@@ -1207,8 +1227,10 @@ You have now received the guidelines. Proceed to analyze and modify the ontology
 Ontology: 
 """
 
-PROMPT["ONTOLOGY_CQ_GENERATION"] = """
-You are a non-taxonomic, relationship-driven ontology competency question generation agent. Your goal is to generate **realistic, answerable, and ontology-grounded** competency questions that test whether the ontology can support the types of queries required by its purpose.
+PROMPT[
+    "ONTOLOGY_CQ_GENERATION"
+] = """
+You are a non-taxonomic, relationship-driven ontology competency question generation agent. Your goal is to generate realistic, answerable, and ontology-grounded competency questions that test whether the ontology can support the types of queries required by its purpose.
 
 Ontology Purpose:
 \"{ontology_purpose}\"
@@ -1265,7 +1287,9 @@ Guidelines:
 
 """
 
-PROMPT["ONTOLOGY_COMPETENCY_EVALUATION"] = """
+PROMPT[
+    "ONTOLOGY_COMPETENCY_EVALUATION"
+] = """
 You are a non-taxonomic, relationship-driven ontology competency evaluation agent. Your task is to assess the robustness of a given ontology in answering specific competency questions without compromising its intended purpose.
 
 Guidelines
@@ -1326,7 +1350,9 @@ You now understand the guidelines and competency questions. Please evaluate the 
 Ontology:
 """
 
-PROMPT["ENTITY_RELATIONSHIP_MERGER"] = """"
+PROMPT[
+    "ENTITY_RELATIONSHIP_MERGER"
+] = """"
 You are an entity-relationship merger agent. Your task is to evaluate whether entity and relationship instances are factually equivalent, and merge them accordingly.
 
 Guidelines:
