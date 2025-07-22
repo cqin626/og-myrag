@@ -3,32 +3,51 @@ PROMPT = {}
 PROMPT[
     "ENTITIES_RELATIONSHIPS_PARSING"
 ] = """
-You are an entity and relationship extraction agent. Your task is to extract only entities and relationships defined in the given ontology from the source text.
+You are an entity and relationship instance extraction agent. Your task is to extract instances of entities and relationships defined in the provided ontology from the given source text.
 
 Guidelines
+	1. Extraction Logic
+      - For each potential relationship identified in the source text:
+         - If the relationship aligns with the type and definition (as stated in llm-guidance) of any relationship defined in the ontology:
+            - Extract the relationship instance and its associated attributes as specified in Guideline 2.
+            - Also extract the source and target entity instances associated with this relationship, following the instructions in Guideline 3.
+         - Otherwise:
+           - Skip the current relationship and proceed to the next.
+   
+   2. Relationship Attributes
+      - Each relationship in the ontology includes the following metadata, which must be used to guide your extraction:
+			1. `source`: The expected source entity type. You must extract this entity instance.
+			2. `target`: The expected target entity type. You must extract this entity instance.
+			3. `llm-guidance`: Defines the semantic meaning of the relationship and when it applies. Use this to validate whether a relationship in the source text qualifies for extraction.
+			4. `examples`: Provide contextual examples. Use them as secondary guidance for interpretation.
 
-	1. Ontology Grounding
-		- Extract only entities and relationships defined in the ontology.
-		- Each extracted entity and relationship must match the types and definitions in the ontology.
+      - Each extracted relationship instance must include:
+         1. `type`: The relationship type, as defined in the ontology.
+         2. `source`: The instance of the source entity.
+         3. `target`: The instance of the target entity.
+         4. `desc`: A descriptive statement that:
+            - Is written in reporting format
+            - Includes temporal references relative to the publication date of the source document and, if available, the effective date of the relationship.
+            (See example in Guideline 5 for formatting.)
+      
+   3. Entity Attributes
+      - Each entity in the ontology includes the following metadata:
+         1. `definition`: A formal description of the entity type. Use this to determine the entity's relevance in context.
+         2. `llm-guidance`: Detailed instructions for extracting or identifying instances of the entity. Follow this strictly.
+         3. `examples`: Sample instances to aid interpretation.
 
-	2. Entity Inclusion Rule
-		- Only include entities that are part of at least one valid relationship.
-		- Do not include entities that do not participate in any defined relationship even if the definition matches.
+      - For each entity instance extracted as part of a relationship, provide:
+         1. `name`: The extracted name of the entity, aligned with the llm-guidance.
+         2. `type`: The entity type, exactly as defined in the ontology.
+         3. `desc`: A descriptive statement that:
+            - Is written in reporting format
+            - Includes temporal references relative to the publication time of the source document.
+            (See example in Guideline 5 for formatting.)
+            - Focuses on the entity itself, not on its relationships. Avoid describing the same information already covered in the relationship desc field.
 
-	3. Temporal Information for Relationships
-		- Every extracted relationship must include temporal information.
-		-	Use information from the document to fill in the temporal fields.
-			- Absolute dates: Use format "DD-Month-YYYY" (e.g., "25-June-2024"). Be as specific as the text allows. If the exact date is missing, use "Month-YYYY" or just "YYYY".
-			- Relative dates: Resolve them using document publish date as reference. Convert them into the same "DD-Month-YYYY" format.
-			- If no clear date is present: Set "valid_date" and "invalid_date" as "NA" and provide context in "temporal_note" (e.g., "Before acquisition").
-			- Avoid setting fields to "NA" unless the information truly cannot be inferred. If the text is recent, the publishing date is often an implicit valid date.
-
-	4. Additional Constraints
-		- You may be given additional document-specific constraints. Follow them strictly during extraction.
-
-	5. Output Format
-		- Return only the structured output in the following format. Do not include any explanations, extra text, or headers. Use "" or [] for missing values.
-		- Format: 
+   4. Output Format
+		- Return the results strictly in the following JSON format without any extra text, commentary, or headers:
+  
 			{{
 				\"entities\": [
 					{{
@@ -48,224 +67,76 @@ Guidelines
 						\"source\": \"entity_x\",
 						\"target\": \"entity_y\",
 						\"desc\": \"\",
-						\"valid_date\": \"NA\",
-						\"invalid_date\": \"NA\",
-						\"temporal_note\": \"Before acquisition of Company XYZ\"
 					}}
 				]
 			}}
-		- Format explanation:
-			a. Entities
-				- "name": Entity name, extracted based on llm-guidance from ontology.
-				- "type": Entity type as defined in the ontology.
-				- "desc": Short factual description based on the document.
 
-			b. Relationships
-				- "type": Relationship type as defined in the ontology.
-				- "source": The "name" of the source entity.
-				- "target": The "name" of the target entity.
-				- "desc": Explanation of the relationship based on the document.
-				- "valid_date": When the relationship becomes effective. Default: "NA".
-				- "invalid_date": When the relationship becomes ineffective. Default: "NA".
-				- "temporal_note": Use when date is missing or vague. Default: "NA".
+      - If no valid entity or relationship instance is found, return the following:
+         {{
+            \"entities\": [],
+            \"relationships\": []
+         }}
    
-   6. An example of entity and relationship extraction is provided in the example section below to guide your extraction. However, the ontology, document, document constraints, and output in the example section are for learning purposes only and must not be used in the actual extraction.
-
-Steps: 
-	1. Understand the ontology structure.
-
-	2. Identify relationships in the document that match the ontology.
-
-	3. Extract the entities needed to establish those relationships.
-
-	4. Follow the output format exactly.
-	
-Example:
-	a. Example Ontology
+   5. Example
+	   a. Source Text:
+      “Dr Tan Hui Mei is currently serving as the independent director of ABC Berhad, which is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.
       
-      Entities:
-      
-         1. Property
-         - definition: A real estate asset, such as a residential, commercial, or industrial property, mentioned in official documents or reports.
-         - llm-guidance: Extract the full name or identifier of the property as it appears in the text; exclude vague references like "the building" unless a specific name is provided.
-         - examples: Sunway Velocity Mall, KLCC Tower, Bandar Utama Lot 5
-
-         2. Developer
-         - definition: A company or entity responsible for developing or constructing a real estate property.
-         - llm-guidance: Extract the full registered name of the developer as stated; omit informal names or abbreviations unless officially used.
-         - examples: Sunway Property Sdn Bhd, IOI Properties Group, UEM Sunrise Berhad
+      b. Ontology
+         Entities:
+            1. Person
+            - definition: An individual human who may hold a position or role within a company.
+            - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
+            - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
+            
+            2. Company 
+            - definition: A legally registered business entity involved in commercial or professional activities.
+            - llm-guidance: Extract full legal names of organizations registered as companies. Identify names ending in legal suffixes such as 'Berhad', 'Sdn Bhd', or 'Inc.' Do not include registration numbers or addresses.
+            - examples: ABC Berhad, Apple Inc., United Gomax Sdn Bhd
          
-         3. Location
-         - definition: A geographic area (country, state, or city) where a property is located or a developer operates.
-         - llm-guidance: Extract the most specific geographic name (country, state, or city) as presented; exclude street addresses or postal codes.
-         - examples: Kuala Lumpur, Penang, Johor Bahru
+         Relationships:
+            1. hasIndependentDirector
+            - source: Company
+            - target: Person
+            - llm-guidance: Use this when a person is described as the independent director of a company.
+            - examples: Banana Inc. hasIndependentDirector John Chua
+            
+      c. Publish Date
+         20-May-2023
       
-      Relationships:
+      d. Output
+      
+         {{
+            \"entities\": [
+               {{
+                  \"name\": \"Tan Hui Mei\",
+                  \"type\": \"Person\",
+                  \"desc\": \"As of May 2023, Tan Hui Mei was identified as a professional individual active in corporate governance.\"
+               }},
+               {{
+                  \"name\": \"ABC Berhad\",
+                  \"type\": \"Company\",
+                  \"desc\": \"As of May 2023, ABC Berhad was a legally registered Malaysian company with the suffix 'Berhad', indicating public limited status under Malaysian company law.\"
+               }}
+            ],
+            \"relationships\": [
+               {{
+                  \"type\": \"hasIndependentDirector\",
+                  \"source\": \"ABC Berhad\",
+                  \"target\": \"Tan Hui Mei\",
+                  \"desc\": \"As of May 2023, ABC Berhad had appointed Tan Hui Mei as its independent director.\"
+               }}
+            ]
+         }}
+      
+You understand the instructions. Now extract entities and relationships from the given document, strictly following the stated guidelines.
 
-         1. Developer buildsProperty Property
-         - llm-guidance: Apply when a document explicitly states that a developer is constructing, developing, or has completed a named property.
-         - examples: Sunway Property Sdn Bhd builds Sunway Velocity Mall
-         
-         2. Property locatedIn Location
-         - llm-guidance: Apply when a document specifies the geographic location of a property; extract the most specific location mentioned.
-         - examples: Sunway Velocity Mall locatedIn Kuala Lumpur
-
-	b. Example Document
-
-      "Sunway Property Sdn Bhd announced the completion of its latest project, Sunway Geo Tower, a mixed-use development in Petaling Jaya. The tower, finalized in April 2025, is set to enhance the commercial landscape of Selangor. Additionally, Sunway Property Sdn Bhd is developing another property, Sunway Serene Residences, located in Kuala Lumpur, with construction starting in January 2025. Before the acquisition of a nearby plot, Sunway Property Sdn Bhd had planned the development of Sunway Green Heights in Johor Bahru. IOI Properties Group is also active, with its IOI City Mall Phase 2 in Putrajaya, but no specific timeline for its development was provided."
-
-   c. Example Document Publish Date
-   
-      10-May-2025
-   
-   d. Example Document Constraints
-   
-      1. Only extract relationships with explicit mention of development or location in the text.
-      2. Exclude any properties or developers not tied to a specific named project or location.
-	
-	e. Example Output
- 
-      {{
-         \"entities\": [
-            {{
-               \"name\": \"Sunway Property Sdn Bhd\",
-               \"type\": \"Developer\",
-               \"desc\": \"A company responsible for developing real estate projects in Malaysia.\"
-            }},
-            {{
-               \"name\": \"Sunway Geo Tower\",
-               \"type\": \"Property\",
-               \"desc\": \"A mixed-use development completed in Petaling Jaya.\"
-            }},
-            {{
-               \"name\": \"Sunway Serene Residences\",
-               \"type\": \"Property\",
-               \"desc\": \"A residential property under development in Kuala Lumpur.\"
-            }},
-            {{
-               \"name\": \"Sunway Green Heights\",
-               \"type\": \"Property\",
-               \"desc\": \"A planned property development in Johor Bahru.\"
-            }},
-            {{
-               \"name\": \"IOI Properties Group\",
-               \"type\": \"Developer\",
-               \"desc\": \"A company developing real estate projects in Malaysia.\"
-            }},
-            {{
-               \"name\": \"IOI City Mall Phase 2\",
-               \"type\": \"Property\",
-               \"desc\": \"A commercial property under development in Putrajaya.\"
-            }},
-            {{
-               \"name\": \"Petaling Jaya\",
-               \"type\": \"Location\",
-               \"desc\": \"A city in Selangor where Sunway Geo Tower is located.\"
-            }},
-            {{
-               \"name\": \"Kuala Lumpur\",
-               \"type\": \"Location\",
-               \"desc\": \"A city where Sunway Serene Residences is located.\"
-            }},
-            {{
-               \"name\": \"Johor Bahru\",
-               \"type\": \"Location\",
-               \"desc\": \"A city where Sunway Green Heights is planned.\"
-            }},
-            {{
-               \"name\": \"Putrajaya\",
-               \"type\": \"Location\",
-               \"desc\": \"A city where IOI City Mall Phase 2 is located.\"
-            }}
-         ],
-         \"relationships\": [
-            {{
-               \"type\": \"buildsProperty\",
-               \"source\": \"Sunway Property Sdn Bhd\",
-               \"target\": \"Sunway Geo Tower\",
-               \"desc\": \"Sunway Property Sdn Bhd completed the development of Sunway Geo Tower.\",
-               \"valid_date\": \"30-April-2025\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"Completion date mentioned in the text.\"
-            }},
-            {{
-               \"type\": \"buildsProperty\",
-               \"source\": \"Sunway Property Sdn Bhd\",
-               \"target\": \"Sunway Serene Residences\",
-               \"desc\": \"Sunway Property Sdn Bhd is developing Sunway Serene Residences.\",
-               \"valid_date\": \"01-January-2025\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"Construction start date mentioned in the text.\"
-            }},
-            {{
-               \"type\": \"buildsProperty\",
-               \"source\": \"Sunway Property Sdn Bhd\",
-               \"target\": \"Sunway Green Heights\",
-               \"desc\": \"Sunway Property Sdn Bhd planned the development of Sunway Green Heights.\",
-               \"valid_date\": \"NA\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"Before the acquisition of a nearby plot.\"
-            }},
-            {{
-               \"type\": \"buildsProperty\",
-               \"source\": \"IOI Properties Group\",
-               \"target\": \"IOI City Mall Phase 2\",
-               \"desc\": \"IOI Properties Group is developing IOI City Mall Phase 2.\",
-               \"valid_date\": \"NA\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"As at 10-May-2025 (Inferred from publish date as development is ongoing.)\"
-            }},
-            {{
-               \"type\": \"locatedIn\",
-               \"source\": \"Sunway Geo Tower\",
-               \"target\": \"Petaling Jaya\",
-               \"desc\": \"Sunway Geo Tower is located in Petaling Jaya.\",
-               \"valid_date\": \"30-April-2025\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"Location tied to completion date of the property.\"
-            }},
-            {{
-               \"type\": \"locatedIn\",
-               \"source\": \"Sunway Serene Residences\",
-               \"target\": \"Kuala Lumpur\",
-               \"desc\": \"Sunway Serene Residences is located in Kuala Lumpur.\",
-               \"valid_date\": \"01-January-2025\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"Location tied to construction start date.\"
-            }},
-            {{
-               \"type\": \"locatedIn\",
-               \"source\": \"Sunway Green Heights\",
-               \"target\": \"Johor Bahru\",
-               \"desc\": \"Sunway Green Heights is planned in Johor Bahru.\",
-               \"valid_date\": \"NA\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"Before the acquisition of a nearby plot.\"
-            }},
-            {{
-               \"type\": \"locatedIn\",
-               \"source\": \"IOI City Mall Phase 2\",
-               \"target\": \"Putrajaya\",
-               \"desc\": \"IOI City Mall Phase 2 is located in Putrajaya.\",
-               \"valid_date\": \"NA\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"As at 10-May-2025 (Inferred from publish date as development is ongoing.)\"
-            }}
-         ]
-      }}
-
-You understand the instructions. Now extract entities and relationships from the document given, using the provided ontology and constraints.
-
-Actual Ontology
+Ontology:
 {ontology}
 
-Actual Document Publish Date
-{document_publish_date}
+Source Text Publish Date:
+{publish_date}
 
-Actual Document Constraints
-{document_constraints}
-
-Document
+Source Text:
 """
 
 PROMPT[
@@ -977,13 +848,13 @@ Guidelines:
                - Update its content.
                - Log the change and rationale as stated in Guideline 4.
                
-   2. Entity Attributes (for each new entity):
+   2. Entity Attributes (for each entity):
       - `entity_name`: A meaningful noun phrase that is neither too generic (e.g., "Entity") nor too specific (e.g., "Justin"), but expresses a reusable concept (e.g., "Person").
       - `definition`: A clear, general, and comprehensive description of the entity type.
       - `llm-guidance`: Instructions on how to consistently detect or infer this entity in various contexts.
       - `examples`: At least 2 representative examples, including edge cases.
 
-   3. Relationship Attributes (for each valid relationship):
+   3. Relationship Attributes (for each relationship):
       - `relationship_name`: A concise verb phrase in camelCase (e.g., `hasPartner`).
       - `source`: The entity from which the relationship originates.
       - `target`: The entity to which the relationship points.
@@ -1168,6 +1039,12 @@ Ontology Purpose:
 {ontology_purpose}
 
 Current Ontology:
+"""
+
+PROMPT[
+    "RETRIEVAL_QUERY_PLANNER"
+] = """
+
 """
 
 PROMPT[
