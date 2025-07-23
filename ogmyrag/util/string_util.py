@@ -71,7 +71,9 @@ def get_formatted_entities_and_relationships(json_string):
     for idx, rel in enumerate(data.get("relationships", []), start=1):
         output.append(f"{idx}. {rel['type']}")
         output.append(f"- source: {rel['source']}")
+        output.append(f"- source_type: {rel['source_type']}")
         output.append(f"- target: {rel['target']}")
+        output.append(f"- target_type: {rel['target_type']}")
         output.append(f"- desc: {rel['desc']}\n")
 
     return "\n".join(output)

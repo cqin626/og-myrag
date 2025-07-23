@@ -65,9 +65,9 @@ class EntityRelationshipExtractionAgent(BaseAgent):
 
         graph_construction_logger.info(f"EntityRelatonshipExtractionAgent is called")
 
-        graph_construction_logger.info(
-            f"EntityRelatonshipExtractionAgent\nOntology used:\n{formatted_ontology}"
-        )
+        # graph_construction_logger.info(
+        #     f"EntityRelatonshipExtractionAgent\nOntology used:\n{formatted_ontology}"
+        # )
 
         try:
             response = await fetch_responses_openai(
@@ -403,44 +403,44 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         results = await asyncio.gather(*all_tasks)
         return results
 
-    # async def insert_entities_into_pinecone(self):
-    #     try:
-    #         formatted_entities = []
-    #         entities = await self.entity_storage.read_documents(
-    #             {"to_be_deleted": False, "inserted_into_vectordb_at": ""}
-    #         )
+    async def insert_entities_into_pinecone(self):
+        try:
+            formatted_entities = []
+            entities = await self.entity_storage.read_documents(
+                {"to_be_deleted": False, "inserted_into_vectordb_at": ""}
+            )
 
-    #         if not entities:
-    #             graph_construction_logger.info(
-    #                 "GraphConstructionSystem\nNo entities found. Skipping insertion into Pinecone."
-    #             )
-    #             raise ValueError(f"No entities found.")
+            if not entities:
+                graph_construction_logger.info(
+                    "GraphConstructionSystem\nNo entities found. Skipping insertion into Pinecone."
+                )
+                raise ValueError(f"No entities found.")
 
-    #         for entity in entities:
-    #             formatted_entities.append(get_formatted_entity_for_vectordb(entity))
+            for entity in entities:
+                formatted_entities.append(get_formatted_entity_for_vectordb(entity))
 
-    #         await self.entity_vector_storage.create_vectors_without_namespace(
-    #             formatted_entities
-    #         )
+            await self.entity_vector_storage.create_vectors_without_namespace(
+                formatted_entities
+            )
 
-    #         for entity in entities:
-    #             self.entity_storage.update_document(
-    #                 {"_id": entity["_id"]},
-    #                 {
-    #                     "inserted_into_vectordb_at": get_formatted_current_datetime(
-    #                         "Asia/Kuala_Lumpur"
-    #                     )
-    #                 },
-    #             )
+            for entity in entities:
+                self.entity_storage.update_document(
+                    {"_id": entity["_id"]},
+                    {
+                        "inserted_into_vectordb_at": get_formatted_current_datetime(
+                            "Asia/Kuala_Lumpur"
+                        )
+                    },
+                )
 
-    #         graph_construction_logger.info(
-    #             f"GraphConstructionSystem\nUpdated {len(entities)} entity(ies) with inserted_into_vectordb_at field."
-    #         )
-    #     except Exception as e:
-    #         graph_construction_logger.error(
-    #             f"GraphConstructionSystem\nError while inserting entities into Pinecone:{e}"
-    #         )
-    #         raise ValueError(f"Failed to insert entities into Pinecone: {e}")
+            graph_construction_logger.info(
+                f"GraphConstructionSystem\nUpdated {len(entities)} entity(ies) with inserted_into_vectordb_at field."
+            )
+        except Exception as e:
+            graph_construction_logger.error(
+                f"GraphConstructionSystem\nError while inserting entities into Pinecone:{e}"
+            )
+            raise ValueError(f"Failed to insert entities into Pinecone: {e}")
 
     async def insert_entities_into_neo4j(self):
         try:

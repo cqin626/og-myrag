@@ -16,10 +16,12 @@ Guidelines
    
    2. Relationship Attributes
       - Each relationship in the ontology includes the following metadata, which must be used to guide your extraction:
-			1. `source`: The expected source entity type. You must extract this entity instance.
-			2. `target`: The expected target entity type. You must extract this entity instance.
-			3. `llm-guidance`: Defines the semantic meaning of the relationship and when it applies. Use this to validate whether a relationship in the source text qualifies for extraction.
-			4. `examples`: Provide contextual examples. Use them as secondary guidance for interpretation.
+			1. `source`: The expected source entity instance. You must extract this entity.
+			2. `target`: The expected target entity instance. You must extract this entity.
+			3. `source_type`: The expected entity type of `source`. It must be one of the entity types defined in the ontology.
+			4. `target_type`: The expected entity type of `target`. It must be one of the entity types defined in the ontology.
+			5. `llm-guidance`: Defines the semantic meaning of the relationship and when it applies. Use this to validate whether a relationship in the source text qualifies for extraction.
+			6. `examples`: Provide contextual examples. Use them as secondary guidance for interpretation.
 
       - Each extracted relationship instance must include:
          1. `type`: The relationship type, as defined in the ontology.
@@ -66,6 +68,8 @@ Guidelines
 						\"type\": \"relationship_type_a\",
 						\"source\": \"entity_x\",
 						\"target\": \"entity_y\",
+                  \"source_type\":\"entity_type_a\",
+                  \"target_type\":\"entity_type_b\",
 						\"desc\": \"\",
 					}}
 				]
@@ -123,6 +127,8 @@ Guidelines
                   \"type\": \"hasIndependentDirector\",
                   \"source\": \"ABC Berhad\",
                   \"target\": \"Tan Hui Mei\",
+                  \"source_type\":\"Company\",
+                  \"target_type\":\"Person\",
                   \"desc\": \"As of May 2023, ABC Berhad had appointed Tan Hui Mei as its independent director.\"
                }}
             ]

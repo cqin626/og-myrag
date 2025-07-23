@@ -40,6 +40,8 @@ class Neo4jStorage:
                 for rel in relationships:
                     source_name = rel.get('source_name')
                     target_name = rel.get('target_name')
+                    source_type = rel.get('source_type')
+                    target_type = rel.get('target_type')
                     rel_type = rel.get('type')
                     properties = rel.get('properties', {})
 
@@ -48,8 +50,8 @@ class Neo4jStorage:
                         continue
 
                     query = (
-                        f"MATCH (a), (b) "
-                        f"WHERE a.name = $source_name AND b.name = $target_name "
+                        f"MATCH (a:{source_type} {{name: $source_name}}), "
+                        f"(b:{target_type} {{name: $target_name}}) "
                         f"CREATE (a)-[r:{rel_type} $props]->(b)"
                     )
                     session.run(query, source_name=source_name, target_name=target_name, props=properties)

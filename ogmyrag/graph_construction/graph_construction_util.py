@@ -73,6 +73,8 @@ def get_formatted_relationships_for_db(
                 "type": relationship.get("type", "").strip(),
                 "source": relationship.get("source", "").strip(),
                 "target": relationship.get("target", "").strip(),
+                "source_type": relationship.get("source_type", "").strip(),
+                "target_type": relationship.get("target_type", "").strip(),
                 "description": relationship.get("desc", ""),
                 "created_at": get_formatted_current_datetime(timezone),
                 "last_modified_at": get_formatted_current_datetime(timezone),
@@ -115,6 +117,8 @@ def get_formatted_relationship_for_graphdb(
     return {
         "source_name": relationship["source"],
         "target_name": relationship["target"],
+        "source_type": relationship["source_type"],
+        "target_type": relationship["target_type"],
         "type": relationship["type"],
         "properties": {
             "id": str(relationship["_id"]),
