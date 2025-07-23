@@ -12,6 +12,7 @@ from ..util import (
     get_formatted_ontology,
     get_formatted_openai_response,
     get_clean_json,
+    get_formatted_entities_and_relationships,
     get_formatted_current_datetime,
 )
 from ..storage import MongoDBStorage, AsyncMongoDBStorage, PineconeStorage, Neo4jStorage
@@ -64,6 +65,10 @@ class EntityRelationshipExtractionAgent(BaseAgent):
 
         graph_construction_logger.info(f"EntityRelatonshipExtractionAgent is called")
 
+        graph_construction_logger.info(
+            f"EntityRelatonshipExtractionAgent\nOntology used:\n{formatted_ontology}"
+        )
+
         try:
             response = await fetch_responses_openai(
                 model="o4-mini",
@@ -76,6 +81,10 @@ class EntityRelationshipExtractionAgent(BaseAgent):
             )
             graph_construction_logger.info(
                 f"EntityRelatonshipExtractionAgent\nEntity-relationship extraction response details:\n{get_formatted_openai_response(response)}"
+            )
+
+            graph_construction_logger.info(
+                f"EntityRelatonshipExtractionAgent\nEntities and relationships extracted:\n{get_formatted_entities_and_relationships(response.output_text)}"
             )
 
             return response.output_text

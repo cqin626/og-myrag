@@ -41,8 +41,8 @@ def get_formatted_entities_for_db(
       formatted_entities = []
       for entity in entities:
          formatted_entities.append({
-            "name": entity.get("name", "").strip().upper(),
-            "type": entity.get("type", "").strip().upper(),
+            "name": entity.get("name", "").strip(),
+            "type": entity.get("type", "").strip(),
             "description": entity.get("desc", ""),
             "created_at": get_formatted_current_datetime(timezone),
             "last_modified_at": get_formatted_current_datetime(timezone),
@@ -60,8 +60,8 @@ def get_formatted_relationships_for_db(
       for relationship in relationships:
          formatted_relationships.append( {
             "type": relationship.get("type", "").strip(),
-            "source": relationship.get("source", "").strip().upper(),
-            "target": relationship.get("target", "").strip().upper(),
+            "source": relationship.get("source", "").strip(),
+            "target": relationship.get("target", "").strip(),
             "description": relationship.get("desc", ""),
             "created_at": get_formatted_current_datetime(timezone),
             "last_modified_at": get_formatted_current_datetime(timezone),
