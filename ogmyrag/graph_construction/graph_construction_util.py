@@ -63,45 +63,12 @@ def get_formatted_relationships_for_db(
             "source": relationship.get("source", "").strip().upper(),
             "target": relationship.get("target", "").strip().upper(),
             "description": relationship.get("desc", ""),
-            "valid_date" : relationship.get("valid_date", "NA"),
-            "invalid_date" : relationship.get("invalid_date", "NA"),
-            "temporal_note" : relationship.get("temporal_note", "NA"),
             "created_at": get_formatted_current_datetime(timezone),
             "last_modified_at": get_formatted_current_datetime(timezone),
             "inserted_into_graphdb_at": "",
             "to_be_deleted": False
          })
       return formatted_relationships
-   
-def get_formatted_entities_for_display(raw_entities: list[dict[str, Any]]) -> str:
-    output = ""
-    for idx, raw_entity in enumerate(raw_entities, start=1):
-        output += get_formatted_entity_for_display(raw_entity, idx) + "\n"
-    return output
-
-def get_formatted_entity_for_display(raw_entity: dict[str, Any], index: int) -> str:
-    output = f"{index}. {raw_entity['name']}\n"
-    output += "- id: " + str(raw_entity["_id"]) + "\n"
-    output += "- type: " + raw_entity["type"] + "\n"
-    output += "- description: " + raw_entity["description"] + "\n"
-    return output
- 
-def get_formatted_relationships_for_display(raw_relationships: list[dict[str, Any]]) -> str:
-    output = ""
-    for idx, rel in enumerate(raw_relationships, start=1):
-        output += get_formatted_relationship_for_display(rel, idx) + "\n"
-    return output
-
-def get_formatted_relationship_for_display(raw_relationship: dict[str, Any], index: int) -> str:
-    output  = f"{index}. {raw_relationship['type']}\n"
-    output += "- id: "          + str(raw_relationship["_id"])      + "\n"
-    output += "- source: "      + raw_relationship["source"]        + "\n"
-    output += "- target: "      + raw_relationship["target"]        + "\n"
-    output += "- description: " + raw_relationship["description"]   + "\n"
-    output += "- valid_date: "  + raw_relationship["valid_date"]  + "\n"
-    output += "- invalid_date: " + raw_relationship["invalid_date"] + "\n"
-    output += "- temporal_note: " + raw_relationship["temporal_note"] + "\n"
-    return output
  
 def get_formatted_entity_for_vectordb(
    entity: dict[str, Any], 

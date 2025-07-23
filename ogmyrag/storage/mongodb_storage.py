@@ -197,11 +197,11 @@ class AsyncMongoDBStorage:
             logger.error(f"AsyncMongoDB connection failed: {str(e)}")
             raise
 
-    async def use_database(self, db_name: str) -> None:
+    def use_database(self, db_name: str) -> None:
         self.db = self.client[db_name]
         logger.info(f"Switched to database: {db_name}")
 
-    async def use_collection(self, collection_name: str) -> None:
+    def use_collection(self, collection_name: str) -> None:
         if self.db is None:
             raise ValueError("Call use_database() before use_collection()")
         self.collection = self.db[collection_name]
