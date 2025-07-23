@@ -2,6 +2,7 @@ gradio
 ipykernel
 ipywidgets
 openai>=1.0.0
+motor
 neo4j
 pinecone
 pymongo
