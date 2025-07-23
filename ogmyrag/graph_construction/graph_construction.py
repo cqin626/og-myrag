@@ -102,7 +102,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         disclosure_config: MongoStorageConfig,
         entity_config: MongoStorageConfig,
         relationship_config: MongoStorageConfig,
-        #   entity_vector_config: PineconeStorageConfig,
+        entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
     ):
         super().__init__(
@@ -136,15 +136,10 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 relationship_config["collection_name"]
             )
 
-            # self.entity_vector_storage = PineconeStorage(**entity_vector_config)
+            self.entity_vector_storage = PineconeStorage(**entity_vector_config)
 
             self.graph_storage = Neo4jStorage(**graphdb_config)
 
-            # entities = self.entity_storage.read_documents()
-            # for entity in entities:
-            #     self.entity_storage.update_document(
-            #         {"_id": entity["_id"]}, {"inserted_into_graphdb_at": ""}
-            #     )
         except Exception as e:
             graph_construction_logger.error(f"GraphConstructionSystem: {e}")
             raise ValueError(f"Failed to intialize GraphConstructionSystem: {e}")
@@ -423,15 +418,21 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 formatted_entities
             )
 
+            update_tasks = []
+
             for entity in entities:
-                self.entity_storage.update_document(
-                    {"_id": entity["_id"]},
-                    {
-                        "inserted_into_vectordb_at": get_formatted_current_datetime(
-                            "Asia/Kuala_Lumpur"
-                        )
-                    },
+                update_tasks.append(
+                    self.entity_storage.update_document(
+                        {"_id": entity["_id"]},
+                        {
+                            "inserted_into_vectordb_at": get_formatted_current_datetime(
+                                "Asia/Kuala_Lumpur"
+                            )
+                        },
+                    )
                 )
+
+            await asyncio.gather(*update_tasks)
 
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nUpdated {len(entities)} entity(ies) with inserted_into_vectordb_at field."
@@ -602,3 +603,10 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             raise ValueError(
                 f"Failed to update relationship(s) with 'inserted_into_graphdb_at' field: {e}"
             )
+
+    async def get_formatted_similar_results_from_pinecone(
+        self, query_texts: str | list[str], top_k: int
+    ):
+        return await self.entity_vector_storage.get_formatted_similar_results_no_namespace(
+            query_texts=query_texts, top_k=top_k
+        )
