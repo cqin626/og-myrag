@@ -37,7 +37,7 @@ Guidelines
          3. `examples`: Sample instances to aid interpretation.
 
       - For each entity instance extracted as part of a relationship, provide:
-         1. `name`: The extracted name of the entity, aligned with the llm-guidance.
+         1. `name`: The extracted name of the entity, aligned with the llm-guidance. Ensure that each entity contains only one instance name. Entity names such as `Director / Executive` should be avoided. In such cases, separate them into two distinct entities and establish relationships with each individually.
          2. `type`: The entity type, exactly as defined in the ontology.
          3. `desc`: A descriptive statement that:
             - Is written in reporting format

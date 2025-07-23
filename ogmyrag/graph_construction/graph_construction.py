@@ -103,7 +103,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         entity_config: MongoStorageConfig,
         relationship_config: MongoStorageConfig,
         #   entity_vector_config: PineconeStorageConfig,
-        #   graphdb_config: Neo4jStorageConfig,
+        graphdb_config: Neo4jStorageConfig,
     ):
         super().__init__(
             {
@@ -138,7 +138,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
 
             # self.entity_vector_storage = PineconeStorage(**entity_vector_config)
 
-            # self.graph_storage = Neo4jStorage(**graphdb_config)
+            self.graph_storage = Neo4jStorage(**graphdb_config)
 
             # entities = self.entity_storage.read_documents()
             # for entity in entities:
@@ -403,52 +403,52 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         results = await asyncio.gather(*all_tasks)
         return results
 
-    async def insert_entities_into_pinecone(self):
-        try:
-            formatted_entities = []
-            entities = self.entity_storage.read_documents(
-                {"to_be_deleted": False, "inserted_into_vectordb_at": ""}
-            )
+    # async def insert_entities_into_pinecone(self):
+    #     try:
+    #         formatted_entities = []
+    #         entities = await self.entity_storage.read_documents(
+    #             {"to_be_deleted": False, "inserted_into_vectordb_at": ""}
+    #         )
 
-            if not entities:
-                graph_construction_logger.info(
-                    "GraphConstructionSystem\nNo entities found. Skipping insertion into Pinecone."
-                )
-                raise ValueError(f"No entities found.")
+    #         if not entities:
+    #             graph_construction_logger.info(
+    #                 "GraphConstructionSystem\nNo entities found. Skipping insertion into Pinecone."
+    #             )
+    #             raise ValueError(f"No entities found.")
 
-            for entity in entities:
-                formatted_entities.append(get_formatted_entity_for_vectordb(entity))
+    #         for entity in entities:
+    #             formatted_entities.append(get_formatted_entity_for_vectordb(entity))
 
-            await self.entity_vector_storage.create_vectors_without_namespace(
-                formatted_entities
-            )
+    #         await self.entity_vector_storage.create_vectors_without_namespace(
+    #             formatted_entities
+    #         )
 
-            for entity in entities:
-                self.entity_storage.update_document(
-                    {"_id": entity["_id"]},
-                    {
-                        "inserted_into_vectordb_at": get_formatted_current_datetime(
-                            "Asia/Kuala_Lumpur"
-                        )
-                    },
-                )
+    #         for entity in entities:
+    #             self.entity_storage.update_document(
+    #                 {"_id": entity["_id"]},
+    #                 {
+    #                     "inserted_into_vectordb_at": get_formatted_current_datetime(
+    #                         "Asia/Kuala_Lumpur"
+    #                     )
+    #                 },
+    #             )
 
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nUpdated {len(entities)} entity(ies) with inserted_into_vectordb_at field."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while inserting entities into Pinecone:{e}"
-            )
-            raise ValueError(f"Failed to insert entities into Pinecone: {e}")
+    #         graph_construction_logger.info(
+    #             f"GraphConstructionSystem\nUpdated {len(entities)} entity(ies) with inserted_into_vectordb_at field."
+    #         )
+    #     except Exception as e:
+    #         graph_construction_logger.error(
+    #             f"GraphConstructionSystem\nError while inserting entities into Pinecone:{e}"
+    #         )
+    #         raise ValueError(f"Failed to insert entities into Pinecone: {e}")
 
-    def insert_entities_into_neo4j(self):
+    async def insert_entities_into_neo4j(self):
         try:
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nReading entities from MongoDB..."
             )
 
-            raw_entities = self.entity_storage.read_documents(
+            raw_entities = await self.entity_storage.read_documents(
                 {"inserted_into_graphdb_at": "", "to_be_deleted": False}
             )
 
@@ -497,15 +497,23 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nUpdating {len(raw_entities)} entity(ies) with 'inserted_into_graphdb_at' field."
             )
+
+            update_tasks = []
+
             for entity in raw_entities:
-                self.entity_storage.update_document(
-                    {"_id": entity["_id"]},
-                    {
-                        "inserted_into_graphdb_at": get_formatted_current_datetime(
-                            "Asia/Kuala_Lumpur"
-                        )
-                    },
+                update_tasks.append(
+                    self.entity_storage.update_document(
+                        {"_id": entity["_id"]},
+                        {
+                            "inserted_into_graphdb_at": get_formatted_current_datetime(
+                                "Asia/Kuala_Lumpur"
+                            )
+                        },
+                    )
                 )
+
+            await asyncio.gather(*update_tasks)
+
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nUpdated {len(raw_entities)} entity(ies) with 'inserted_into_graphdb_at' field."
             )
@@ -517,13 +525,13 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 f"Failed to update entity(ies) with 'inserted_into_graphdb_at' field: {e}"
             )
 
-    def insert_relationships_into_neo4j(self):
+    async def insert_relationships_into_neo4j(self):
         try:
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nReading relationships from MongoDB..."
             )
 
-            raw_relationships = self.relationship_storage.read_documents(
+            raw_relationships = await self.relationship_storage.read_documents(
                 {"inserted_into_graphdb_at": "", "to_be_deleted": False}
             )
 
@@ -569,15 +577,21 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nUpdating {len(raw_relationships)} relationship(s) with 'inserted_into_graphdb_at' field."
             )
+            update_tasks = []
             for relationship in raw_relationships:
-                self.relationship_storage.update_document(
-                    {"_id": relationship["_id"]},
-                    {
-                        "inserted_into_graphdb_at": get_formatted_current_datetime(
-                            "Asia/Kuala_Lumpur"
-                        )
-                    },
+                update_tasks.append(
+                    self.relationship_storage.update_document(
+                        {"_id": relationship["_id"]},
+                        {
+                            "inserted_into_graphdb_at": get_formatted_current_datetime(
+                                "Asia/Kuala_Lumpur"
+                            )
+                        },
+                    )
                 )
+
+            await asyncio.gather(*update_tasks)
+
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nUpdated {len(raw_relationships)} relationship(s) with 'inserted_into_graphdb_at' field."
             )
