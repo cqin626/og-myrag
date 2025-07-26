@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import asyncio
 
-from bson import ObjectId
 from collections import defaultdict
 
 from ..prompts import PROMPT
@@ -11,7 +10,6 @@ from ..llm import fetch_responses_openai
 from ..util import (
     get_formatted_ontology,
     get_formatted_openai_response,
-    get_clean_json,
     get_formatted_entities_and_relationships,
     get_formatted_current_datetime,
 )
