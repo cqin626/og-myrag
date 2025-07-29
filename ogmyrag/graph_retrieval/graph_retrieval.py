@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import asyncio
 
 from collections import defaultdict
 
@@ -11,8 +10,6 @@ from ..util import (
     get_clean_json,
     get_formatted_ontology,
     get_formatted_openai_response,
-    get_formatted_entities_and_relationships,
-    get_formatted_current_datetime,
 )
 
 from ..storage import MongoDBStorage, AsyncMongoDBStorage, PineconeStorage, Neo4jStorage
@@ -84,16 +81,19 @@ class Text2CypherAgent(BaseAgent):
            potential_entities (str): Potential entities to query on.
            ontology (dict): The existing ontology.
         """
+        
+        
         formatted_ontology = get_formatted_ontology(
             data=kwargs.get("ontology", {}) or {},
         )
 
         system_prompt = PROMPT["TEXT_TO_CYPHER_V2"].format(
             ontology=formatted_ontology,
+            potential_entities=kwargs.get('potential_entities', '') or '',
         )
 
-        user_prompt = f"User query: {kwargs.get('query', '') or ''}\n Validated entities: {kwargs.get('potential_entities', '') or ''}"
-
+        user_prompt = kwargs.get('query', '') or ''
+        
         graph_retrieval_logger.info(f"Text2CypherAgent is called")
 
         try:
