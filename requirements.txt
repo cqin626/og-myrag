@@ -9,3 +9,5 @@ pymongo
 python-dotenv
 tenacity
 tqdm
+curl_cffi
+beautifulsoup4
