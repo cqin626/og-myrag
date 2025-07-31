@@ -237,22 +237,26 @@ class PineconeStorage:
 
             query_embeddings = await self._embed_text(query_texts)
 
-            all_results = []
-
-            for embedding in query_embeddings:
-                result = self.index.query(
+            async def query_single(embedding):
+                return await asyncio.to_thread(
+                    self.index.query,
                     vector=embedding,
                     namespace=namespace,
                     top_k=top_k,
                     include_metadata=include_metadata,
                 )
-                all_results.append(result)
+
+            # Perform concurrent Pinecone queries
+            all_results = await asyncio.gather(
+                *(query_single(embedding) for embedding in query_embeddings)
+            )
 
             return all_results
+
         except Exception as e:
             pinecone_logger.error(f"Error while fetching similar result(s): {e}")
             raise
-    
+
     async def get_formatted_similar_results_no_namespace(
         self, query_texts: str | list[str], top_k: int = 5
     ) -> str:

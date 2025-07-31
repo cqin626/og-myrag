@@ -305,6 +305,7 @@ Guidelines:
                
       [2.2] Think in Cypher
          - The graph uses the Neo4j graph database. Although your task is to write natural English queries, they will be translated to Cypher by another agent.
+         - However, you are not allowed to instruct the agent responsible for Cypher translation to leverage attributes, as it is not permitted to access any attributes during Cypher query formulation. “Therefore, write your query or queries in high-level natural English, using only the entity types, relationship types defined in the ontology, and the names of specific entity instances. Do not reference or rely on any node or edge attributes.
          - Keep Cypher capabilities and limitations in mind when forming your natural language queries.
 
       [2.3] Minimal Query Attempts
@@ -331,9 +332,12 @@ Guidelines:
          - Otherwise, keep query count minimal and focused.
       
       [2.5] Entity Validation
-         - The entity instances mentioned in your queries may not necessarily exist in the actual entity database. Therefore, for each entity instance mentioned in the query, you must append it to the `entities_to_validate list`, as outlined in Section 2.6, for further validation.
+         - The entity instances mentioned in user queries may not exist in the actual entity database. Therefore, you must append every entity instance mentioned to the 'entities_to_validate' list, as specified in Section 2.6, for downstream validation.
 
-         - Do not reject partial or informal entity names that do not align with the definitions, LLM guidance, or examples stated in the ontology. Instead, include them in the `entities_to_validate` list for downstream validation and resolution against the actual entity database. You are not responsible for verifying the correctness or completeness of instance names—your task is solely to identify them. 
+         - Do not discard or modify partial, informal, or non-standard entity names, even if they do not match the definitions, LLM guidance, or examples in the ontology. Include them in the 'entities_to_validate' list.
+
+         - You are not responsible for verifying, validating, or completing entity instance names. Your only task is to identify and extract them exactly as they appear in the user request, without any modification.
+
 
       [2.6] Accept/Reject Conditions
          - Accept if:
@@ -362,6 +366,13 @@ Guidelines:
                      \"note\": \"\"
                   }}
                ]
+            }}
+         
+         - If the user's request is rejected, return the following JSON structure. Justify the reason for rejection in the `note` field.
+            {{
+               \"response_type\": \"FINAL_REPORT\",
+               \"response\": [],
+               \"note\": \"\"
             }}
       
    [3] Final Report Report Generation
@@ -442,7 +453,11 @@ Guidelines:
                      \"response_type\": \"RETRIEVAL_RESULT\",
                      \"response\": [
                         {{
+                           \"original_query\": \"<original_query_in_English>\",
                            \"cypher_query\": \"<cypher_query>\",
+                           \"parameters\": {{
+                              \"param1\": \"value1\"
+                           }},
                            \"obtained_data\": [<Retrieval result shows that ABC Berhad hasIndependentDirector Tan Hui Mei>],
                            \"note\": \"\"
                         }}
@@ -480,7 +495,11 @@ Guidelines:
                      \"response_type\": \"RETRIEVAL_RESULT\",
                      \"response\": [
                         {{
+                           \"original_query\": \"<original_query_in_English>\",
                            \"cypher_query\": \"<cypher_query>\",
+                           \"parameters\": {{
+                              \"param1\": \"value1\"
+                           }},
                            \"obtained_data\": [],
                            \"note\": \"\"
                         }}
@@ -506,7 +525,11 @@ Guidelines:
                      \"response_type\": \"RETRIEVAL_RESULT\",
                      \"response\": [
                         {{
+                           \"original_query\": \"<original_query_in_English>\",                           
                            \"cypher_query\": \"<cypher_query>\",
+                           \"parameters\": {{
+                              \"param1\": \"value1\"
+                           }},
                            \"obtained_data\": [<Retrieval result shows that Priya Ramesh is an independent director of United Gomax Sdn Bhd>],
                            \"note\": \"\"
                         }}
@@ -547,7 +570,11 @@ Guidelines:
                      \"response_type\": \"RETRIEVAL_RESULT\",
                      \"response\": [
                         {{
+                           \"original_query\": \"<original_query_in_English>\",                           
                            \"cypher_query\": \"<cypher_query>\",
+                           \"parameters\": {{
+                              \"param1\": \"value1\"
+                           }},
                            \"obtained_data\": [<Retrieval result shows that Emily Johnson is an independent director of Apple Inc.>],
                            \"note\": \"\"
                         }},
@@ -595,7 +622,11 @@ Guidelines:
                      \"response_type\": \"RETRIEVAL_RESULT\",
                      \"response\": [
                         {{
+                           \"original_query\": \"<original_query_in_English>\",                           
                            \"cypher_query\": \"<cypher_query>\",
+                           \"parameters\": {{
+                              \"param1\": \"value1\"
+                           }},
                            \"obtained_data\": [],
                            \"note\": \"\"
                         }}
@@ -621,7 +652,11 @@ Guidelines:
                      \"response_type\": \"RETRIEVAL_RESULT\",
                      \"response\": [
                         {{
+                           \"original_query\": \"<original_query_in_English>\",                           
                            \"cypher_query\": \"<cypher_query>\",
+                           \"parameters\": {{
+                              \"param1\": \"value1\"
+                           }},
                            \"obtained_data\": [],
                            \"note\": \"\"
                         }}
@@ -679,6 +714,9 @@ Guidelines:
          [2] Potentially Used Entity Instances
             - These are vector similarity matches between the entity names in the user query and the actual entity instances stored in the graph.
             - You must only use entity instances listed here in your final Cypher query. Names are case-sensitive.
+            
+         [3] Additional Note (optional)
+            – An additional note to guide your conversion. Not necessarily present.
       
    [2] Constraints on Generated Queries
       - Your output must:
@@ -713,16 +751,17 @@ Guidelines:
 		- Return only the following raw JSON structure - no explanations, comments, or code block formatting.
       - The Cypher must use parameterized placeholders (e.g., `$company_name`).
       - The `parameters` dictionary must match those placeholders exactly.
+      – Include the query that you perform Cypher conversion on exactly as it is in the `original_query` field.
       - If a valid query cannot be generated, explain why in the `note` field, and leave `query` and `parameters` empty.
-      
-      {{
-         \"cypher_query\": \"<your_query>\",
-         \"parameters\": {{
-            \"param1\": \"value1\",
-            ...
-         }},
-         \"note\": \"\"
-      }}
+         {{
+            \"original_query\": \"<your_original_query>\"
+            \"cypher_query\": \"<your_cypher_query>\",
+            \"parameters\": {{
+               \"param1\": \"value1\",
+               ...
+            }},
+            \"note\": \"\"
+         }}
 
 You now understand your task. Proceed to generate the Cypher query strictly based on the inputs below.
 
