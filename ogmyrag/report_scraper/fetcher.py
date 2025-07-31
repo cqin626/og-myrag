@@ -46,10 +46,10 @@ class AnnouncementFetcher(BaseScraper):
             if not company_code:
                 raise ValueError(f"Company '{company_name}' not found")
             params["company"] = company_code
-            scraper_logger.info("Using company code: %s for %s", company_code, company_name)
+            scraper_logger.info("Using company code: %s (%s)", company_code, company_name)
 
-        scraper_logger.info("Fetching %s links (year = %s, company = %s)...",
-                    report_type.name,
+        scraper_logger.info("Fetching %s links (Year: %s, Company: %s)...",
+                    report_type.keyword,
                     str(year) if year is not None else "N/A",
                     company_name or "ALL")
 
