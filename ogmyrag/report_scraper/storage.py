@@ -109,7 +109,7 @@ class AsyncStorageManager:
         """
         Download each PDF, upload to GridFS, then insert metadata doc.
         """
-        if self.fs_bucket is None:
+        if self.storage.collection != report_type.collection:
             self.use_collection(report_type.collection)
 
         for pdf in announcement.pdfs:
@@ -163,3 +163,45 @@ class AsyncStorageManager:
                 "summary_path": summary_path
             }
         )
+
+    async def delete_reports(self, company: str, report_type: ReportType, year: Optional[int] = None):
+        """
+        Delete all documents for this company + report type + year.
+        """
+        if self.storage.collection != report_type.collection:
+            self.use_collection(report_type.collection)
+
+        company = company.replace(" ", "_").upper().strip()  # normalize company name
+
+        # find all matching metadata documents
+        query: dict = {"company": company}
+        if year is not None:
+            query["year"] = str(year)
+        else:
+            query["year"] = "N/A"
+
+        docs = await self.storage.read_documents(query=query)
+
+        if not docs:
+            scraper_logger.warning("No documents found for %s %s %s", company, report_type.keyword, str(year))
+            return
+        
+        # delete each document
+        for doc in docs:
+            file_id = doc.get("file_id")
+            if file_id:
+                # delete from GridFS
+                try:
+                    await self.fs_bucket.delete(file_id)
+                    scraper_logger.info("Deleted GridFSPDF bytes for %s (id = %s)", doc["filename"], file_id)
+                except Exception as e:
+                    scraper_logger.error("Failed to delete GridFS file %s: %s", file_id, e)
+            
+            # delete metadata document
+            deleted_count = await self.storage.delete_document({"_id": doc["_id"]})
+            if deleted_count > 0:
+                scraper_logger.info("Deleted metadata document for %s (id = %s)", doc["filename"], doc["_id"])
+            else:
+                scraper_logger.error("Failed to delete metadata document for %s (id = %s)", doc["filename"], doc["_id"])
+
+        scraper_logger.info("Deleted %d documents of %s for %s (year = %s)", len(docs), report_type.keyword, company, str(year) if year else "N/A")
