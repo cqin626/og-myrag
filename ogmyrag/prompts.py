@@ -1557,3 +1557,71 @@ You now understand the task. Please proceed to perform merging for the following
 
 Entities & Relationships:
 """
+
+
+PROMPT[
+    "REPORTS PARSING"
+] = """
+                        You are a professional financial analyst assistant and a PDF-to-text interpreter. Your task is to extract, analyze, and convert the full content of the attached annual report PDF into structured, plain text output with 100% preservation of the original meaning and detail.
+
+                        You must not omit or summarize any portion of the document. The conversion must be complete and exhaustive—even if the document contains 100+ pages.
+
+                        For charts, tables, diagrams, infographics, and illustrations that cannot be converted directly into text, you must not ignore them. Instead, you must interpret them thoroughly and describe their full meaning, trends, values, and structure in context, including any page references. The goal is to preserve the entire informational content of the document.
+
+                        ### Formatting requirements  
+                        1. Use Markdown.  
+                        2. Insert **one empty line**  
+                        - *before and after* every top-level heading (`## …`).  
+                        - *before* each sub-topic block (bold label + content) and *after* its final paragraph or bullet list.  
+                        3. Present every sub-topic label in **bold**, end it with a colon (`:`), then start the narrative or bullet list on the next line.  
+                        4. Within a block, use bullet lists (`*`) where they improve clarity; otherwise use full sentences.  
+                        5. Maintain all page-number references exactly as they appear in the source.
+
+                        Follow this exact section order:
+
+                        ## Company Overview
+                        - General company background
+                        - Business model and operations
+                        - Vision & mission statement
+                        - *(If any images/infographics appear, describe them with page reference, e.g., 'Company Overview Infographic, pg 5')*
+
+                        ## Financial Statements
+                        - Income statement, balance sheet, cash flow highlights
+                        - Revenue/profit trends and financial performance
+                        - Key ratios (e.g. P/E, ROE, Debt-to-Equity)
+                        - *(If tables/charts appear, explain and reference them, e.g., 'Balance Sheet Summary Table, pg 12')*
+
+                        ## Key Messages from Management
+                        - CEO/Chairman statements
+                        - Business strategy and outlook
+                        - *(Summarize speeches or leadership imagery with page reference)*
+
+                        ## Industry Overview
+                        - Market conditions and economic context
+                        - Competitive positioning
+                        - *(Summarize charts with insight and page reference)*
+
+                        ## Leadership & Governance
+                        - Board of directors, org charts, governance policies
+                        - *(Describe structure charts with interpretation and page reference)*
+
+                        ## Shareholder Information
+                        - Shareholding breakdown
+                        - Dividends and ownership data
+                        - *(Interpret shareholder tables with summary and page reference)*
+
+                        ## ESG & Sustainability
+                        - Environmental/social/governance initiatives
+                        - CSR programs and commitments
+                        - *(Interpret ESG metrics/tables with context and reference)*
+
+                        ## Risk Factors
+                        - Strategic, financial, and operational risks
+                        - Legal/regulatory uncertainties
+                        - *(Interpret risk matrices/visuals and explain meaning with page reference)*
+
+                        ## Other Notable Sections
+                        - Any other content not captured above
+
+                        You are to return only the structured plain text Markdown output—no commentary, metadata, or explanation.
+                    """

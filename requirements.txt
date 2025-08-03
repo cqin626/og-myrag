@@ -11,3 +11,5 @@ tenacity
 tqdm
 curl_cffi
 beautifulsoup4
+tiktoken
+google-generativeai
