@@ -223,56 +223,97 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
             raise ValueError(f"Failed to fetch the latest ontology: {e}")
 
         # Step 2 : Call QueryFormulationAgent
-        yield "## Calling QueryFormulationAgent..."
 
-        query_formulation_agent_response = (
-            await self.get_query_formulation_agent_response(
-                user_request=user_request, ontology=latest_onto, current_query_attempt=0
+        is_final_report_produced = False
+        current_query_attempt = 0
+        previous_response_id = None
+
+        while not is_final_report_produced and current_query_attempt < 3:
+            yield "## Calling QueryFormulationAgent..."
+
+            query_formulation_agent_raw_response = (
+                await self.get_query_formulation_agent_response(
+                    user_request=user_request,
+                    ontology=latest_onto,
+                    current_query_attempt=current_query_attempt,
+                    previous_response_id=previous_response_id,
+                )
             )
-        )
 
-        if query_formulation_agent_response["response_type"] == "QUERY_FORMULATION":
-            yield f"## Response by: QueryFormulationAgent\n {get_formatted_query_formulation_message(query_formulation_agent_response)}"
+            previous_response_id = query_formulation_agent_raw_response.id
 
-            text2cypher_tasks = []
+            query_formulation_agent_response = get_clean_json(
+                query_formulation_agent_raw_response.output_text
+            )
 
-            for item in query_formulation_agent_response["response"]:
-                text2cypher_tasks.append(
-                    self.get_text_to_cypher_agent_response(
-                        query=item.get("query", ""),
-                        potential_entities=item.get("entities_to_validate", []),
-                        note=item.get("note", ""),
+            if query_formulation_agent_response["response_type"] == "QUERY_FORMULATION":
+                yield f"## Response by: QueryFormulationAgent\n {get_formatted_query_formulation_message(query_formulation_agent_response)}"
+
+                text2cypher_tasks = []
+
+                for item in query_formulation_agent_response["response"]:
+                    text2cypher_tasks.append(
+                        self.get_text_to_cypher_agent_response(
+                            query=item.get("query", ""),
+                            potential_entities=item.get("entities_to_validate", []),
+                            note=item.get("note", ""),
+                            ontology=latest_onto,
+                        )
+                    )
+
+                yield "## Calling Text2CypherAgent..."
+
+                text2cypher_response = {
+                    "response_type": "RETRIEVAL_RESULT",
+                    "response": [],
+                }
+
+                conversion_results = await asyncio.gather(*text2cypher_tasks)
+
+                for result in conversion_results:
+                    text2cypher_response["response"].append(result)
+
+                yield f"## Response by: Text2CypherAgent\n {get_formatted_text2cypher_message(text2cypher_response)}"
+                
+                yield "## Calling QueryFormulationAgent..."
+                query_formulation_agent_raw_response = (
+                    await self.get_query_formulation_agent_response(
+                        user_request=str(text2cypher_response),
                         ontology=latest_onto,
+                        current_query_attempt=current_query_attempt,
+                        previous_response_id=previous_response_id,
                     )
                 )
 
-            yield "## Calling Text2CypherAgent..."
+                previous_response_id = query_formulation_agent_raw_response.id
+                
+                query_formulation_agent_response = get_clean_json(
+                    query_formulation_agent_raw_response.output_text
+                )
 
-            text2cypher_response = {"response_type": "RETRIEVAL_RESULT", "response": []}
+            if query_formulation_agent_response["response_type"] == "FINAL_REPORT":
+                is_final_report_produced = True
+                yield f"## Response by: QueryFormulationAgent\n {get_formatted_query_formulation_message(query_formulation_agent_response)}"
 
-            conversion_results = await asyncio.gather(*text2cypher_tasks)
-
-            for result in conversion_results:
-                text2cypher_response["response"].append(result)
-
-            yield f"## Response by: Text2CypherAgent\n {get_formatted_text2cypher_message(text2cypher_response)}"
-
-        elif query_formulation_agent_response["response_type"] == "FINAL_REPORT":
-            yield f"## Response by: QueryFormulationAgent\n {get_formatted_query_formulation_message(query_formulation_agent_response)}"
+            current_query_attempt += 1
 
     async def get_query_formulation_agent_response(
-        self, user_request: str, ontology: dict, current_query_attempt: int
+        self,
+        user_request: str,
+        ontology: dict,
+        current_query_attempt: int,
+        previous_response_id: str,
     ):
         response = await self.agents["QueryFormulationAgent"].handle_task(
             ontology=ontology,
             user_request=user_request,
-            previous_response_id=None,
+            previous_response_id=previous_response_id,
             max_query_attempt=3,
             max_query_per_attempt=5,
             current_query_attempt=current_query_attempt,
         )
 
-        return get_clean_json(response.output_text)
+        return response
 
     async def get_text_to_cypher_agent_response(
         self, query: str, potential_entities: list, note: str, ontology: dict

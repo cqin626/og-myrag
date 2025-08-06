@@ -386,7 +386,8 @@ Guidelines:
       
       [3.2] Focus on Data Preparation
          - You are NOT responsible for crafting the final natural language response.
-         - Your job is to prepare a **lossless translation** of the selected results into clear, structured statements.
+         - Your job is to prepare a **lossless translation** of the selected results into clear, structured statements. 
+         - You must include a comprehensive information summary, including any temporal aspects if mentioned, based on the data provided as information entries in the response.
          - Each selected retrieval result corresponds to an information entry in Section 3.3.
 
       [3.3] Output Format for Final Report
