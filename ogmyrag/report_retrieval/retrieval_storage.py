@@ -183,4 +183,4 @@ class RetrievalAsyncStorageManager:
         if self.storage.collection is None:
             raise ValueError("Call use_collection() first")
         results = await self.storage.read_documents(query=query)
-        return results[0]["contetnt"] 
+        return results[0]["content"] 
