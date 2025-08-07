@@ -52,3 +52,5 @@ class RetrievalExtractor:
         )
         retrieval_logger.info("Retrieved chunks: %r", [match.metadata["text"] for match in result.matches])
         return [match.metadata["text"] for match in result.matches]
+    
+

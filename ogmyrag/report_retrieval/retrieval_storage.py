@@ -60,7 +60,8 @@ class RetrievalAsyncStorageManager:
             return None
         
         file_id = docs[0]["file_id"]
-        raw = await self.fs_bucket.open_download_stream(file_id).read()
+        grid_out = await self.fs_bucket.open_download_stream(file_id)
+        raw = await grid_out.read()
         return raw.decode("utf-8")
     
     async def save_processed_report(
@@ -109,6 +110,77 @@ class RetrievalAsyncStorageManager:
         )
         return summary_doc_id
     
-    # async def download_processed_report()
+    def update_many(self, query: dict, new_values: dict):
+        if self.storage.collection is None:
+            raise ValueError("Call use_collection() first")
+        self.storage.collection.update_many(query, {"$set": new_values}, upsert=True)
 
+    async def save(self, data: Mapping[str, Any]):
+        if self.storage.collection is None:
+            raise ValueError("Call use_collection() first")
+        await self.storage.collection.insert_one(data)
+
+
+    async def extract_combine_processed_content(
+            self,
+            company: str,
+            year: Optional[int],
+            report_type: ReportType
+    ) -> str:
+        """
+        Extract and combine all processed content for a given company and year.
+        """
+        if self.storage.collection is None:
+            raise ValueError("Call use_collection() first")
+        
+        if report_type.collection == "ipo_reports":
+            type = "PROSPECTUS"
+
+            query = {
+                "from_company": company,
+                "type": type
+            }
+        elif report_type.collection == "annual_reports":
+            type = "ANNUAL_REPORT"
+
+            query = {
+                "from_company": company,
+                "year": str(year),
+                "type": type
+            }
+
+        results = await self.storage.read_documents(query=query)
+        
+        if not results:
+            retrieval_logger.warning("No processed content found for %s %s (year: %s)",
+                                     company, report_type.name, str(year))
+            return ""
+        
+        # combine all sections into a single Markdown string
+        md = [f"# {company} {report_type.name}\n"]
+        for section in results:
+            md.append(section["content"] + "\n")
+
+        return "\n".join(md)
     
+
+    async def check_exists(self, query: dict) -> bool:
+        """
+        Check if a document exists in the current collection.
+        """
+        if self.storage.collection is None:
+            raise ValueError("Call use_collection() first")
+        count = await self.storage.collection.count_documents(query)
+        return count > 0
+    
+    async def retrieve_toc(self, query: dict):
+        if self.storage.collection is None:
+            raise ValueError("Call use_collection() first")
+        results = await self.storage.read_documents(query=query)
+        return results[0].get("content", "[]")
+    
+    async def retrieve_section(self, query: dict):
+        if self.storage.collection is None:
+            raise ValueError("Call use_collection() first")
+        results = await self.storage.read_documents(query=query)
+        return results[0]["contetnt"] 

@@ -1625,3 +1625,40 @@ PROMPT[
 
                         You are to return only the structured plain text Markdown output—no commentary, metadata, or explanation.
                     """
+
+
+PROMPT[
+    "REPORTS PARSING SYSTEM INSTRUCTION"
+] = """
+You are a PDF-to-text converter and interpreter. A financial report PDF has been loaded into context and cached. 
+   When I say:
+   Section: "<Section Name>"
+   you must extract only that section (matching the Table of Contents).
+
+   - Extract and convert only the content under the given section heading, preserving 100% of the original meaning.
+   - For any charts, diagrams, tables, or illustrations within that section, provide a comprehensive textual interpretation that fully and accurately conveys their content, including a reference to the section title and page number.
+   - Exclude all content outside the specified section.
+   - Remove any headers, footers, or page numbers.
+   - Return only the plain text of that section—no explanations, metadata, headers, or additional commentary.
+"""
+
+PROMPT[
+    "DEFINITION PARSING"
+] = """
+            You are an information extraction system. The provided PDF contains two relevant sections: “DEFINITION” and “GLOSSARY OF TECHNICAL TERMS.” Extract only the entries under these two sections, mapping each term to its definition as key-value pairs in JSON. Return only the JSON—no explanations, headers, or additional text.
+            Output format example:
+            {
+            "Term": "Definition"
+            }
+        """
+
+
+PROMPT[
+    "TABLE OF CONTENT EXTRACTION"
+] = """
+            Please extract only the top-level section headings listed under the Table of Contents of the cached PDF.  
+            Top-level headings are those beginning with a single digit followed by a period and a space (e.g. "1. CORPORATE DIRECTORY", "2. APPROVALS AND CONDITIONS", "3. PROSPECTUS SUMMARY", "4. DETAILS OF OUR IPO").  
+            Ignore any unnumbered headings and any sub-sections (e.g. "1.1", "2.1", "2.2", etc.).  
+            Return a JSON array of strings in the exact order they appear.  
+            Do **not** include page numbers or any extra text—only the JSON array of main section titles.
+        """
