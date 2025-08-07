@@ -1,5 +1,6 @@
 import logging
 import json
+from bson import ObjectId
 
 from ..util import get_clean_json
 from typing import Any
@@ -7,30 +8,14 @@ from typing import Any
 from ..util import get_normalized_string, get_formatted_current_datetime
 
 
-def get_formatted_company_data(
-    document: str,
-    document_name: str,
-    document_type: str,
-    company_name: str,
-    published_at: str,
-    timezone_str: str = "Asia/Kuala_Lumpur",
-) -> dict[str, Any]:
-    return {
-        "name": get_normalized_string(document_name),
-        "type": get_normalized_string(document_type),
-        "from_company": get_normalized_string(company_name),
-        "created_at": get_formatted_current_datetime(timezone_str),
-        "is_parsed": False,
-        "content": document,
-        "published_at": published_at,
-    }
-
-
 def get_formatted_entities_and_relationships_for_db(
     response_string: str,
 ) -> tuple[list, list]:
     try:
-        response_data = get_clean_json(response_string)
+        unprocessed_response_data = get_clean_json(response_string)
+        response_data = get_entities_relationships_with_updated_ids(
+            unprocessed_response_data
+        )
         formatted_entities = get_formatted_entities_for_db(
             response_data.get("entities", [])
         )
@@ -50,6 +35,7 @@ def get_formatted_entities_for_db(
     for entity in entities:
         formatted_entities.append(
             {
+                "_id": entity.get("id"),
                 "name": entity.get("name", "").strip(),
                 "type": entity.get("type", "").strip(),
                 "description": entity.get("desc", ""),
@@ -57,7 +43,12 @@ def get_formatted_entities_for_db(
                 "last_modified_at": get_formatted_current_datetime(timezone),
                 "inserted_into_vectordb_at": "",
                 "inserted_into_graphdb_at": "",
-                "to_be_deleted": False,
+                "deduplication_info": {
+                    "check_duplicated": False,
+                    "merge_into": None,
+                    "is_removed_from_vectordb": False,
+                    "is_removed_from_graphdb": False,
+                },
             }
         )
     return formatted_entities
@@ -70,19 +61,51 @@ def get_formatted_relationships_for_db(
     for relationship in relationships:
         formatted_relationships.append(
             {
+                "_id": relationship.get("id"),
+                "source_id": relationship.get("source_id", ""),
+                "target_id": relationship.get("target_id", ""),
                 "type": relationship.get("type", "").strip(),
-                "source": relationship.get("source", "").strip(),
-                "target": relationship.get("target", "").strip(),
-                "source_type": relationship.get("source_type", "").strip(),
-                "target_type": relationship.get("target_type", "").strip(),
                 "description": relationship.get("desc", ""),
+                "valid_in": relationship.get("valid_in", []),
                 "created_at": get_formatted_current_datetime(timezone),
                 "last_modified_at": get_formatted_current_datetime(timezone),
                 "inserted_into_graphdb_at": "",
-                "to_be_deleted": False,
+                "deduplication_info": {
+                    "check_duplicated": False,
+                    "merge_into": None,
+                    "is_removed_from_graphdb": False,
+                },
             }
         )
     return formatted_relationships
+
+
+def get_entities_relationships_with_updated_ids(data: dict):
+    old_to_new_ids = {}
+
+    # Step 1: Assign new ObjectIds to entities
+    for entity in data.get("entities", []):
+        new_id = ObjectId()
+        old_to_new_ids[entity["id"]] = new_id
+        entity["id"] = new_id
+
+    # Step 2: Assign new ObjectIds to relationships and update source/target IDs
+    for rel in data.get("relationships", []):
+        rel["id"] = ObjectId()
+        rel["source_id"] = old_to_new_ids.get(rel["source_id"], rel["source_id"])
+        rel["target_id"] = old_to_new_ids.get(rel["target_id"], rel["target_id"])
+
+    # Step 3: Filter out unused entities
+    used_entity_ids = set()
+    for rel in data.get("relationships", []):
+        used_entity_ids.add(rel["source_id"])
+        used_entity_ids.add(rel["target_id"])
+
+    data["entities"] = [
+        entity for entity in data.get("entities", []) if entity["id"] in used_entity_ids
+    ]
+
+    return data
 
 
 def get_formatted_entity_for_vectordb(
@@ -115,14 +138,13 @@ def get_formatted_relationship_for_graphdb(
     relationship: dict[str, Any], timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
     return {
-        "source_name": relationship["source"],
-        "target_name": relationship["target"],
-        "source_type": relationship["source_type"],
-        "target_type": relationship["target_type"],
+        "source_id": str(relationship["source_id"]),
+        "target_id": str(relationship["target_id"]),
         "type": relationship["type"],
         "properties": {
             "id": str(relationship["_id"]),
             "description": relationship["description"],
             "last_modified_at": get_formatted_current_datetime(timezone),
+            "valid_in": relationship["valid_in"],
         },
     }

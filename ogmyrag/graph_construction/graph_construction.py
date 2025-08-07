@@ -100,6 +100,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         disclosure_config: MongoStorageConfig,
         entity_config: MongoStorageConfig,
         relationship_config: MongoStorageConfig,
+        deduplication_log_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
     ):
@@ -133,6 +134,10 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             self.relationship_storage.use_collection(
                 relationship_config["collection_name"]
             )
+            
+            self.deduplication_log_storage = AsyncMongoDBStorage(deduplication_log_config["connection_uri"])
+            self.deduplication_log_storage.use_database(deduplication_log_config["database_name"])
+            self.deduplication_log_storage.use_collection(deduplication_log_config["collection_name"])
 
             self.entity_vector_storage = PineconeStorage(**entity_vector_config)
 
@@ -400,7 +405,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         try:
             formatted_entities = []
             entities = await self.entity_storage.read_documents(
-                {"to_be_deleted": False, "inserted_into_vectordb_at": ""}
+                {"inserted_into_vectordb_at": ""}
             )
 
             if not entities:
@@ -448,7 +453,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             )
 
             raw_entities = await self.entity_storage.read_documents(
-                {"inserted_into_graphdb_at": "", "to_be_deleted": False}
+                {"inserted_into_graphdb_at": ""}
             )
 
             if not raw_entities:
@@ -531,7 +536,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             )
 
             raw_relationships = await self.relationship_storage.read_documents(
-                {"inserted_into_graphdb_at": "", "to_be_deleted": False}
+                {"inserted_into_graphdb_at": ""}
             )
 
             if not raw_relationships:

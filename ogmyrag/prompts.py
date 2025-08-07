@@ -3,61 +3,78 @@ PROMPT = {}
 PROMPT[
     "ENTITIES_RELATIONSHIPS_PARSING"
 ] = """
-You are an entity and relationship instance extraction agent. Your task is to extract instances of entities and relationships defined in the provided ontology from the given source text.
+You are an entity and relationship instance extraction agent. Your task is to extract instances of entities and relationships as defined in the provided ontology, based on the given source text.
 
 Guidelines
 	1. Extraction Logic
       - For each potential relationship identified in the source text:
-         - If the relationship aligns with the type and definition (as stated in llm-guidance) of any relationship defined in the ontology:
+         - If the relationship semantically matches a relationship type in the ontology based on llm-guidance, expected source and target entity types, and examples:
             - Extract the relationship instance and its associated attributes as specified in Guideline 2.
-            - Also extract the source and target entity instances associated with this relationship, following the instructions in Guideline 3.
+            - Extract the source and target entity instances associated with this relationship, following the instructions in Guideline 3.
          - Otherwise:
            - Skip the current relationship and proceed to the next.
-   
+      - Output results using the format in Guideline 5.
+      
    2. Relationship Attributes
-      - Each relationship in the ontology includes the following metadata, which must be used to guide your extraction:
-			1. `source`: The expected source entity instance. You must extract this entity.
-			2. `target`: The expected target entity instance. You must extract this entity.
-			3. `source_type`: The expected entity type of `source`. It must be one of the entity types defined in the ontology.
-			4. `target_type`: The expected entity type of `target`. It must be one of the entity types defined in the ontology.
-			5. `llm-guidance`: Defines the semantic meaning of the relationship and when it applies. Use this to validate whether a relationship in the source text qualifies for extraction.
-			6. `examples`: Provide contextual examples. Use them as secondary guidance for interpretation.
+      - Each relationship in the ontology includes the following metadata, they are interpreted as follow to guide your extraction:
+			1. `source`: The expected entity type of source entity instance defined in the ontology.
+			2. `target`: The expected entity type of target entity instance defined in the ontology.
+			3. `llm-guidance`: Defines the semantic meaning of the relationship and when it applies. Use this to validate whether a relationship in the source text qualifies for extraction. 
+			4. `examples`: Contextual references to guide interpretation.
 
-      - Each extracted relationship instance must include:
-         1. `type`: The relationship type, as defined in the ontology.
-         2. `source`: The instance of the source entity.
-         3. `target`: The instance of the target entity.
-         4. `desc`: A descriptive statement that:
-            - Is written in reporting format
+      - Each extracted relationship instance must have attributes as follow:
+         1. `id` (str, non-null): The unique identifier of the relationship which you need to generate on your own. Generate it in the format of `Rx`, for examples, `R1`, `R2`, `R3' and so on.
+			2. `source_id` (str, non-null): The identifier of the expected source entity instance. It is also an identifier that you require to generate on your own as stated in Guideline 3.
+			3. `target_id` (str, non-null): The identifier of the expected target entity instance. It is also an identifier that you require to generate on your own as stated in Guideline 3.
+         4. `type` (str, non-null): The relationship type, as defined in the ontology.
+         5. `desc` (str, non-null): A comprehensive descriptive statement that:
+            - Is written in reporting format. Do not include references to the source document itself, such as “this prospectus,” “this document,” or similar. Completely omit such phrases even if they appear in the source text.
+            - Provides complementary details explaining the semantic meaning of the relationship.
             - Includes temporal references relative to the publication date of the source document and, if available, the effective date of the relationship.
-            (See example in Guideline 5 for formatting.)
+            (See example in Guideline 6)
+         6. `valid_in` (list of int, non-null): A list of years during which the relationship is valid. It is inferred from either the explicit temporal information stated in the source text or the implicit temporal information based on the publication date of the source text.
       
    3. Entity Attributes
-      - Each entity in the ontology includes the following metadata:
-         1. `definition`: A formal description of the entity type. Use this to determine the entity's relevance in context.
-         2. `llm-guidance`: Detailed instructions for extracting or identifying instances of the entity. Follow this strictly.
-         3. `examples`: Sample instances to aid interpretation.
+      - Each entity in the ontology includes the following metadata, they are interpreted as follow to guide your extraction::
+         1. `definition`: A formal description of the entity type descrbing its semantic meaning. Use this to determine the entity's relevance in context.
+         2. `llm-guidance`: Detailed instructions for extracting the **name** of the entity instances. Follow this strictly.
+         3. `examples`: Contextual references to guide interpretation.
 
-      - For each entity instance extracted as part of a relationship, provide:
-         1. `name`: The extracted name of the entity, aligned with the llm-guidance. Ensure that each entity contains only one instance name. Entity names such as `Director / Executive` should be avoided. In such cases, separate them into two distinct entities and establish relationships with each individually.
-         2. `type`: The entity type, exactly as defined in the ontology.
-         3. `desc`: A descriptive statement that:
-            - Is written in reporting format
-            - Includes temporal references relative to the publication time of the source document.
-            (See example in Guideline 5 for formatting.)
-            - Focuses on the entity itself, not on its relationships. Avoid describing the same information already covered in the relationship desc field.
+      - Each extracted entity instance must have attributes as follow:
+         1. `id` (str, non-null): The unique identifier of the entity which you need to generate on your own. Generate it in the format of `Ex`, for examples, `E1`, `E2`, `E3' and so on.
+         2. `name` (str, non-null): A descritive name that:
+            - Aligns with the extraction guideline stated in the llm-guidance of entity type. 
+            - Represents only one real-world instance. If the name includes multiple distinct entities (e.g., `Name1 / Name2`), split them into separate entities and establish individual relationships as needed.
+         3. `type` (str, non-null): The entity type, as defined in the ontology.
+         4. `desc` (str, non-null): A comprehensive descriptive statement that:
+            - Is written in reporting format. Do not include references to the source document itself, such as “this prospectus,” “this document,” or similar. Completely omit such phrases even if they appear in the source text.
+            - Describes the entity itself, while including **temporal context** inferred from either explicit temporal information stated in the source text or implicit information based on the source's publication date.
+            - Includes **limited relationship-dependent or contextual details** only when such information helps uniquely identify the entity (e.g., distinguishing it from other entities with the same name)).
+            - The description should be sufficient for a downstream agent or human to **disambiguate the entity from other similarly named entities**.
+            - All descriptive content must be **strictly based on the source text**. Do not include assumptions, inferences beyond the source, or unverified external knowledge.
+            (See example in Guideline 6)
+      - Only extract an entity instance if it is part of a valid relationship identified according to Guideline 1. Entities mentioned in the text but not involved in any extractable relationship should not be extracted.
 
-   4. Output Format
+   4. Handling of Duplicate or New Entity/Relationship Instances  
+      - Reuse an existing entity or relationship instance — and append complementary information if needed — **only if you are confident** that the current mention clearly refers to the **same real-world instance** already extracted, based on consistent identifying details and contextual alignment.  
+      - If there is any ambiguity (e.g., differing context, insufficient information, or partial overlap), treat the mention as a **new instance** and generate a new `id`.  
+      - When uncertain, prioritize creating new instances to preserve contextual distinctions.  
+      - Your goal is to extract all contextually distinct instances. A separate agent will handle deduplication or merging of equivalent entities and relationships.
+
+   5. Output Format
 		- Return the results strictly in the following JSON format without any extra text, commentary, or headers:
+      - Do not format the JSON inside a code block. Return only the raw JSON.
   
 			{{
 				\"entities\": [
 					{{
+                  \"id\":\"E1\",
 						\"name\": \"entity_x\",
 						\"type\": \"entity_type_a\",
 						\"desc\": \"\"
 					}},
 					{{
+                  \"id\":\"E2\",
 						\"name\": \"entity_y\",
 						\"type\": \"entity_type_b\",
 						\"desc\": \"\"
@@ -65,23 +82,24 @@ Guidelines
 				],
 				\"relationships\": [
 					{{
+                  \"id\":\"R1\",
+                  \"source_id\":\"E1\",
+                  \"target_id\":\"E2\",
 						\"type\": \"relationship_type_a\",
-						\"source\": \"entity_x\",
-						\"target\": \"entity_y\",
-                  \"source_type\":\"entity_type_a\",
-                  \"target_type\":\"entity_type_b\",
 						\"desc\": \"\",
+                  \"valid_in\": [2021]
 					}}
 				]
 			}}
 
       - If no valid entity or relationship instance is found, return the following:
+      - Do not format the JSON inside a code block. Return only the raw JSON.
          {{
             \"entities\": [],
             \"relationships\": []
          }}
    
-   5. Example
+   6. Example
 	   a. Source Text:
       “Dr Tan Hui Mei is currently serving as the independent director of ABC Berhad, which is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.
       
@@ -89,8 +107,8 @@ Guidelines
          Entities:
             1. Person
             - definition: An individual human who may hold a position or role within a company.
-            - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
-            - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
+            - llm-guidance: Extract full names of individuals, including professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato') when mentioned in the source text. Only include proper nouns referring to specific persons involved in a company context. Avoid partial names or general descriptors.
+            - examples: Dr Tan Tek Kiong, Emily Johnson, Priya Ramesh
             
             2. Company 
             - definition: A legally registered business entity involved in commercial or professional activities.
@@ -112,24 +130,26 @@ Guidelines
          {{
             \"entities\": [
                {{
-                  \"name\": \"Tan Hui Mei\",
+                  \"id\": \"E1\",
+                  \"name\": \"Dr Tan Hui Mei\",
                   \"type\": \"Person\",
-                  \"desc\": \"As of May 2023, Tan Hui Mei was identified as a professional individual active in corporate governance.\"
+                  \"desc\": \"Tan Hui Mei, who holds the professional title of Dr., was associated with the governance structure of a Malaysian public listed company, ABC Berhad, as of May 2023.\"
                }},
                {{
+                  \"id\": \"E2\",
                   \"name\": \"ABC Berhad\",
                   \"type\": \"Company\",
-                  \"desc\": \"As of May 2023, ABC Berhad was a legally registered Malaysian company with the suffix 'Berhad', indicating public limited status under Malaysian company law.\"
+                  \"desc\": \"ABC Berhad is a Malaysian public limited company listed on the stock exchange. As of May 2023, it is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.\"
                }}
             ],
             \"relationships\": [
                {{
+                  \"id\": \"R1\",
+                  \"source_id\": \"E2",
+                  \"target_id\": \"E1\",
                   \"type\": \"hasIndependentDirector\",
-                  \"source\": \"ABC Berhad\",
-                  \"target\": \"Tan Hui Mei\",
-                  \"source_type\":\"Company\",
-                  \"target_type\":\"Person\",
-                  \"desc\": \"As of May 2023, ABC Berhad had appointed Tan Hui Mei as its independent director.\"
+                  \"desc\": \"As of May 2023, ABC Berhad had appointed Tan Hui Mei as its independent director, indicating her role in overseeing the company’s governance without executive involvement.\",
+                  \"valid_in\": [2023]
                }}
             ]
          }}
@@ -141,8 +161,6 @@ Ontology:
 
 Source Text Publish Date:
 {publish_date}
-
-Source Text:
 """
 
 PROMPT[
