@@ -37,30 +37,28 @@ class Neo4jStorage:
             raise
 
     def insert_relationships(self, relationships: list[dict]):
-        """Insert a list of relationships from JSON to the graph based on entity names."""
+        """Insert a list of relationships into the graph using entity IDs (id)."""
         try:
             with self.driver.session() as session:
                 for rel in relationships:
-                    source_name = rel.get("source_name")
-                    target_name = rel.get("target_name")
-                    source_type = rel.get("source_type")
-                    target_type = rel.get("target_type")
+                    source_id = rel.get("source_id")
+                    target_id = rel.get("target_id")
                     rel_type = rel.get("type")
                     properties = rel.get("properties", {})
 
-                    if not all([source_name, target_name, rel_type]):
+                    if not all([source_id, target_id, rel_type]):
                         neo4j_logger.warning(f"Skipping invalid relationship: {rel}")
                         continue
 
                     query = (
-                        f"MATCH (a:{source_type} {{name: $source_name}}), "
-                        f"(b:{target_type} {{name: $target_name}}) "
+                        f"MATCH (a {{id: $source_id}}), (b {{id: $target_id}}) "
                         f"CREATE (a)-[r:{rel_type} $props]->(b)"
                     )
+
                     session.run(
                         query,
-                        source_name=source_name,
-                        target_name=target_name,
+                        source_id=str(source_id),
+                        target_id=str(target_id),
                         props=properties,
                     )
 
@@ -163,28 +161,27 @@ class AsyncNeo4jStorage:
         try:
             async with self.driver.session() as session:
                 for rel in relationships:
-                    source_name = rel.get("source_name")
-                    target_name = rel.get("target_name")
-                    source_type = rel.get("source_type")
-                    target_type = rel.get("target_type")
+                    source_id = rel.get("source_id")
+                    target_id = rel.get("target_id")
                     rel_type = rel.get("type")
                     properties = rel.get("properties", {})
 
-                    if not all([source_name, target_name, rel_type]):
+                    if not all([source_id, target_id, rel_type]):
                         neo4j_logger.warning(f"Skipping invalid relationship: {rel}")
                         continue
 
                     query = (
-                        f"MATCH (a:{source_type} {{name: $source_name}}), "
-                        f"(b:{target_type} {{name: $target_name}}) "
+                        f"MATCH (a {{id: $source_id}}), (b {{id: $target_id}}) "
                         f"CREATE (a)-[r:{rel_type} $props]->(b)"
                     )
+
                     await session.run(
                         query,
-                        source_name=source_name,
-                        target_name=target_name,
+                        source_id=str(source_id),
+                        target_id=str(target_id),
                         props=properties,
                     )
+
                 neo4j_logger.info(
                     f"Successfully inserted {len(relationships)} relationship(s)"
                 )

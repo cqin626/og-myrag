@@ -148,3 +148,47 @@ def get_formatted_relationship_for_graphdb(
             "valid_in": relationship["valid_in"],
         },
     }
+
+
+def get_simplified_similar_entities_list(results: list[dict]) -> list[dict]:
+    """
+    Converts Pinecone similarity search results into a simplified list of entity dicts.
+
+    Each dictionary contains:
+      - id: vector ID
+      - entity_name: value from metadata["entity_name"]
+      - entity_type: value from metadata["entity_type"]
+      - description: value from metadata["description"]
+      - similarity_score: value from match["score"]
+
+    Args:
+        results (list[dict]): List of result dicts returned from get_similar_results_no_namespace in pinecone storage.
+
+    Returns:
+        list[dict]: Flattened list of entity info dicts.
+    """
+    simplified = []
+
+    for result in results:
+        for match in result.get("matches", []):
+            metadata = match.get("metadata", {})
+            simplified.append(
+                {
+                    "id": match.get("id", ""),
+                    "entity_name": metadata.get("entity_name", ""),
+                    "entity_type": metadata.get("entity_type", ""),
+                    "description": metadata.get("description", ""),
+                    "similarity_score": match.get("score", 0.0),
+                }
+            )
+
+    return simplified
+
+
+def get_formatted_similar_entities_for_deduplication(entities: list[dict]):
+    output = "Similar Entities:"
+    for i, entity in enumerate(entities, 1):
+        output += f"\n{i}. {entity.get('entity_name', '')}"
+        output += f"\n- Similarity Score: {entity.get('similarity_score', 0.0)}"
+        output += f"\n- Description: {entity.get('description', '')}\n"
+    return output.strip()

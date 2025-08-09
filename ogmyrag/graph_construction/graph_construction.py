@@ -28,6 +28,8 @@ from .graph_construction_util import (
     get_formatted_entity_for_vectordb,
     get_formatted_entity_for_graphdb,
     get_formatted_relationship_for_graphdb,
+    get_simplified_similar_entities_list,
+    get_formatted_similar_entities_for_deduplication,
 )
 
 graph_construction_logger = logging.getLogger("graph_construction")
@@ -134,10 +136,16 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             self.relationship_storage.use_collection(
                 relationship_config["collection_name"]
             )
-            
-            self.deduplication_log_storage = AsyncMongoDBStorage(deduplication_log_config["connection_uri"])
-            self.deduplication_log_storage.use_database(deduplication_log_config["database_name"])
-            self.deduplication_log_storage.use_collection(deduplication_log_config["collection_name"])
+
+            self.deduplication_log_storage = AsyncMongoDBStorage(
+                deduplication_log_config["connection_uri"]
+            )
+            self.deduplication_log_storage.use_database(
+                deduplication_log_config["database_name"]
+            )
+            self.deduplication_log_storage.use_collection(
+                deduplication_log_config["collection_name"]
+            )
 
             self.entity_vector_storage = PineconeStorage(**entity_vector_config)
 
@@ -607,9 +615,51 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 f"Failed to update relationship(s) with 'inserted_into_graphdb_at' field: {e}"
             )
 
+    async def deduplicate_entities(self, top_k: int, score_threshold: float):
+        i = 0
+        while i < 5:
+            unchecked_entities = await self.entity_storage.read_documents(
+                {"deduplication_info.check_duplicated": False}, limit=1
+            )
+
+            if not unchecked_entities:
+                break
+
+            entity = unchecked_entities[0]
+
+            similar_results = (
+                await self.entity_vector_storage.get_similar_results_no_namespace(
+                    query_texts=entity.get("name", ""),
+                    top_k=top_k,
+                    query_filter={"entity_type": {"$eq": entity.get("type", "")}},
+                    score_threshold=score_threshold,
+                )
+            )
+
+            simplified_similar_results = (
+                get_formatted_similar_entities_for_deduplication(
+                    get_simplified_similar_entities_list(similar_results)
+                )
+            )
+
+            graph_construction_logger.info(
+                f"GraphConstructionSystem\nTesting deduplication for entity {str(entity.get('_id',''))}：\n{simplified_similar_results} "
+            )
+
+            i += 1
+
     async def get_formatted_similar_results_from_pinecone(
-        self, query_texts: str | list[str], top_k: int
+        self,
+        query_texts: str | list[str],
+        top_k: int,
+        query_filter: dict | None = None,
+        score_threshold: float = 0.0,
     ):
-        return await self.entity_vector_storage.get_formatted_similar_results_no_namespace(
-            query_texts=query_texts, top_k=top_k
+        return (
+            await self.entity_vector_storage.get_formatted_similar_results_no_namespace(
+                query_texts=query_texts,
+                top_k=top_k,
+                query_filter=query_filter,
+                score_threshold=score_threshold,
+            )
         )

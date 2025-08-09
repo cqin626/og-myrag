@@ -219,7 +219,9 @@ class AsyncMongoDBStorage:
             return None
 
     async def read_documents(
-        self, query: dict[str, Any] | None = None
+        self,
+        query: dict[str, Any] | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         if query is None:
             query = {}
@@ -227,7 +229,9 @@ class AsyncMongoDBStorage:
             raise ValueError("No collection selected")
         try:
             cursor = self.collection.find(query)
-            docs = await cursor.to_list(length=None)
+            if limit is not None:
+                cursor = cursor.limit(limit)
+            docs = await cursor.to_list(length=limit or None)
             logger.info(f"Retrieved {len(docs)} documents")
             return docs
         except Exception as e:

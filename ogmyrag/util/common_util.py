@@ -18,11 +18,12 @@ def get_clean_json(text: str) -> dict:
     # Step 1: Trim whitespace
     text = text.strip()
 
-    # Step 2: Remove Markdown-style code block (```json ... ```)
-    text = re.sub(r'^```(?:json)?\s*', '', text)
-    text = re.sub(r'\s*```$', '', text)
+    # Step 2: Remove markdown code block if present (```json ... ```)
+    if text.startswith("```json") or text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
 
-    # Step 3: Extract JSON object between first '{' and last '}'
+    # Step 3: Try to extract valid JSON between first '{' and last '}'
     try:
         start = text.index('{')
         end = text.rindex('}') + 1

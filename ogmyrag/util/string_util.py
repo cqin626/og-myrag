@@ -64,17 +64,18 @@ def get_formatted_entities_and_relationships(json_string):
     output = ["Entities"]
     for idx, entity in enumerate(data.get("entities", []), start=1):
         output.append(f"{idx}. {entity['name']}")
+        output.append(f"- id: {entity['id']}")
         output.append(f"- type: {entity['type']}")
         output.append(f"- desc: {entity['desc']}\n")
 
     output.append("Relationships:")
     for idx, rel in enumerate(data.get("relationships", []), start=1):
         output.append(f"{idx}. {rel['type']}")
-        output.append(f"- source: {rel['source']}")
-        output.append(f"- source_type: {rel['source_type']}")
-        output.append(f"- target: {rel['target']}")
-        output.append(f"- target_type: {rel['target_type']}")
+        output.append(f"- id: {rel['id']}")
+        output.append(f"- source_id: {rel['source_id']}")
+        output.append(f"- target_id: {rel['target_id']}")
         output.append(f"- desc: {rel['desc']}\n")
+        output.append(f"- valid_in: {rel['valid_in']}\n")
 
     return "\n".join(output)
 
