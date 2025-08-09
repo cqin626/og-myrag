@@ -8,6 +8,7 @@ from ..util import (
     get_clean_json,
     get_formatted_ontology,
     get_formatted_openai_response,
+    get_formatted_similar_entities,
 )
 
 from ..storage import (
@@ -162,50 +163,6 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
             graph_retrieval_logger.error(f"GraphRetrievalSystem: {e}")
             raise ValueError(f"Failed to intialize GraphRetrievalSystem: {e}")
 
-    # async def query_from_graph(self, user_request: str):
-    #     try:
-    #         graph_retrieval_logger.info("GraphRetrievalSystem\nPreparing ontology...")
-    #         latest_onto = (
-    #             self.onto_storage.read_documents({"is_latest": True})[0].get(
-    #                 "ontology", {}
-    #             )
-    #             or {}
-    #         )
-    #     except Exception as e:
-    #         graph_retrieval_logger.error(
-    #             f"GraphRetrievalSystem\nError while getting latest ontology:{e}"
-    #         )
-    #         raise ValueError(f"Failed to latest ontology: {e}")
-
-    #     raw_response_from_user2requestagent = (
-    #         await self.get_response_from_user2requestagent(user_request)
-    #     )
-
-    #     response_from_user2requestagent = get_clean_json(
-    #         raw_response_from_user2requestagent
-    #     )
-
-    #     potential_entities = (
-    #         await self.entity_vector_storage.get_formatted_similar_results_no_namespace(
-    #             query_texts=response_from_user2requestagent["entities_to_validate"],
-    #             top_k=20,
-    #         )
-    #     )
-
-    #     graph_retrieval_logger.info(f"Potential entities:\n {potential_entities}")
-
-    #     query = response_from_user2requestagent["generated_query"]
-
-    #     raw_response_from_text2cypher = await self.agents[
-    #         "Text2CypherAgent"
-    #     ].handle_task(
-    #         ontology=latest_onto, query=query, potential_entities=potential_entities
-    #     )
-
-    #     response_from_text2cypher = get_clean_json(raw_response_from_text2cypher)
-
-    #     return response_from_text2cypher["cypher_query"]
-
     async def query_from_graph(self, user_request: str):
         # Step 1 : Get the latest ontology
         try:
@@ -274,7 +231,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                     text2cypher_response["response"].append(result)
 
                 yield f"## Response by: Text2CypherAgent\n {get_formatted_text2cypher_message(text2cypher_response)}"
-                
+
                 yield "## Calling QueryFormulationAgent..."
                 query_formulation_agent_raw_response = (
                     await self.get_query_formulation_agent_response(
@@ -286,7 +243,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 )
 
                 previous_response_id = query_formulation_agent_raw_response.id
-                
+
                 query_formulation_agent_response = get_clean_json(
                     query_formulation_agent_raw_response.output_text
                 )
@@ -318,21 +275,24 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
     async def get_text_to_cypher_agent_response(
         self, query: str, potential_entities: list, note: str, ontology: dict
     ):
-        validated_entities = (
-            await self.entity_vector_storage.get_formatted_similar_results_no_namespace(
-                query_texts=potential_entities,
-                top_k=20,
-            )
+        validated_entities = await self.entity_vector_storage.get_similar_results(
+            query_texts=potential_entities,
+            top_k=20,
+        )
+
+        formatted_validated_entities = get_formatted_similar_entities(
+            query_texts=potential_entities,
+            results=validated_entities
         )
 
         graph_retrieval_logger.info(
-            f"GraphRetrievalSystem\nValidated entities:\n{validated_entities}"
+            f"GraphRetrievalSystem\nValidated entities:\n{formatted_validated_entities}"
         )
 
         raw_response = await self.agents["Text2CypherAgent"].handle_task(
             ontology=ontology,
             query=query,
-            potential_entities=validated_entities,
+            potential_entities=formatted_validated_entities,
             note=note,
         )
         response = get_clean_json(raw_response.output_text)

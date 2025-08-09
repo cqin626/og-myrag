@@ -426,7 +426,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             for entity in entities:
                 formatted_entities.append(get_formatted_entity_for_vectordb(entity))
 
-            await self.entity_vector_storage.create_vectors(formatted_entities)
+            await self.entity_vector_storage.upsert_vectors(formatted_entities)
 
             update_tasks = []
 

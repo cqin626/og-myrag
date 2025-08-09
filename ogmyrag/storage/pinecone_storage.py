@@ -44,7 +44,7 @@ class PineconeStorage:
             pinecone_logger.error(f"Could not connect to Pinecone: {str(e)}")
             raise
 
-    async def create_vectors(
+    async def upsert_vectors(
         self, items: list[dict[str, Any]], namespace: str = ""
     ) -> None:
         """
