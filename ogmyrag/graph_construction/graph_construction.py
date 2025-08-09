@@ -12,6 +12,7 @@ from ..util import (
     get_formatted_openai_response,
     get_formatted_entities_and_relationships,
     get_formatted_current_datetime,
+    get_formatted_similar_entities,
 )
 from ..storage import MongoDBStorage, AsyncMongoDBStorage, PineconeStorage, Neo4jStorage
 
@@ -425,9 +426,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             for entity in entities:
                 formatted_entities.append(get_formatted_entity_for_vectordb(entity))
 
-            await self.entity_vector_storage.create_vectors_without_namespace(
-                formatted_entities
-            )
+            await self.entity_vector_storage.create_vectors(formatted_entities)
 
             update_tasks = []
 
@@ -627,13 +626,11 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
 
             entity = unchecked_entities[0]
 
-            similar_results = (
-                await self.entity_vector_storage.get_similar_results_no_namespace(
-                    query_texts=entity.get("name", ""),
-                    top_k=top_k,
-                    query_filter={"entity_type": {"$eq": entity.get("type", "")}},
-                    score_threshold=score_threshold,
-                )
+            similar_results = await self.entity_vector_storage.get_similar_results(
+                query_texts=entity.get("name", ""),
+                top_k=top_k,
+                query_filter={"entity_type": {"$eq": entity.get("type", "")}},
+                score_threshold=score_threshold,
             )
 
             simplified_similar_results = (
@@ -648,18 +645,20 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
 
             i += 1
 
-    async def get_formatted_similar_results_from_pinecone(
+    async def get_formatted_similar_entities_from_pinecone(
         self,
         query_texts: str | list[str],
         top_k: int,
         query_filter: dict | None = None,
         score_threshold: float = 0.0,
     ):
-        return (
-            await self.entity_vector_storage.get_formatted_similar_results_no_namespace(
-                query_texts=query_texts,
-                top_k=top_k,
-                query_filter=query_filter,
-                score_threshold=score_threshold,
-            )
+        similar_entities = await self.entity_vector_storage.get_similar_results(
+            query_texts=query_texts,
+            top_k=top_k,
+            query_filter=query_filter,
+            score_threshold=score_threshold,
         )
+        formatted_similar_entities = get_formatted_similar_entities(
+            query_texts=query_texts, results=similar_entities
+        )
+        return formatted_similar_entities

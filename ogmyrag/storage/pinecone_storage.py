@@ -44,8 +44,8 @@ class PineconeStorage:
             pinecone_logger.error(f"Could not connect to Pinecone: {str(e)}")
             raise
 
-    async def create_vectors_without_namespace(
-        self, items: list[dict[str, Any]]
+    async def create_vectors(
+        self, items: list[dict[str, Any]], namespace: str = ""
     ) -> None:
         """
         Asynchronously embed multiple texts and upsert them to Pinecone using a single default namespace.
@@ -83,11 +83,8 @@ class PineconeStorage:
                 )
             ]
 
-            # Use default namespace if required, or omit if not needed
-            DEFAULT_NAMESPACE = ""
-
             pinecone_logger.info(f"Upserting {len(vectors)} vectors to Pinecone...")
-            self.index.upsert(vectors=vectors, namespace=DEFAULT_NAMESPACE)
+            self.index.upsert(vectors=vectors, namespace=namespace)
 
             pinecone_logger.info(
                 f"Successfully created {len(items)} vectors in Pinecone (no namespace)."
@@ -97,50 +94,14 @@ class PineconeStorage:
             pinecone_logger.error(f"Error while creating vectors (no namespace): {e}")
             raise
 
-    async def get_formatted_similar_results_no_namespace(
-        self,
-        query_texts: str | list[str],
-        top_k: int = 5,
-        query_filter: dict | None = None,
-        score_threshold: float = 0.0,
-    ) -> str:
-        """
-        Wrapper function that fetches and returns similar results as a formatted string.
-        Works for vector records stored without a namespace.
-        """
-        results = await self.get_similar_results_no_namespace(
-            query_texts=query_texts,
-            top_k=top_k,
-            query_filter=query_filter,
-            score_threshold=score_threshold,
-        )
-
-        if isinstance(query_texts, str):
-            query_texts = [query_texts]
-
-        output_lines = []
-
-        for query, result_set in zip(query_texts, results):
-            output_lines.append(f"Target: {query}")
-            output_lines.append("Found:")
-            for i, match in enumerate(result_set.get("matches", []), start=1):
-                entity_name = match["metadata"].get("entity_name", "Unknown")
-                entity_type = match["metadata"].get("entity_type", "Unknown Type")
-                score = match.get("score", 0.0)
-                output_lines.append(
-                    f"{i}. {entity_name} ({entity_type}; {score:.9f} similarity score)"
-                )
-            output_lines.append("")
-
-        return "\n".join(output_lines)
-
-    async def get_similar_results_no_namespace(
+    async def get_similar_results(
         self,
         query_texts: str | list[str],
         top_k: int = 5,
         include_metadata: bool = True,
         query_filter: dict | None = None,
         score_threshold: float = 0.0,
+        namespace: str = "",
     ):
         """
         Perform similarity search without using namespace for the given query_text(s).
@@ -153,13 +114,12 @@ class PineconeStorage:
                 query_texts = [query_texts]
 
             query_embeddings = await self._embed_text(query_texts)
-            DEFAULT_NAMESPACE = ""
 
             async def query_single(embedding):
                 result = await asyncio.to_thread(
                     self.index.query,
                     vector=embedding,
-                    namespace=DEFAULT_NAMESPACE,
+                    namespace=namespace,
                     top_k=top_k,
                     include_metadata=include_metadata,
                     filter=query_filter or {},

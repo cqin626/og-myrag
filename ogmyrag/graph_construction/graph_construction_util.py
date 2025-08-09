@@ -162,7 +162,7 @@ def get_simplified_similar_entities_list(results: list[dict]) -> list[dict]:
       - similarity_score: value from match["score"]
 
     Args:
-        results (list[dict]): List of result dicts returned from get_similar_results_no_namespace in pinecone storage.
+        results (list[dict]): List of result dicts returned from get_similar_results in pinecone storage.
 
     Returns:
         list[dict]: Flattened list of entity info dicts.
