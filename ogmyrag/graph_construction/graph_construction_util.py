@@ -2,34 +2,29 @@ import logging
 import json
 from bson import ObjectId
 
-from ..util import get_clean_json
+from ..util import get_clean_json, get_current_datetime
 from typing import Any
 
 from ..util import get_normalized_string, get_formatted_current_datetime
 
 
 def get_formatted_entities_and_relationships_for_db(
-    response_string: str,
+    data: dict, from_company: str
 ) -> tuple[list, list]:
-    try:
-        unprocessed_response_data = get_clean_json(response_string)
-        response_data = get_entities_relationships_with_updated_ids(
-            unprocessed_response_data
-        )
-        formatted_entities = get_formatted_entities_for_db(
-            response_data.get("entities", [])
-        )
-        formatted_relationships = get_formatted_relationships_for_db(
-            response_data.get("relationships", [])
-        )
+    formatted_entities = _get_formatted_entities_for_db(
+        entities=data.get("entities", []), from_company=from_company
+    )
+    formatted_relationships = _get_formatted_relationships_for_db(
+        relationships=data.get("relationships", []), from_company=from_company
+    )
 
-        return formatted_entities, formatted_relationships
-    except Exception as e:
-        raise ValueError(f"Failed to parse response string: {e}")
+    return formatted_entities, formatted_relationships
 
 
-def get_formatted_entities_for_db(
-    entities: list[dict[str, Any]], timezone: str = "Asia/Kuala_Lumpur"
+def _get_formatted_entities_for_db(
+    entities: list[dict[str, Any]],
+    from_company: str,
+    timezone: str = "Asia/Kuala_Lumpur",
 ) -> list[dict[str, Any]]:
     formatted_entities = []
     for entity in entities:
@@ -38,24 +33,18 @@ def get_formatted_entities_for_db(
                 "_id": entity.get("id"),
                 "name": entity.get("name", "").strip(),
                 "type": entity.get("type", "").strip(),
-                "description": entity.get("desc", ""),
-                "created_at": get_formatted_current_datetime(timezone),
-                "last_modified_at": get_formatted_current_datetime(timezone),
-                "inserted_into_vectordb_at": "",
-                "inserted_into_graphdb_at": "",
-                "deduplication_info": {
-                    "check_duplicated": False,
-                    "merge_into": None,
-                    "is_removed_from_vectordb": False,
-                    "is_removed_from_graphdb": False,
-                },
+                "description": [entity.get("desc", "")],
+                "originated_from": [from_company],
+                "status": "TO_BE_DEDUPLICATED",
+                "created_at": get_current_datetime(timezone),
+                "last_modified_at": get_current_datetime(timezone),
             }
         )
     return formatted_entities
 
 
-def get_formatted_relationships_for_db(
-    relationships: list[str], timezone: str = "Asia/Kuala_Lumpur"
+def _get_formatted_relationships_for_db(
+    relationships: list[str], from_company: str, timezone: str = "Asia/Kuala_Lumpur"
 ) -> list[dict[str, Any]]:
     formatted_relationships = []
     for relationship in relationships:
@@ -67,14 +56,10 @@ def get_formatted_relationships_for_db(
                 "type": relationship.get("type", "").strip(),
                 "description": relationship.get("desc", ""),
                 "valid_in": relationship.get("valid_in", []),
-                "created_at": get_formatted_current_datetime(timezone),
-                "last_modified_at": get_formatted_current_datetime(timezone),
-                "inserted_into_graphdb_at": "",
-                "deduplication_info": {
-                    "check_duplicated": False,
-                    "merge_into": None,
-                    "is_removed_from_graphdb": False,
-                },
+                "originated_from": [from_company],
+                "status": "TO_BE_DEDUPLICATED",
+                "created_at": get_current_datetime(timezone),
+                "last_modified_at": get_current_datetime(timezone),
             }
         )
     return formatted_relationships
@@ -92,8 +77,8 @@ def get_entities_relationships_with_updated_ids(data: dict):
     # Step 2: Assign new ObjectIds to relationships and update source/target IDs
     for rel in data.get("relationships", []):
         rel["id"] = ObjectId()
-        rel["source_id"] = old_to_new_ids.get(rel["source_id"], rel["source_id"])
-        rel["target_id"] = old_to_new_ids.get(rel["target_id"], rel["target_id"])
+        rel["source_id"] = old_to_new_ids[rel["source_id"]]
+        rel["target_id"] = old_to_new_ids[rel["target_id"]]
 
     # Step 3: Filter out unused entities
     used_entity_ids = set()
@@ -121,6 +106,35 @@ def get_formatted_entity_for_vectordb(
             "last_modified_at": get_formatted_current_datetime(timezone),
         },
     }
+
+
+# def get_formatted_entity_cache_for_db(
+#     id: ObjectId, entity: dict, timezone="Asia/Kuala_Lumpur"
+# ) -> dict:
+#     return {
+#         "_id": id,
+#         "name": entity.get("name", ""),
+#         "type": entity.get("type", ""),
+#         "entity_id": entity.get("_id"),
+#         "description": entity.get("description", ""),
+#         "last_accessed_at": get_current_datetime(timezone),
+#     }
+
+
+# def get_formatted_entity_cache_for_vectordb(
+#     id: ObjectId, entity: dict, timezone="Asia/Kuala_Lumpur"
+# ) -> dict:
+#     return {
+#         "id": str(id),
+#         "name": entity["name"],
+#         "metadata": {
+#             "entity_id": entity.get("_id"),
+#             "entity_name": entity["name"],
+#             "entity_type": entity["type"],
+#             "description": entity["description"],
+#             "last_accessed_at": get_current_datetime(timezone),
+#         },
+#     }
 
 
 def get_formatted_entity_for_graphdb(
@@ -185,10 +199,10 @@ def get_simplified_similar_entities_list(results: list[dict]) -> list[dict]:
     return simplified
 
 
-def get_formatted_similar_entities_for_deduplication(entities: list[dict]):
-    output = "Similar Entities:"
-    for i, entity in enumerate(entities, 1):
-        output += f"\n{i}. {entity.get('entity_name', '')}"
-        output += f"\n- Similarity Score: {entity.get('similarity_score', 0.0)}"
-        output += f"\n- Description: {entity.get('description', '')}\n"
-    return output.strip()
+# def get_formatted_similar_entities_for_deduplication(entities: list[dict]):
+#     output = "Similar Entities:"
+#     for i, entity in enumerate(entities, 1):
+#         output += f"\n{i}. {entity.get('entity_name', '')}"
+#         output += f"\n- Similarity Score: {entity.get('similarity_score', 0.0)}"
+#         output += f"\n- Description: {entity.get('description', '')}\n"
+#     return output.strip()

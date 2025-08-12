@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+from pymongo import MongoClient
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import (
@@ -13,9 +14,7 @@ from ..util import (
 
 from ..storage import (
     MongoDBStorage,
-    AsyncMongoDBStorage,
     PineconeStorage,
-    Neo4jStorage,
     AsyncNeo4jStorage,
 )
 
@@ -139,6 +138,7 @@ class Text2CypherAgent(BaseAgent):
 class GraphRetrievalSystem(BaseMultiAgentSystem):
     def __init__(
         self,
+        mongo_client: MongoClient,
         ontology_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
@@ -151,9 +151,8 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         )
 
         try:
-            self.onto_storage = MongoDBStorage(ontology_config["connection_uri"])
-            self.onto_storage.use_database(ontology_config["database_name"])
-            self.onto_storage.use_collection(ontology_config["collection_name"])
+            self.ontology_config=ontology_config
+            self.mongo_storage = MongoDBStorage(mongo_client)
 
             self.entity_vector_storage = PineconeStorage(**entity_vector_config)
 
@@ -168,7 +167,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         try:
             graph_retrieval_logger.info("GraphRetrievalSystem\nPreparing ontology...")
             latest_onto = (
-                self.onto_storage.read_documents({"is_latest": True})[0].get(
+                self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).read_documents({"is_latest": True})[0].get(
                     "ontology", {}
                 )
                 or {}

@@ -44,14 +44,15 @@ class PineconeStorage:
             pinecone_logger.error(f"Could not connect to Pinecone: {str(e)}")
             raise
 
+    import asyncio
+
     async def upsert_vectors(
-        self, items: list[dict[str, Any]], namespace: str = ""
+        self, items: dict[str, Any] | list[dict[str, Any]], namespace: str = ""
     ) -> None:
-        """
-        Asynchronously embed multiple texts and upsert them to Pinecone using a single default namespace.
-        Each item must have: 'id', 'name', and optionally 'metadata'.
-        """
         pinecone_logger.info("Starting vector creation process (no namespace).")
+
+        if isinstance(items, dict):
+            items = [items]
 
         missing_fields = [
             item for item in items if not all(k in item for k in ("id", "name"))
@@ -84,7 +85,9 @@ class PineconeStorage:
             ]
 
             pinecone_logger.info(f"Upserting {len(vectors)} vectors to Pinecone...")
-            self.index.upsert(vectors=vectors, namespace=namespace)
+            await asyncio.to_thread(
+                self.index.upsert, vectors=vectors, namespace=namespace
+            )
 
             pinecone_logger.info(
                 f"Successfully created {len(items)} vectors in Pinecone (no namespace)."
@@ -149,7 +152,8 @@ class PineconeStorage:
     ) -> None:
         try:
             embedding = await self._embed_text(new_text)
-            self.index.upsert(
+            await asyncio.to_thread(
+                self.index.upsert,
                 vectors=[
                     {
                         "id": id,
@@ -157,15 +161,15 @@ class PineconeStorage:
                         "values": embedding,
                         "metadata": new_metadata or {},
                     }
-                ]
+                ],
             )
         except Exception as e:
             pinecone_logger.error(f"Error while updating vector: {e}")
             raise
 
-    def delete_vector(self, id: str) -> None:
+    async def delete_vector(self, id: str, namespace: str = "") -> None:
         try:
-            self.index.delete(ids=[id])
+            await asyncio.to_thread(self.index.delete, ids=[id], namespace=namespace)
         except Exception as e:
             pinecone_logger.error(f"Error while deleting: {e}")
             raise
