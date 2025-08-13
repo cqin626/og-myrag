@@ -152,10 +152,21 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
 
         try:
             self.ontology_config=ontology_config
+            self.entity_vector_config=entity_vector_config
+            
             self.mongo_storage = MongoDBStorage(mongo_client)
-
-            self.entity_vector_storage = PineconeStorage(**entity_vector_config)
-
+            self.pinecone_storage = PineconeStorage(
+                pinecone_api_key=entity_vector_config["pinecone_api_key"],
+                openai_api_key=entity_vector_config["openai_api_key"],
+            )
+            self.pinecone_storage.create_index_if_not_exists(
+                index_name=entity_vector_config["index_name"],
+                dimension=entity_vector_config["pinecone_dimensions"],
+                metric=entity_vector_config["pinecone_metric"],
+                cloud=entity_vector_config["pinecone_cloud"],
+                region=entity_vector_config["pinecone_environment"],
+            )
+            
             self.graph_storage = AsyncNeo4jStorage(**graphdb_config)
 
         except Exception as e:
@@ -274,7 +285,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
     async def get_text_to_cypher_agent_response(
         self, query: str, potential_entities: list, note: str, ontology: dict
     ):
-        validated_entities = await self.entity_vector_storage.get_similar_results(
+        validated_entities = await self.pinecone_storage.get_index(self.entity_vector_config["index_name"]).get_similar_results(
             query_texts=potential_entities,
             top_k=20,
         )

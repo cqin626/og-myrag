@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
-
+import json
 from collections import defaultdict
 from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
@@ -36,8 +36,8 @@ from .graph_construction_util import (
     get_formatted_entity_for_graphdb,
     get_formatted_relationship_for_graphdb,
     get_simplified_similar_entities_list,
-    get_formatted_entity_cache_for_db,
-    get_formatted_entity_cache_for_vectordb,
+    # get_formatted_entity_cache_for_db,
+    # get_formatted_entity_cache_for_vectordb,
     get_formatted_entities_and_relationships_for_db,
 )
 
@@ -123,13 +123,29 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             self.entity_config = entity_config
             self.relationship_config = relationship_config
             self.entity_cache_config = entity_cache_config
+            self.entity_vector_config = entity_vector_config
+            self.entity_cache_vector_config = entity_cache_vector_config
 
             self.async_mongo_storage = AsyncMongoDBStorage(async_mongo_client)
 
-            self.entity_vector_storage = PineconeStorage(**entity_vector_config)
-
-            self.entity_cache_vector_storage = PineconeStorage(
-                **entity_cache_vector_config
+            # Both indices use the same OpenAI API Key and PineconeAPI Key at the current momment
+            self.pinecone_storage = PineconeStorage(
+                pinecone_api_key=entity_vector_config["pinecone_api_key"],
+                openai_api_key=entity_vector_config["openai_api_key"],
+            )
+            self.pinecone_storage.create_index_if_not_exists(
+                index_name=entity_vector_config["index_name"],
+                dimension=entity_vector_config["pinecone_dimensions"],
+                metric=entity_vector_config["pinecone_metric"],
+                cloud=entity_vector_config["pinecone_cloud"],
+                region=entity_vector_config["pinecone_environment"],
+            )
+            self.pinecone_storage.create_index_if_not_exists(
+                index_name=entity_cache_vector_config["index_name"],
+                dimension=entity_cache_vector_config["pinecone_dimensions"],
+                metric=entity_cache_vector_config["pinecone_metric"],
+                cloud=entity_cache_vector_config["pinecone_cloud"],
+                region=entity_cache_vector_config["pinecone_environment"],
             )
 
             self.graph_storage = Neo4jStorage(**graphdb_config)
@@ -349,9 +365,13 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 processed_result = get_entities_relationships_with_updated_ids(
                     get_clean_json(result)
                 )
-                
-                combined_extraction_results["entities"].extend(processed_result["entities"])
-                combined_extraction_results["relationships"].extend(processed_result["relationships"])
+
+                combined_extraction_results["entities"].extend(
+                    processed_result["entities"]
+                )
+                combined_extraction_results["relationships"].extend(
+                    processed_result["relationships"]
+                )
 
             graph_construction_logger.info(
                 f"EntityRelatonshipExtractionAgent\nEntities and relationships extracted for {source_text_details.get('name')}:\n{get_formatted_entities_and_relationships(combined_extraction_results)}"
@@ -413,6 +433,73 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
                 )
 
+    async def deduplicate_entities(
+        self,
+        from_company: str,
+        num_of_entities_per_batch: int,
+        cache_size: int,
+        similarity_threshold: float,
+    ):
+        # unchecked_entities = await self.entity_storage.read_documents(
+        #     {"deduplication_info.check_duplicated": False}, limit=10
+        # )
+
+        # for entity in unchecked_entities:
+
+        #     simplified_similar_results = (
+        #         get_formatted_similar_entities_for_deduplication(
+        #             get_simplified_similar_entities_list(similar_results)
+        #         )
+        #     )
+
+        #     graph_construction_logger.info(
+        #         f"GraphConstructionSystem\nTesting deduplication for entity {str(entity.get('_id',''))}：\n{simplified_similar_results} "
+        #     )
+        # deduplication_tasks = []
+
+        # entities = await self.entity_cache_vector_storage.get_similar_results(
+        #     query_texts=entity_name, namespace=namespace, top_k=1
+        # )
+        entities_to_deduplicate = await self._get_entities_to_deduplicate(
+            from_company=from_company,
+            num_of_entities_to_fetch=num_of_entities_per_batch,
+        )
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nEntities to deduplicate:\n{json.dumps(entities_to_deduplicate,indent=4,default=str)}"
+        )
+
+    async def deduplicate_entity(
+        self, entity: dict, from_company: str, similarity_threshold: float
+    ):
+        # similar_result = (
+        #     await self.async_mongo_storage.get_database(
+        #         self.entity_cache_config["database_name"]
+        #     )
+        #     .get_collection(self.entity_cache_config["collection_name"])
+        #     .get_similar_results(
+        #         query_texts=entity.get("name", ""),
+        #         top_k=1,
+        #         query_filter={"entity_type": {"$eq": entity.get("type", "")}},
+        #         score_threshold=similarity_threshold,
+        #     )
+        # )
+        pass
+
+    async def _get_entities_to_deduplicate(
+        self, from_company: str, num_of_entities_to_fetch: int
+    ) -> list[dict]:
+        return await (
+            self.async_mongo_storage.get_database(self.entity_config["database_name"])
+            .get_collection(self.entity_config["collection_name"])
+            .read_documents(
+                query={
+                    "status": "TO_BE_DEDUPLICATED",
+                    "originated_from": {"$in": [from_company]},
+                },
+                limit=num_of_entities_to_fetch,
+            )
+        )
+
     async def insert_entities_into_pinecone(self):
         try:
             formatted_entities = []
@@ -433,7 +520,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             for entity in entities:
                 formatted_entities.append(get_formatted_entity_for_vectordb(entity))
 
-            await self.entity_vector_storage.upsert_vectors(formatted_entities)
+            await self.pinecone_storage.get_index(self.entity_vector_config["index_name"]).upsert_vectors(formatted_entities)
 
             update_tasks = []
 
@@ -641,36 +728,6 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 f"Failed to update relationship(s) with 'inserted_into_graphdb_at' field: {e}"
             )
 
-    async def deduplicate_entities(self, entity_ids: list[ObjectId], namespace: str):
-        # unchecked_entities = await self.entity_storage.read_documents(
-        #     {"deduplication_info.check_duplicated": False}, limit=10
-        # )
-
-        # for entity in unchecked_entities:
-        #     similar_results = await self.entity_vector_storage.get_similar_results(
-        #         query_texts=entity.get("name", ""),
-        #         top_k=top_k,
-        #         query_filter={"entity_type": {"$eq": entity.get("type", "")}},
-        #         score_threshold=score_threshold,
-        #     )
-
-        #     simplified_similar_results = (
-        #         get_formatted_similar_entities_for_deduplication(
-        #             get_simplified_similar_entities_list(similar_results)
-        #         )
-        #     )
-
-        #     graph_construction_logger.info(
-        #         f"GraphConstructionSystem\nTesting deduplication for entity {str(entity.get('_id',''))}：\n{simplified_similar_results} "
-        #     )
-        # deduplication_tasks = []
-
-        # entities = await self.entity_cache_vector_storage.get_similar_results(
-        #     query_texts=entity_name, namespace=namespace, top_k=1
-        # )
-        # graph_construction_logger.info(f"GraphConstructionSystem\n{entities}")
-        pass
-
     async def get_formatted_similar_entities_from_pinecone(
         self,
         query_texts: str | list[str],
@@ -678,7 +735,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         query_filter: dict | None = None,
         score_threshold: float = 0.0,
     ):
-        similar_entities = await self.entity_vector_storage.get_similar_results(
+        similar_entities = await self.pinecone_storage.get_index(self.entity_vector_config["index_name"]).get_similar_results(
             query_texts=query_texts,
             top_k=top_k,
             query_filter=query_filter,

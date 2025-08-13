@@ -19,7 +19,6 @@ class PineconeStorageConfig(TypedDict):
     pinecone_dimensions: str
     openai_api_key: str
 
-
 class Neo4jStorageConfig(TypedDict):
     uri: str
     user: str
