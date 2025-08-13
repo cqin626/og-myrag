@@ -93,9 +93,36 @@ def get_entities_relationships_with_updated_ids(data: dict):
     return data
 
 
+def get_formatted_entity_cache_for_db(
+    entity: dict, timezone: str = "Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+    return {
+        "name": entity.get("name"),
+        "type": entity.get("type"),
+        "description": entity.get("description"),
+        "last_modified_at": get_current_datetime(timezone),
+    }
+
+
+def get_formatted_entities_deduplication_pending_task(
+    from_company: str,
+    payload: dict[str, Any],
+    timezone: str = "Asia/Kuala_Lumpur",
+) -> dict[str, Any]:
+    return {
+        "from_company": from_company,
+        "status": "PENDING",
+        "payload": payload,
+        "created_at": get_current_datetime(timezone),
+    }
+
+
 def get_formatted_entity_for_vectordb(
     entity: dict[str, Any], timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
+    """
+    Used for both vector entities cache and actual vector entities storage
+    """
     return {
         "id": str(entity["_id"]),
         "name": entity["name"],
@@ -103,7 +130,6 @@ def get_formatted_entity_for_vectordb(
             "entity_name": entity["name"],
             "entity_type": entity["type"],
             "description": entity["description"],
-            "last_modified_at": get_formatted_current_datetime(timezone),
         },
     }
 
@@ -118,22 +144,6 @@ def get_formatted_entity_for_vectordb(
 #         "entity_id": entity.get("_id"),
 #         "description": entity.get("description", ""),
 #         "last_accessed_at": get_current_datetime(timezone),
-#     }
-
-
-# def get_formatted_entity_cache_for_vectordb(
-#     id: ObjectId, entity: dict, timezone="Asia/Kuala_Lumpur"
-# ) -> dict:
-#     return {
-#         "id": str(id),
-#         "name": entity["name"],
-#         "metadata": {
-#             "entity_id": entity.get("_id"),
-#             "entity_name": entity["name"],
-#             "entity_type": entity["type"],
-#             "description": entity["description"],
-#             "last_accessed_at": get_current_datetime(timezone),
-#         },
 #     }
 
 

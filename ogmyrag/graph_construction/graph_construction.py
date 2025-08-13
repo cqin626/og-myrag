@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import asyncio
 import json
+import copy
 from collections import defaultdict
 from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
@@ -19,6 +20,7 @@ from ..util import (
     get_formatted_similar_entities,
     get_sliced_ontology,
     get_clean_json,
+    get_current_datetime,
 )
 from ..storage import AsyncMongoDBStorage, PineconeStorage, Neo4jStorage
 
@@ -36,8 +38,8 @@ from .graph_construction_util import (
     get_formatted_entity_for_graphdb,
     get_formatted_relationship_for_graphdb,
     get_simplified_similar_entities_list,
-    # get_formatted_entity_cache_for_db,
-    # get_formatted_entity_cache_for_vectordb,
+    get_formatted_entities_deduplication_pending_task,
+    get_formatted_entity_cache_for_db,
     get_formatted_entities_and_relationships_for_db,
 )
 
@@ -105,6 +107,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         entity_config: MongoStorageConfig,
         relationship_config: MongoStorageConfig,
         entity_cache_config: MongoStorageConfig,
+        entities_deduplication_pending_tasks_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         entity_cache_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
@@ -125,7 +128,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             self.entity_cache_config = entity_cache_config
             self.entity_vector_config = entity_vector_config
             self.entity_cache_vector_config = entity_cache_vector_config
-
+            self.entities_deduplication_pending_tasks_config = (
+                entities_deduplication_pending_tasks_config
+            )
             self.async_mongo_storage = AsyncMongoDBStorage(async_mongo_client)
 
             # Both indices use the same OpenAI API Key and PineconeAPI Key at the current momment
@@ -439,51 +444,99 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         num_of_entities_per_batch: int,
         cache_size: int,
         similarity_threshold: float,
+        num_of_relationships_to_fetch: int = 5
     ):
-        # unchecked_entities = await self.entity_storage.read_documents(
-        #     {"deduplication_info.check_duplicated": False}, limit=10
-        # )
-
-        # for entity in unchecked_entities:
-
-        #     simplified_similar_results = (
-        #         get_formatted_similar_entities_for_deduplication(
-        #             get_simplified_similar_entities_list(similar_results)
-        #         )
-        #     )
-
-        #     graph_construction_logger.info(
-        #         f"GraphConstructionSystem\nTesting deduplication for entity {str(entity.get('_id',''))}：\n{simplified_similar_results} "
-        #     )
-        # deduplication_tasks = []
-
-        # entities = await self.entity_cache_vector_storage.get_similar_results(
-        #     query_texts=entity_name, namespace=namespace, top_k=1
-        # )
+        # Step 1 : Fetch unparsed entities
         entities_to_deduplicate = await self._get_entities_to_deduplicate(
             from_company=from_company,
             num_of_entities_to_fetch=num_of_entities_per_batch,
         )
-        graph_construction_logger.info(
+        
+        graph_construction_logger.debug(
             f"GraphConstructionSystem\nEntities to deduplicate:\n{json.dumps(entities_to_deduplicate,indent=4,default=str)}"
         )
 
+        # Step 2 : Deduplicate entities concurrently
+        deduplication_tasks = [
+            self.deduplicate_entity(
+                entity=entity,
+                from_company=from_company,
+                similarity_threshold=similarity_threshold,
+                num_of_relationships_to_fetch=num_of_relationships_to_fetch
+            )
+            for entity in entities_to_deduplicate
+        ]
+
+        await asyncio.gather(*deduplication_tasks)
+
+        # Step 3 : Upsert entities in cache into Pinecone
+        await self.resolve_entities_deduplication_pending_tasks(
+            from_company=from_company,
+            entities_to_resolve_per_batch=num_of_entities_per_batch,
+        )
+
+        
+
     async def deduplicate_entity(
-        self, entity: dict, from_company: str, similarity_threshold: float
+        self,
+        entity: dict,
+        from_company: str,
+        similarity_threshold: float,
+        num_of_relationships_to_fetch: int,
     ):
-        # similar_result = (
-        #     await self.async_mongo_storage.get_database(
-        #         self.entity_cache_config["database_name"]
-        #     )
-        #     .get_collection(self.entity_cache_config["collection_name"])
-        #     .get_similar_results(
-        #         query_texts=entity.get("name", ""),
-        #         top_k=1,
-        #         query_filter={"entity_type": {"$eq": entity.get("type", "")}},
-        #         score_threshold=similarity_threshold,
-        #     )
-        # )
-        pass
+        # Check if there are any similar entities in the vector cache storage
+        raw_results = await self.pinecone_storage.get_index(
+            self.entity_cache_vector_config["index_name"]
+        ).get_similar_results(
+            query_texts=entity.get("name", ""),
+            top_k=1,
+            query_filter={"entity_type": {"$eq": entity.get("type", "")}},
+            score_threshold=similarity_threshold,
+            namespace=from_company,
+        )
+
+        graph_construction_logger.debug(
+            f"GraphConstructionSystem\nSimilar results fetched in deduplicate_entity(): {raw_results}"
+        )
+
+        similar_results = raw_results[0]["matches"]
+
+        if similar_results:
+            candidate_entity = similar_results[0]
+            relationships_involved_by_primary_entity = (
+                await (
+                    self._get_relationships_involved_by_entity(
+                        entity_id=entity["_id"],
+                        from_company=from_company,
+                        num_of_relationships_to_fetch=num_of_relationships_to_fetch,
+                    )
+                )
+            )
+            relationships_involved_by_candidate_entity = (
+                await (
+                    self._get_relationships_involved_by_entity(
+                        entity_id=ObjectId(
+                            candidate_entity["id"]
+                        ),  # Note that the result returned is a Pinecone response
+                        from_company=from_company,
+                        num_of_relationships_to_fetch=num_of_relationships_to_fetch,
+                    )
+                )
+            )
+            # Need to let LLM to decide whether to merge
+            graph_construction_logger.debug(
+                f"GraphConstructionSystem\nRelationships involved by primary entity:\n{json.dumps(relationships_involved_by_primary_entity,indent=4,default=str)}"
+            )
+            graph_construction_logger.debug(
+                f"GraphConstructionSystem\nRelationships involved by candidate entity:\n{json.dumps(relationships_involved_by_candidate_entity,indent=4,default=str)}"
+            )
+        else:
+            await self._insert_entity_into_cache(
+                entity=entity, from_company=from_company
+            )
+            graph_construction_logger.debug(
+                f"GraphConstructionSystem\nSuccessfully inserted entity with id: {str(entity['_id'])}"
+            )
 
     async def _get_entities_to_deduplicate(
         self, from_company: str, num_of_entities_to_fetch: int
@@ -498,6 +551,140 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 },
                 limit=num_of_entities_to_fetch,
             )
+        )
+
+    async def get_relationships_involved_by_entity(
+        self,
+        entity_id: ObjectId,
+        from_company: str,
+        num_of_relationships_to_fetch: int = 5,
+    ):
+        # For debugging purpose
+        return await self._get_relationships_involved_by_entity(
+            entity_id, from_company, num_of_relationships_to_fetch
+        )
+
+    async def _get_relationships_involved_by_entity(
+        self,
+        entity_id: ObjectId,
+        from_company: str,
+        num_of_relationships_to_fetch: int = 5,
+    ):
+        return (
+            await self.async_mongo_storage.get_database(
+                self.relationship_config["database_name"]
+            )
+            .get_collection(self.relationship_config["collection_name"])
+            .read_documents(
+                query={
+                    "status": "TO_BE_DEDUPLICATED",
+                    "originated_from": {"$in": [from_company]},
+                    "$or": [
+                        {"source_id": entity_id},
+                        {"target_id": entity_id},
+                    ],
+                },
+                limit=num_of_relationships_to_fetch,
+            )
+        )
+
+    async def _insert_entity_into_cache(self, entity: dict, from_company: str):
+        async with self.async_mongo_storage.with_transaction() as session:
+            # Step 1 : Insert the entity into mongodb cache storage
+            formatted_entity_for_mongo_cache = get_formatted_entity_cache_for_db(
+                entity=entity
+            )
+            formatted_entity_for_mongo_cache["_id"] = entity["_id"]
+            await self.async_mongo_storage.get_database(
+                self.entity_cache_config["database_name"]
+            ).get_collection(from_company).create_document(
+                data=formatted_entity_for_mongo_cache,
+                session=session,
+            )
+
+            # Step 2 : Update the status of the inserted entity in permanent entities storage
+            await self.async_mongo_storage.get_database(
+                self.entity_config["database_name"]
+            ).get_collection(self.entity_config["collection_name"]).update_document(
+                query={"_id": entity["_id"]},
+                new_values={
+                    "status": "TO_BE_UPSERTED_INTO_VECTOR_DB",
+                    "last_modified_at": get_current_datetime(),
+                },
+                session=session,
+            )
+
+            # Step 3 : Add a pending task to insert the entity into vector db
+            await self.async_mongo_storage.get_database(
+                self.entities_deduplication_pending_tasks_config["database_name"]
+            ).get_collection(
+                self.entities_deduplication_pending_tasks_config["collection_name"]
+            ).create_document(
+                data=get_formatted_entities_deduplication_pending_task(
+                    from_company=from_company,
+                    payload={
+                        "_id": entity["_id"],
+                        "name": entity["name"],
+                        "type": entity["type"],
+                        "description": entity["description"],
+                    },
+                ),
+                session=session,
+            )
+
+    async def resolve_entities_deduplication_pending_tasks(
+        self, from_company: str, entities_to_resolve_per_batch: int = 200
+    ):
+        """
+        Insert entities for caching in mongodb into vectordb (idempotent).
+        Called after every batch of deduplication OR sudden breakdown that leaves to inconsistent state in Pinecone
+        """
+        # Step 1 : Fetch the entities that are not yet inserted into Pinecone
+        pending_tasks = await (
+            self.async_mongo_storage.get_database(
+                self.entities_deduplication_pending_tasks_config["database_name"]
+            )
+            .get_collection(
+                self.entities_deduplication_pending_tasks_config["collection_name"]
+            )
+            .read_documents(
+                query={"status": "PENDING", "from_company": from_company},
+                limit=entities_to_resolve_per_batch,
+            )
+        )
+
+        formatted_entities_to_insert = []
+        update_tasks = []
+
+        for task in pending_tasks:
+            entity = task["payload"]
+
+            formatted_entities_to_insert.append(
+                get_formatted_entity_for_vectordb(entity)
+            )
+
+            update_tasks.append(
+                self.async_mongo_storage.get_database(
+                    self.entities_deduplication_pending_tasks_config["database_name"]
+                )
+                .get_collection(
+                    self.entities_deduplication_pending_tasks_config["collection_name"]
+                )
+                .update_document(
+                    query={"_id": task["_id"]}, new_values={"status": "COMPLETED"}
+                )
+            )
+
+        # Step 2 : Upsert the entities into Pinecone
+        await self.pinecone_storage.get_index(
+            self.entity_cache_vector_config["index_name"]
+        ).upsert_vectors(items=formatted_entities_to_insert, namespace=from_company)
+
+        # Step 3 : Update the status of pending task to 'COMPLETED'
+        await asyncio.gather(*update_tasks)
+
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nSuccessfully inserted {len(pending_tasks)} into Pinecone for caching."
         )
 
     async def insert_entities_into_pinecone(self):
@@ -520,7 +707,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             for entity in entities:
                 formatted_entities.append(get_formatted_entity_for_vectordb(entity))
 
-            await self.pinecone_storage.get_index(self.entity_vector_config["index_name"]).upsert_vectors(formatted_entities)
+            await self.pinecone_storage.get_index(
+                self.entity_vector_config["index_name"]
+            ).upsert_vectors(formatted_entities)
 
             update_tasks = []
 
@@ -735,7 +924,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         query_filter: dict | None = None,
         score_threshold: float = 0.0,
     ):
-        similar_entities = await self.pinecone_storage.get_index(self.entity_vector_config["index_name"]).get_similar_results(
+        similar_entities = await self.pinecone_storage.get_index(
+            self.entity_vector_config["index_name"]
+        ).get_similar_results(
             query_texts=query_texts,
             top_k=top_k,
             query_filter=query_filter,

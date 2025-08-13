@@ -5,7 +5,7 @@ from bson.objectid import ObjectId
 from pymongo.errors import (
     PyMongoError,
 )
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateOne
 from pymongo.database import Database
 from pymongo.collection import Collection
 from pymongo.client_session import ClientSession
@@ -15,6 +15,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorDatabase,
     AsyncIOMotorClientSession,
 )
+from pymongo.results import UpdateResult, BulkWriteResult
 from .storage_util import DatabaseError
 
 logger = logging.getLogger("mongodb")
@@ -96,7 +97,7 @@ class MongoDBStorage:
         """Returns a handler for a specific database."""
         return DatabaseHandler(self.client[db_name])
 
-    @contextmanager 
+    @contextmanager
     def with_transaction(self):
         """A context manager to handle a transaction, initiated from the client."""
         with self.client.start_session() as session:
@@ -167,6 +168,43 @@ class AsyncCollectionHandler:
         except PyMongoError as e:
             logger.error(f"Error updating async document: {e}")
             raise DatabaseError("Update document failed") from e
+
+    async def upsert_documents(
+        self,
+        operations: list[dict[str, dict]] | dict[str, dict],
+        session: AsyncIOMotorClientSession | None = None,
+    ) -> BulkWriteResult:
+        """
+        Performs multiple upsert operations in a single bulk request.
+
+        Args:
+            - operations (list or dict) : A list of dictionaries, where each dict has a "query" and "data" key. Example: [{"query": {"name": "A"}, "data": {"value": 1}}, {"query": {"name": "B"}, "data": {"value": 2}}]. Or, a single dictionary with "query" and "data" keys. Example: {"query": {"name": "C"}, "data": {"value": 3}}
+            - session (optional) : The client session for transactions.
+
+        Returns:
+            BulkWriteResult: The result object from the bulk operation.
+        """
+        if isinstance(operations, dict):
+            operations = [operations]
+
+        if not operations:
+            return BulkWriteResult({}, True)  # Return empty but successful result
+
+        try:
+            bulk_requests = [
+                UpdateOne(op["query"], {"$set": op["data"]}, upsert=True)
+                for op in operations
+            ]
+            result = await self.collection.bulk_write(bulk_requests, session=session)
+            logger.info(
+                f"Bulk upsert completed. "
+                f"Upserted: {result.upserted_count}, "
+                f"Modified: {result.modified_count}."
+            )
+            return result
+        except (PyMongoError, KeyError) as e:
+            logger.error(f"Error during bulk upsert operation: {e}")
+            raise DatabaseError("Bulk upsert documents failed") from e
 
     async def delete_document(
         self, query: dict, session: AsyncIOMotorClientSession | None = None
