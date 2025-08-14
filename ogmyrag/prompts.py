@@ -1662,3 +1662,70 @@ PROMPT[
             Return a JSON array of strings in the exact order they appear.  
             Do **not** include page numbers or any extra text—only the JSON array of main section titles.
         """
+
+
+PROMPT[
+    "SECTION PROMPT FRESH"
+] = """
+      You are extracting authoritative content from one or more PDF filings.
+
+      SECTION: "{section}"
+
+      GOAL
+      Extract ONLY the content under the exact heading above and return it as STANDARDIZED MARKDOWN that is easy to chunk for semantic search.
+
+      STRICT RULES
+      1) Fidelity: Preserve 100% of the meaning. Do NOT summarize or omit content. Do NOT add commentary.
+      2) Scope: Include only text that is truly under this heading/subheadings (ignore headers/footers, page numbers in margins).
+      3) Pagination: Add page references inline as “(p. X)” where applicable.
+      4) Headings: Use ATX Markdown headings:
+         - `# {section}` as the first line
+         - Use `##` for major subheads and `###` for nested subheads you observe in the PDF.
+      5) Lists:
+         - Use `- ` for bullets.
+         - Use `1.` for numbered lists.
+         - Preserve roman enumerations like `(i)`, `(ii)`… at the start of list items when present.
+         - One list item per line (no wrapping into multiple lines).
+      6) Tables:
+         - For each table under this section, first write a label line:
+         `Table: <Exact Title if present or short descriptor> (p. X)`
+         - Then output a **GitHub Markdown table**:
+         `| Col A | Col B | ... |` + divider line + rows. Do not merge cells; repeat labels as needed.
+         - If the table spans pages, include both page numbers, e.g., `(p. 121–122)`.
+      7) Figures/Diagrams:
+         - Label like:
+         `Figure: <Exact Title/description> (p. X)`
+         - Follow with a single paragraph **describing** the figure in plain text (no image).
+      8) Paragraphs: Separate paragraphs with a single blank line. No hard line wraps inside a paragraph.
+      9) Numbers: Keep numeric formats (commas, decimals, signs, currencies) exactly as shown. Do NOT normalize units or round.
+      10) Output: **Markdown only**. Do NOT use code fences (no ```).
+      11) No fabrication: If a required element (e.g., a table title) is missing, leave the label generic (e.g., `Table: [no title] (p. X)`) but do not invent content.
+
+      OPTIONAL STRUCTURE (use when present in the source)
+      - If the section has a short preface or bulletable outcomes, add a `## Key Points` block before the main body:
+      ## Key Points
+      - <point 1>
+      - <point 2>
+      (Keep it strictly sourced; do not summarize beyond rephrasing headings into bullet stubs.)
+
+      RETURN FORMAT (example skeleton — adapt to the section content):
+      # {section}
+
+      ## Key Points
+      - …
+
+      ## <Subheading A> (p. X)
+      <paragraphs>
+
+      Table: <Title> (p. X)
+      | Column 1 | Column 2 |
+      | --- | --- |
+      | … | … |
+
+      Figure: <Title> (p. X)
+      <one-paragraph description>
+
+      ### <Nested Subheading> (p. X)
+      - (i) …
+      - (ii) …
+"""

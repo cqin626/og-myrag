@@ -57,129 +57,7 @@ class ReportRetrievalManager:
         self.openai_key    = openai_api_key
         self.dry_run       = dry_run
 
-    def parse_store(
-        self,
-        company: str,
-        report_type: ReportType,
-        year: int,
-        prompt: str = PROMPT["REPORTS PARSING"],
-        download_local: bool = True,
-        forced_process: bool = False
-    ) -> Optional[str]:
-        """
-        Synchronous wrapper around the async parse_and_store.
-        """
-        return run_async(self.parse_and_store(company, report_type, year, prompt, download_local, forced_process))
-
-    async def parse_and_store(
-            self,
-            company: str,
-            report_type: ReportType,
-            year: int,
-            prompt: str = PROMPT["REPORTS PARSING"],
-            download_local: bool = True,
-            forced_process: bool = False
-    ) -> None:
-        """
-        1) Fetch raw PDFs for company/year
-        2) Upload to GenAI + run summarization prompt
-        3) Save the Markdown summary to GridFS and metadata
-        4) Mark raw PDF docs processed=True + summary_path/file_id
-        5) Chunk & embed the summary into Pinecone
-        """
-        company = company.replace(" ", "_").upper().strip()
-
-        # Step 1: Fetch raw PDFs
-        report_collection = report_type.collection
-        process_collection = f"{report_type.name}_processed"
-
-        # Check processed collection first
-        self.storage.use_collection(process_collection)
-        summary_fn = f"{company}_{report_type.name}_{year}_summary.md"
-        processed_md = await self.storage.get_processed_summary(summary_fn)
-
-        # Fetch raw pdfs
-        self.storage.use_collection(report_collection)
-        raw_docs = await self.storage.get_raw_reports(company, year)
-        if not raw_docs:
-            retrieval_logger.info(f"No raw reports found for {company} {report_type.keyword} {year}")
-            raise ValueError(f"No raw reports found for {company} {report_type.keyword} {year}")
-        
-        amended_docs = [d for d in raw_docs if d.get("is_amended")]
-        original_docs = [d for d in raw_docs if not d.get("is_amended")]
-
-        # if processed summary is existed
-        if processed_md and not forced_process:
-            # if no amendments, mark all raw as processed and return existing summary
-            if not amended_docs:
-                self.storage.use_collection(report_collection)
-                retrieval_logger.info("Processed report found.")
-                self.storage.update_many(
-                    {"company": company, "year": str(year)},
-                    {"processed": True, "summary_path": summary_fn,}
-                )
-
-                # download to local
-                if download_local:
-                    self.download_to_local(company, summary_fn, processed_md)
-
-                return
-            
-            # re-process only the amended PDFs
-            else:
-                retrieval_logger.info("Performing Amend Branch...")
-                base_md = await self.storage.get_processed_summary(summary_fn)
-                to_upload = amended_docs
-                mode = "amend"
-
-        else:
-            if original_docs and amended_docs:
-                # phase 1: process originals
-                retrieval_logger.info("Performing Phase 1: Fresh Branch...")
-                base_md = await self.generate_response_with_docs(original_docs, prompt)
-                retrieval_logger.info("Performing Phase 2: Amend Branch...")
-                to_upload = amended_docs
-                mode = "amend"
-            else:
-                # no processed summary yet, fresh process of all raw PDFs
-                retrieval_logger.info("Performing Fresh Branch...")
-                to_upload = raw_docs
-                mode = "fresh"
-
-        
-        if mode == "amend":
-            full_prompt = (
-                "Here is the existing summary:\n\n"
-                    + base_md
-                    + "\n\nNow update it to incorporate these amendments:\n\n"
-                    + prompt
-            )
-        else:
-            full_prompt = prompt
-
-        # upload PDFs and process with genai
-        md = await self.generate_response_with_docs(to_upload, full_prompt)
-        retrieval_logger.info("Finished processing.")
-
-        # save summary into processed collection and mark raw docs
-        await self.storage.save_processed_report(
-            company, year, report_type, summary_fn, md
-        )
-
-        # chunk and replce old vectors in Pinecone
-        chunks = chunk_markdown(md)
-        if not self.dry_run:
-            self.embedder.upsert_chunks(chunks, company, year)
-
-        else:
-            retrieval_logger.info("Dry run enabled, skipping chunk upsert.")
-
-        # download to local
-        if download_local:
-            self.download_to_local(company, summary_fn, md)
-
-
-
+    
     async def parse_report(
             self,
             company: str,
@@ -189,10 +67,11 @@ class ReportRetrievalManager:
             download_local: bool = True,
             forced_process: bool = False
     ) -> None:
+        year_tag = f"_{year}" if year and year != "N/A" else ""
         year = str(year) if year is not None else "N/A"
         company = company.replace(" ", "_").upper().strip()
 
-        processed_location = f"{company}_{report_type.name}"
+        processed_location = f"{company}_{report_type.name}{year_tag}"
         report_collection = report_type.collection
         disclosure_collection = "company_disclosures"
         
@@ -230,13 +109,75 @@ class ReportRetrievalManager:
         
 
     
+    async def parse_annual(
+            self,
+            company: str,
+            year: int,
+            report_type: ReportType,
+            docs: List[Mapping[str, Any]],
+            mode: str
+    ) -> str:
+        """
+        Annual report parsing with mode-aware behavior:
+        - fresh: extract definitions, TOC, and sections from PDFs (year-scoped)
+        - amend: update existing sections using amended PDFs; keep existing definitions
+        - skip: load previously stored content; no uploads or generations
+        """
 
+        if mode == "skip":
+            retrieval_logger.info("Skipping processing, using existing content.")
+            self.storage.use_collection("company_disclosures")
+            return await self.storage.extract_combine_processed_content(company, year, report_type)
 
+        # upload PDFs
+        uploaded = await self.upload_pdfs(docs)
 
+        if mode == "fresh":
+            retrieval_logger.info("Fresh processing mode, extracting definitions and TOC.")
 
+            # Definitions & TOC extraction
+            await self.extract_definitions(company, report_type, docs, uploaded, year=year)
+            sections = await self.extract_table_of_contents(company, report_type, docs, uploaded, year=year)
 
+            # Section extraction
+            contents = await self.extract_sections(company, report_type, docs, uploaded, sections, mode, year=year)
 
+            # Combine all sections into a single Markdown string
+            md = [f"# {company} {report_type.name} {year}\n"]
+            for section, text in contents.items():
+                md.append(text + "\n")
 
+            return "\n".join(md)
+        
+        if mode == "amend":
+            retrieval_logger.info("Amend processing mode, updating existing sections.")
+
+            sections = await self.extract_table_of_contents(company, report_type, docs, uploaded, year=year)
+            contents = await self.extract_sections(company, report_type, docs, uploaded, sections, mode, year=year)
+
+            # Combine all sections into a single Markdown string
+            md = [f"# {company} {report_type.name} {year}\n"]
+            for section, text in contents.items():
+                md.append(text + "\n")
+
+            return "\n".join(md)
+        
+        # If we reach here, it means an unknown mode was provided
+        retrieval_logger.error("Unknown processing mode: %s - defaulting to fresh", mode)
+
+        # Definitions & TOC extraction
+        await self.extract_definitions(company, report_type, docs, uploaded, year=year)
+        sections = await self.extract_table_of_contents(company, report_type, docs, uploaded, year=year)
+
+        # Section extraction
+        contents = await self.extract_sections(company, report_type, docs, uploaded, sections, mode, year=year)
+
+        # Combine all sections into a single Markdown string
+        md = [f"# {company} {report_type.name} {year}\n"]
+        for section, text in contents.items():
+            md.append(text + "\n")
+
+        return "\n".join(md)
     
 
     
@@ -248,8 +189,54 @@ class ReportRetrievalManager:
             docs: List[Mapping[str, Any]],
             mode: str,
         ) -> str:
+        """
+        IPO parsing with different mode handling.
+        - fresh: extract definitions, TOC and sections from PDFs
+        - amend: update existing sections using amended PDFs, keep existing definitions
+        - skip: load previously processed content, no uploads and generations
+        """
+        if mode == "skip":
+            retrieval_logger.info("Skipping processing, using existing content.")
+            self.storage.use_collection("company_disclosures")
+            return await self.storage.extract_combine_processed_content(company, year, report_type)
+        
+    
         # upload PDFs
         uploaded = await self.upload_pdfs(docs)
+
+        if mode == "fresh":
+            retrieval_logger.info("Fresh processing mode, extracting definitions and TOC.")
+
+            # Definitions & TOC extraction
+            await self.extract_definitions(company, report_type, docs, uploaded)
+            sections = await self.extract_table_of_contents(company, report_type, docs, uploaded)
+
+            # Section extraction
+            contents = await self.extract_sections(company, report_type, docs, uploaded, sections, mode)
+
+            # Combine all sections into a single Markdown string
+            md = [f"# {company} {report_type.name}\n"]
+            for section, text in contents.items():
+                md.append(text + "\n")
+
+            return "\n".join(md)
+        
+        if mode == "amend":
+            retrieval_logger.info("Amend processing mode, updating existing sections.")
+
+            sections = await self.extract_table_of_contents(company, report_type, docs, uploaded)
+            contents = await self.extract_sections(company, report_type, docs, uploaded, sections, mode)
+
+            # Combine all sections into a single Markdown string
+            md = [f"# {company} {report_type.name}\n"]
+            for section, text in contents.items():
+                md.append(text + "\n")
+
+            return "\n".join(md)
+        
+
+        # If we reach here, it means an unknown mode was provided
+        retrieval_logger.error("Unknown processing mode: %s - defaulting to fresh", mode)
 
         # Definitions & TOC extraction
         await self.extract_definitions(company, report_type, docs, uploaded)
@@ -264,9 +251,7 @@ class ReportRetrievalManager:
             md.append(text + "\n")
 
         return "\n".join(md)
-
-        
-    
+   
 
     def determine_mode(
             self,
@@ -344,14 +329,19 @@ class ReportRetrievalManager:
             company: str,
             report_type: ReportType,
             docs: List[Mapping[str, Any]],
-            uploaded: List[Any]
+            uploaded: List[Any],
+            year: Optional[str] = None
     ) -> None:
-        key = f"{company}_{report_type.name}_WORD_DEFINITION"
+        year_tag = f"_{year}" if year and year != "N/A" else ""
+        key = f"{company}_{report_type.name}{year_tag}_WORD_DEFINITION"
         filter_query = {
             "name": key,
             "type": "CONSTRAINTS",
             "from_company": company
         }
+        if year and year != "N/A":
+            filter_query["year"] = str(year)
+
         self.storage.use_collection("constraints")
         if not await self.storage.check_exists(filter_query):
             # Extract Definitions
@@ -369,8 +359,10 @@ class ReportRetrievalManager:
                 "content": definition_text,
                 "published_at": docs[0]["announced_date"]
             }
+            if year and year != "N/A":
+                update_query["year"] = year
             
-            self.storage.update_many(filter_query, update_query)
+            #self.storage.update_many(filter_query, update_query)
             retrieval_logger.info("Saved constraints for %s", company)
 
             # Extract token usage
@@ -388,14 +380,18 @@ class ReportRetrievalManager:
             company: str,
             report_type: ReportType,
             docs: List[Mapping[str, Any]],
-            uploaded: List[Any]
+            uploaded: List[Any],
+            year: Optional[str] = None
     ) -> List[str]:
-        key = f"{company}_{report_type.name}_TOC"
+        year_tag = f"_{year}" if year and year != "N/A" else ""
+        key = f"{company}_{report_type.name}{year_tag}_TOC"
         filter_query = {
-            "name": f"{company}_{report_type.name}_TOC",
+            "name": key,
             "type": "TOC",
             "from_company": company
         }
+        if year and year != "N/A":
+            filter_query["year"] = year
 
         self.storage.use_collection("company_disclosures")
 
@@ -414,7 +410,10 @@ class ReportRetrievalManager:
                 "content": clean_markdown_response(toc_resp.text.strip()),
                 "published_at": docs[0]["announced_date"]
             }
-            self.storage.update_many(filter_query, update_query)
+            if year and year != "N/A":
+                update_query["year"] = year
+            
+            #self.storage.update_many(filter_query, update_query)
             retrieval_logger.info("Saved Table of Contents for %s", company)
 
             # Extract token usage
@@ -439,22 +438,37 @@ class ReportRetrievalManager:
             docs: List[Mapping[str, Any]],
             uploaded: List[Any],
             sections: List[str],
-            mode: str
+            mode: str,
+            year: Optional[str] = None
     ) -> Dict[str, str]:
         results: Dict[str, str] = {}
+
+        year_tag = f"_{year}" if year and year != "N/A" else ""
+        doc_type = "PROSPECTUS" if report_type.collection == "ipo_reports" else "ANNUAL_REPORT"
         
         for index, section in enumerate(sections, start = 1):
             self.storage.use_collection("company_disclosures")
             filter_query = {
-                "name": f"{company}_{report_type.name}_SECTION_{index}",
-                "type": "PROSPECTUS",
+                "name": f"{company}_{report_type.name}{year_tag}_SECTION_{index}",
+                "type": doc_type,
                 "from_company": company,
                 "section": section
             }
+            if year and year != "N/A":
+                filter_query["year"] = year
 
-            need_to_extract = mode == "fresh" or not await self.storage.check_exists(filter_query)
+            exists = await self.storage.check_exists(filter_query)
 
-            if mode == "amend" and await self.storage.check_exists(filter_query):
+            if mode == "fresh":
+                need_to_extract = True
+            elif mode == "amend":
+                need_to_extract = True
+            else:
+                need_to_extract = not exists
+
+            base = None
+
+            if mode == "amend" and exists:
                 base = await self.storage.retrieve_section(filter_query)
                 prompt_text = (
                     f"Here is the existing summary:\n{base}\n\n"
@@ -466,13 +480,9 @@ class ReportRetrievalManager:
                     "Return only the plain text of this section—no extra commentary."
                 )
             else:
-                prompt_text = (
-                    f"Section: \"{section}\"\n\n"
-                    "Extract only the content under this exact heading—preserve 100% of the meaning."
-                    "For any tables or figures in this section, fully interpret them with page number references."
-                    "Strip headers, footers, and page numbers."
-                    "Return only the plain text of this section—no extra commentary."
-                )
+                SECTION_PROMPT_FRESH = PROMPT["SECTION PROMPT FRESH"]
+                prompt_text = SECTION_PROMPT_FRESH.format(section=section)
+                
 
             if need_to_extract:
                 retrieval_logger.info("Extracting section: %s", section)
@@ -490,7 +500,10 @@ class ReportRetrievalManager:
                     "published_at": docs[0]["announced_date"],
                     "section": section
                 }
-                self.storage.update_many(filter_query, update_query)
+                if year and year != "N/A":
+                    update_query["year"] = year
+
+                #self.storage.update_many(filter_query, update_query)
 
                 usage = response.usage_metadata
 
@@ -504,6 +517,7 @@ class ReportRetrievalManager:
                 content = await self.storage.retrieve_section(filter_query)
 
             results[section] = content
+            break
 
         retrieval_logger.info("All sections extracted.")
         return results
