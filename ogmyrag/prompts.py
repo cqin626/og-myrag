@@ -1671,6 +1671,70 @@ PROMPT[
 
       SECTION: "{section}"
 
+      OBJECTIVE
+      Return STANDARDIZED MARKDOWN optimized for atomic chunking. Do not add or remove meaning.
+
+      CORE RULES
+      1) Fidelity: Preserve 100% of content; no summaries or commentary.
+      2) Scope: Include only text truly under this heading/subheadings (ignore headers/footers/margins).
+      3) Pagination: Add page refs as “(p. X)” where applicable.
+      4) Headings: Use ATX Markdown.
+         - First line: # {section}
+         - Use ## for major subheads and ### for nested subheads you observe in the PDF. Include page refs in the heading when helpful: e.g., "## Risks (p. 14)".
+      5) Paragraphs: Separate with one blank line. No hard wraps inside a paragraph.
+      6) Lists:
+         - Use "- " for bullets; "1." for numbered lists.
+         - Preserve roman enumerations like "(i)", "(ii)" at the start of items.
+         - One list item per line (no wrapping).
+      7) Tables (ROW-AS-BULLETS for chunking):
+         - First add a label line: "Table: <Exact Title or [no title]> (p. X)".
+         - Then output each table row as a single bullet on one line:
+         - "Col A: Val; Col B: Val; Col C: Val"
+         - Do not include a markdown grid table. If the table spans pages, show both pages in the label (e.g., "(p. 121–122)").
+      8) Figures/Diagrams:
+         - Label: "Figure: <Title/description> (p. X)"
+         - Follow with one paragraph describing the figure (no image).
+      9) Numbers: Keep all numeric formats exactly (commas, decimals, signs, currencies).
+      10) Output: Markdown only. Do NOT use code fences.
+
+      OPTIONAL (use only if present in the source)
+      - If the section has a short preface or bulletable outcomes, add:
+      ## Key Points
+      - <verbatim point or heading stub from the source>
+
+      RETURN SKELETON (adapt to the actual content)
+      # {section}
+
+      ## Key Points
+      - …
+
+      ## <Subheading A> (p. X)
+      <paragraphs>
+
+      Table: <Title or [no title]> (p. X)
+      - Col 1: …; Col 2: …; Col 3: …
+      - Col 1: …; Col 2: …; Col 3: …
+
+      Figure: <Title> (p. X)
+      <one-paragraph description>
+
+      ### <Nested Subheading> (p. X)
+      - (i) …
+      - (ii) …
+"""
+
+PROMPT[
+    "SECTION PROMPT AMEND"
+] = """
+      Here is the existing summary:
+      {base}
+
+      Now update it to incorporate these amendments for the specific section below.
+
+      You are extracting authoritative content from one or more PDF filings.
+
+      SECTION: "{section}"
+
       GOAL
       Extract ONLY the content under the exact heading above and return it as STANDARDIZED MARKDOWN that is easy to chunk for semantic search.
 

@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 import json
 import re
 import argparse
@@ -18,8 +19,9 @@ from .retrieval_storage   import RetrievalAsyncStorageManager
 from .retrieval_embedder  import RetrievalEmbedder
 from .retrieval_extractor import RetrievalExtractor
 from ..report_scraper.models import ReportType
-from ..report_retrieval.report_retrieval_util import chunk_markdown, clean_markdown_response
+from ..report_retrieval.report_retrieval_util import clean_markdown_response
 from ..prompts import PROMPT
+from .report_chunker import chunk_markdown_financial_reports
 
 # Background event loop for async storage
 _background_loop = asyncio.new_event_loop()
@@ -56,6 +58,9 @@ class ReportRetrievalManager:
         self.client = genai.Client(api_key=self.genai_api_key)
         self.openai_key    = openai_api_key
         self.dry_run       = dry_run
+        self.rpm_limit = 5
+        self.win_start = time.time()
+        self.reqs_in_window = 0
 
     
     async def parse_report(
@@ -95,17 +100,21 @@ class ReportRetrievalManager:
         # upsert and download
         #await self.upsert_download(company, year, processed_md, final_md, report_type)
 
+        # download to local
+        if download_local:
+            self.download_to_local(company, processed_md_name, final_md)
+
         # chunk and replce old vectors in Pinecone
-        chunks = chunk_markdown(final_md)
+        """chunks = chunk_markdown_financial_reports(final_md)
+        retrieval_logger.info("Total Chunks: %d", len(chunks))
+        
         if not self.dry_run:
             self.embedder.upsert_chunks(chunks, company, year)
 
         else:
-            retrieval_logger.info("Dry run enabled, skipping chunk upsert.")
+            retrieval_logger.info("Dry run enabled, skipping chunk upsert.")"""
 
-        # download to local
-        if download_local:
-            self.download_to_local(company, processed_md_name, final_md)
+        
         
 
     
@@ -344,36 +353,75 @@ class ReportRetrievalManager:
 
         self.storage.use_collection("constraints")
         if not await self.storage.check_exists(filter_query):
-            # Extract Definitions
-            definition_resp = self.client.models.generate_content(
-                model=self.genai_model,
-                contents=[*uploaded, PROMPT["DEFINITION PARSING"]]
-            )
-            definition_text = clean_markdown_response(definition_resp.text.strip())
+            # --- retry loop (max 3 attempts) + RPM ---
+            attempts = 0
+            definition_text = None
 
-            retrieval_logger.info("Definition extracted: %s", definition_text)
+            while attempts < 3:
+                attempts += 1
+                # RPM window check
+                now = time.time()
+                elapsed = now - self.win_start
+                if elapsed >= 60:
+                    self.win_start = now
+                    self.reqs_in_window = 0
+                if self.reqs_in_window >= self.rpm_limit:
+                    await asyncio.sleep(60 - (time.time() - self.win_start))
+                    self.win_start = time.time()
+                    self.reqs_in_window = 0
 
-            # store in 'constraints' collection
-            update_query = {
-                "created_at": datetime.utcnow(),
-                "content": definition_text,
-                "published_at": docs[0]["announced_date"]
-            }
-            if year and year != "N/A":
-                update_query["year"] = year
+                try:
+                    # Extract Definitions
+                    definition_resp = self.client.models.generate_content(
+                        model=self.genai_model,
+                        contents=[*uploaded, PROMPT["DEFINITION PARSING"]]
+                    )
+                    definition_text = clean_markdown_response(definition_resp.text.strip())
+
+                    # Extract token usage
+                    usage = definition_resp.usage_metadata
+
+                    retrieval_logger.info(
+                        f"Definition tokens: prompt = {usage.prompt_token_count}, "
+                        f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
+                    )
+                    break
+                except Exception as e:
+                    msg = str(e).lower()
+                    # If rate-limited, sleep to next minute; else small backoff
+                    if "429" in msg or "rate" in msg or "quota" in msg or "limit" in msg:
+                        wait_s = max(0.5, 60 - (time.time() - self.win_start))
+                    else:
+                        wait_s = 1 if attempts == 1 else 2
+                    retrieval_logger.warning("Definitions attempt %d failed: %s; sleeping %.1fs",
+                                            attempts, e, wait_s)
+                    await asyncio.sleep(wait_s)
+
             
-            #self.storage.update_many(filter_query, update_query)
-            retrieval_logger.info("Saved constraints for %s", company)
+            if definition_text:
 
-            # Extract token usage
-            usage = definition_resp.usage_metadata
+                #retrieval_logger.info("Definition extracted: %s", definition_text)
 
-            retrieval_logger.info(
-                f"Definition tokens: prompt = {usage.prompt_token_count}, "
-                f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
-            )
+                # store in 'constraints' collection
+                update_query = {
+                    "created_at": datetime.utcnow(),
+                    "content": definition_text,
+                    "published_at": docs[0]["announced_date"]
+                }
+                if year and year != "N/A":
+                    update_query["year"] = year
+                
+                self.storage.update_many(filter_query, update_query)
+                retrieval_logger.info("Saved constraints for %s", company)
+
+            else:
+                retrieval_logger.error("Definition extraction failed after retries; continuing.")
+
+            
         else:
             retrieval_logger.info("Definitions already exist, skipping extraction.")
+
+
 
     async def extract_table_of_contents(
             self, 
@@ -396,33 +444,72 @@ class ReportRetrievalManager:
         self.storage.use_collection("company_disclosures")
 
         if not await self.storage.check_exists(filter_query):
-            # Extract Table of Contents
-            toc_resp = self.client.models.generate_content(
-                model=self.genai_model,
-                contents=[*uploaded, PROMPT["TABLE OF CONTENT EXTRACTION"]]
-            )
-            sections = json.loads(clean_markdown_response(toc_resp.text.strip()))
-            retrieval_logger.info("Table of Contents extracted")
-            
-            # store in 'company_disclosures' collection
-            update_query = {
-                "created_at": datetime.utcnow(),
-                "content": clean_markdown_response(toc_resp.text.strip()),
-                "published_at": docs[0]["announced_date"]
-            }
-            if year and year != "N/A":
-                update_query["year"] = year
-            
-            #self.storage.update_many(filter_query, update_query)
-            retrieval_logger.info("Saved Table of Contents for %s", company)
+            sections = []
+            attempts = 0
 
-            # Extract token usage
-            usage = toc_resp.usage_metadata
+            while attempts < 3:
+                attempts += 1
+                # RPM guard
+                now = time.time()
+                elapsed = now - self.win_start
+                if elapsed >= 60:
+                    self.win_start = now
+                    self.reqs_in_window = 0
+                if self.reqs_in_window >= self.rpm_limit:
+                    await asyncio.sleep(60 - (time.time() - self.win_start))
+                    self.win_start = time.time()
+                    self.reqs_in_window = 0
 
-            retrieval_logger.info(
-                f"Definition tokens: prompt = {usage.prompt_token_count}, "
-                f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
-            )
+                try:
+                    self.reqs_in_window += 1
+                    # Extract Table of Contents
+                    toc_resp = self.client.models.generate_content(
+                        model=self.genai_model,
+                        contents=[*uploaded, PROMPT["TABLE OF CONTENT EXTRACTION"]]
+                    )
+                    cleaned = clean_markdown_response(toc_resp.text.strip())
+                    try:
+                        sections = json.loads(cleaned)
+                    except Exception:
+                        # accept fenced JSON
+                        cleaned2 = re.sub(r"^```(?:json|markdown)?|```$", "", cleaned, flags=re.M).strip()
+                        sections = json.loads(cleaned2)
+
+                    # Extract token usage
+                    usage = toc_resp.usage_metadata
+
+                    retrieval_logger.info(
+                        f"Definition tokens: prompt = {usage.prompt_token_count}, "
+                        f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
+                    )
+
+                    retrieval_logger.info("Table of Contents extracted")
+            
+                    # store in 'company_disclosures' collection
+                    update_query = {
+                        "created_at": datetime.utcnow(),
+                        "content": clean_markdown_response(toc_resp.text.strip()),
+                        "published_at": docs[0]["announced_date"]
+                    }
+                    if year and year != "N/A":
+                        update_query["year"] = year
+                    
+                    self.storage.update_many(filter_query, update_query)
+                    retrieval_logger.info("Saved Table of Contents for %s", company)
+                    break
+
+                except Exception as e:
+                    msg = str(e).lower()
+                    if "429" in msg or "rate" in msg or "quota" in msg or "limit" in msg:
+                        wait_s = max(0.5, 60 - (time.time() - self.win_start))
+                    else:
+                        wait_s = 1 if attempts == 1 else 2
+                    retrieval_logger.warning("TOC attempt %d failed: %s; sleeping %.1fs",
+                                            attempts, e, wait_s)
+                    await asyncio.sleep(wait_s)
+
+            if not sections:
+                retrieval_logger.error("TOC extraction failed after retries; returning empty list.")
 
         else:
             retrieval_logger.info("Table of Contents already exists, skipping extraction.")
@@ -470,54 +557,85 @@ class ReportRetrievalManager:
 
             if mode == "amend" and exists:
                 base = await self.storage.retrieve_section(filter_query)
-                prompt_text = (
-                    f"Here is the existing summary:\n{base}\n\n"
-                    "Now update it to incorporate these amendments:\n\n"
-                    f"Section: \"{section}\"\n\n"
-                    "Extract only the content under this exact heading—preserve 100% of the meaning."
-                    "For any tables or figures in this section, fully interpret them with page number references."
-                    "Strip headers, footers, and page numbers."
-                    "Return only the plain text of this section—no extra commentary."
-                )
+                SECTION_PROMPT_AMEND = PROMPT["SECTION PROMPT AMEND"]
+                prompt_text = SECTION_PROMPT_AMEND.format(base=base, section=section)
+
             else:
                 SECTION_PROMPT_FRESH = PROMPT["SECTION PROMPT FRESH"]
                 prompt_text = SECTION_PROMPT_FRESH.format(section=section)
                 
-
+            content = None
             if need_to_extract:
-                retrieval_logger.info("Extracting section: %s", section)
+                attempts = 0
+                while attempts < 3:
+                    attempts += 1
+                    # RPM guard
+                    now = time.time()
+                    elapsed = now - self.win_start
+                    if elapsed >= 60:
+                        self.win_start = now
+                        self.reqs_in_window = 0
+                    if self.reqs_in_window >= self.rpm_limit:
+                        await asyncio.sleep(60 - (time.time() - self.win_start))
+                        self.win_start = time.time()
+                        self.reqs_in_window = 0
 
-                response = self.client.models.generate_content(
-                    model=self.genai_model,
-                    contents=[*uploaded, prompt_text]
-                )
-                content = clean_markdown_response(response.text.strip())
+                    try:
+
+
+                        retrieval_logger.info("Extracting section: %s", section)
+
+                        response = self.client.models.generate_content(
+                            model=self.genai_model,
+                            contents=[*uploaded, prompt_text]
+                        )
+                        content = clean_markdown_response(response.text.strip())
+
+                        usage = response.usage_metadata
+
+                        retrieval_logger.info(
+                            f"Definition tokens: prompt = {usage.prompt_token_count}, "
+                            f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
+                        )
                 
-                update_query = {
-                    "created_at": datetime.utcnow(),
-                    "is_parsed": True,
-                    "content": content,
-                    "published_at": docs[0]["announced_date"],
-                    "section": section
-                }
-                if year and year != "N/A":
-                    update_query["year"] = year
+                        update_query = {
+                            "created_at": datetime.utcnow(),
+                            "is_parsed": True,
+                            "content": content,
+                            "published_at": docs[0]["announced_date"],
+                            "section": section
+                        }
+                        if year and year != "N/A":
+                            update_query["year"] = year
 
-                #self.storage.update_many(filter_query, update_query)
+                        self.storage.update_many(filter_query, update_query)
+                        retrieval_logger.info("Section: %s saved in DB", section)
 
-                usage = response.usage_metadata
+                        break
+                    
+                    except Exception as e:
+                        msg = str(e).lower()
+                        if "429" in msg or "rate" in msg or "quota" in msg or "limit" in msg:
+                            wait_s = max(0.5, 60 - (time.time() - self.win_start))
+                        else:
+                            wait_s = 1 if attempts == 1 else 2
+                        retrieval_logger.warning("Section '%s' attempt %d failed: %s; sleeping %.1fs",
+                                                section, attempts, e, wait_s)
+                        await asyncio.sleep(wait_s)
 
-                retrieval_logger.info(
-                    f"Definition tokens: prompt = {usage.prompt_token_count}, "
-                    f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
-                )
+                if content is None:
+                    retrieval_logger.error("Section '%s' failed after retries.", section)
+                    if exists:
+                        content = await self.storage.retrieve_section(filter_query)
+                    else:
+                        content = f"# {section}\n\n[Extraction failed after retries]"
             
             else:
                 retrieval_logger.info("Section %s already exists, updating content", section)
                 content = await self.storage.retrieve_section(filter_query)
 
             results[section] = content
-            break
+            
 
         retrieval_logger.info("All sections extracted.")
         return results

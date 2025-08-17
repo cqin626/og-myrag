@@ -148,6 +148,8 @@ class RetrievalAsyncStorageManager:
                 "year": str(year),
                 "type": type
             }
+        
+        retrieval_logger.info("Extracting all the processed content.")
 
         results = await self.storage.read_documents(query=query)
         
@@ -156,10 +158,13 @@ class RetrievalAsyncStorageManager:
                                      company, report_type.name, str(year))
             return ""
         
+        retrieval_logger.info("Combining all the processed content.")
         # combine all sections into a single Markdown string
         md = [f"# {company} {report_type.name}\n"]
         for section in results:
             md.append(section["content"] + "\n")
+
+        retrieval_logger.info("Processed content ready.")
 
         return "\n".join(md)
     
