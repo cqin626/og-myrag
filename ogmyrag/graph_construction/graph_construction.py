@@ -506,7 +506,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 num_of_entities_per_batch=num_of_entities_per_batch,
                 from_company=from_company,
             )
-            
+
             # Step 2 : Resolve any pending tasks created by the batch (upserting entities into and deleting from Pinecone)
             await self.resolve_entities_deduplication_pending_tasks(
                 from_company=from_company,
@@ -573,7 +573,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         the similarity threshold, and then proceeds with the merge/insert logic.
         """
         CANDIDATE_POOL_SIZE = 10
-        
+
         # Step 1 : Find a candidate in cache storage
         query_results = await self.pinecone_storage.get_index(
             self.entity_cache_vector_config["index_name"]
@@ -584,26 +584,25 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             score_threshold=similarity_threshold,
             namespace=from_company,
         )
-        
+
         matches = query_results[0].get("matches", []) if query_results else []
 
         graph_construction_logger.debug(
             f"GraphConstructionSystem\nSimilar results fetched in deduplicate_entity() for {entity.get('name')}: {query_results}"
         )
 
-
         if matches:
             # Step 2a : If there is a matching candidate entity, attempt to acquire its write lock
             # Response is from Pinecone, thereby it is 'id' not '_id'
-            
+
             best_candidate = matches[0]
-        
+
             graph_construction_logger.info(
                 f"Best candidate name: '{best_candidate.get('name')}'. "
                 f"Best candidate id: {best_candidate.get('id')}, "
                 f"Similarity score: {best_candidate.get('score', 0.0):.4f}"
             )
-            
+
             candidate_entity_id = best_candidate["id"]
             lock_acquired = False
             wait_time = timedelta(minutes=max_wait_time_minutes)
@@ -1149,58 +1148,68 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             f"GraphConstructionSystem\nChanged the status for {len(deduplicated_entities)}"
         )
 
-    async def insert_entities_into_pinecone(self):
-        try:
-            formatted_entities = []
-            entities = (
-                await self.async_mongo_storage.get_database(
-                    self.entity_config["database_name"]
-                )
-                .get_collection(self.entity_config["collection_name"])
-                .read_documents({"inserted_into_vectordb_at": ""})
-            )
+    async def insert_entities_into_pinecone(self, from_company: str, batch_size: int):
+        """
+        Finds and upserts entities into Pinecone in manageable batches.
+        """
+        
+        entity_collection = self.async_mongo_storage.get_database(
+            self.entity_config["database_name"]
+        ).get_collection(self.entity_config["collection_name"])
 
-            if not entities:
+        graph_construction_logger.info(
+            "Starting batch upsert process for entities into Pinecone."
+        )
+        
+        total_processed = 0
+        while True:
+            try:
+                # Step 1: Fetch one batch of entities
+                entities_in_batch = await entity_collection.read_documents(
+                    query={
+                    "status": "TO_BE_UPSERTED_INTO_VECTOR_DB",
+                    "originated_from": {"$in": [from_company]},
+                },
+                    limit=batch_size
+                )
+
+                if not entities_in_batch:
+                    graph_construction_logger.info(
+                        "No more entities to process. Batch upsert completed."
+                    )
+                    break
+
+                # Step 2: Format and upsert the current batch into Pinecone
+                formatted_entities = [
+                    get_formatted_entity_for_vectordb(entity) for entity in entities_in_batch
+                ]
+                
+                await self.pinecone_storage.get_index(
+                    self.entity_vector_config["index_name"]
+                ).upsert_vectors(items=formatted_entities)
+
+                # Step 3: Update the status ONLY for the entities in this successful batch
+                entity_ids = [entity["_id"] for entity in entities_in_batch]
+                
+                await entity_collection.update_documents(
+                    query={"_id": {"$in": entity_ids}},
+                    update={"$set": {"status": "TO_BE_UPSERTED_INTO_GRAPH_DB"}},
+                )
+                
+                total_processed += len(entities_in_batch)
                 graph_construction_logger.info(
-                    "GraphConstructionSystem\nNo entities found. Skipping insertion into Pinecone."
-                )
-                raise RuntimeError(f"No entities found.")
-
-            for entity in entities:
-                formatted_entities.append(get_formatted_entity_for_vectordb(entity))
-
-            await self.pinecone_storage.get_index(
-                self.entity_vector_config["index_name"]
-            ).upsert_vectors(formatted_entities)
-
-            update_tasks = []
-
-            for entity in entities:
-                update_tasks.append(
-                    self.async_mongo_storage.get_database(
-                        self.entity_config["database_name"]
-                    )
-                    .get_collection(self.entity_config["collection_name"])
-                    .update_document(
-                        {"_id": entity["_id"]},
-                        {
-                            "inserted_into_vectordb_at": get_formatted_current_datetime(
-                                "Asia/Kuala_Lumpur"
-                            )
-                        },
-                    )
+                    f"Successfully processed batch. Total entities processed so far: {total_processed}"
                 )
 
-            await asyncio.gather(*update_tasks)
+            except Exception as e:
+                graph_construction_logger.error(
+                    f"An error occurred while processing a batch: {e}. Stopping process."
+                )
+                raise 
 
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nUpdated {len(entities)} entity(ies) with inserted_into_vectordb_at field."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while inserting entities into Pinecone:{e}"
-            )
-            raise RuntimeError(f"Failed to insert entities into Pinecone: {e}")
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nFinished upserting. Total entities processed: {total_processed}."
+        )
 
     async def insert_entities_into_neo4j(self):
         try:
