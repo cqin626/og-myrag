@@ -4,12 +4,18 @@ import logging
 import asyncio
 import json
 import copy
+from datetime import timedelta
 from collections import defaultdict
 from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
-
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import (
@@ -22,7 +28,7 @@ from ..util import (
     get_clean_json,
     get_current_datetime,
 )
-from ..storage import AsyncMongoDBStorage, PineconeStorage, Neo4jStorage
+from ..storage import AsyncMongoDBStorage, PineconeStorage, Neo4jStorage, DatabaseError
 
 from ..base import (
     BaseAgent,
@@ -37,7 +43,7 @@ from .graph_construction_util import (
     get_formatted_entity_for_vectordb,
     get_formatted_entity_for_graphdb,
     get_formatted_relationship_for_graphdb,
-    get_simplified_similar_entities_list,
+    get_formatted_entity_details_for_deduplication,
     get_formatted_entities_deduplication_pending_task,
     get_formatted_entity_cache_for_db,
     get_formatted_entities_and_relationships_for_db,
@@ -79,7 +85,7 @@ class EntityRelationshipExtractionAgent(BaseAgent):
         constraints = kwargs.get("source_text_constraints") or ""
         source_text = kwargs.get("source_text") or "NA"
         user_prompt = constraints + source_text
-        #   graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
+        graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
 
         response = await fetch_responses_openai(
             model="o4-mini",
@@ -93,6 +99,43 @@ class EntityRelationshipExtractionAgent(BaseAgent):
         )
         graph_construction_logger.info(
             f"EntityRelatonshipExtractionAgent\nEntity-relationship extraction response details:\n{get_formatted_openai_response(response)}"
+        )
+
+        return response.output_text
+
+
+class EntityDeduplicationAgent(BaseAgent):
+    """
+    An agent responsible for deduplicating extracted entities.
+    """
+
+    async def handle_task(self, **kwargs) -> str:
+        """
+        Parameters:
+           entities_to_compare (str)
+        """
+        graph_construction_logger.info(f"EntityDeduplicationAgent is called")
+
+        system_prompt = PROMPT["ENTITIES_DEDUPLICATION"]
+        # graph_construction_logger.debug(
+        #     f"EntityDeduplicationAgent\System prompt used:\n{system_prompt}"
+        # )
+
+        user_prompt = kwargs.get("entities_to_compare") or ""
+        # graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
+
+        response = await fetch_responses_openai(
+            model="o4-mini",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "medium"},
+            max_output_tokens=100000,
+            stream=False,
+            tools=[],
+        )
+        graph_construction_logger.info(
+            f"EntityDeduplicationAgent\nEntity deduplication response details:\n{get_formatted_openai_response(response)}"
         )
 
         return response.output_text
@@ -116,7 +159,10 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             {
                 "EntityRelationshipExtractionAgent": EntityRelationshipExtractionAgent(
                     "EntityRelationshipExtractionAgent"
-                )
+                ),
+                "EntityDeduplicationAgent": EntityDeduplicationAgent(
+                    "EntityDeduplicationAgent"
+                ),
             }
         )
 
@@ -427,7 +473,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     self.disclosure_config["collection_name"]
                 ).update_document(
                     query={"_id": data["document_id"]},
-                    new_values={"is_parsed": True},
+                    update_data={"is_parsed": True},
                     session=session,
                 )
 
@@ -442,55 +488,84 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         self,
         from_company: str,
         num_of_entities_per_batch: int,
-        cache_size: int,
+        max_cache_size: int,
         similarity_threshold: float,
-        num_of_relationships_to_fetch: int = 5
+        num_of_relationships_to_fetch: int = 5,
+        max_wait_time_per_task: int = 5,
     ):
-        # Step 1 : Fetch unparsed entities
-        entities_to_deduplicate = await self._get_entities_to_deduplicate(
-            from_company=from_company,
-            num_of_entities_to_fetch=num_of_entities_per_batch,
-        )
-        
-        graph_construction_logger.debug(
-            f"GraphConstructionSystem\nEntities to deduplicate:\n{json.dumps(entities_to_deduplicate,indent=4,default=str)}"
-        )
-
-        # Step 2 : Deduplicate entities concurrently
-        deduplication_tasks = [
-            self.deduplicate_entity(
-                entity=entity,
+        while True:
+            # Step 1 : Fetch unparsed entities
+            entities_to_deduplicate = await self._get_entities_to_deduplicate(
                 from_company=from_company,
-                similarity_threshold=similarity_threshold,
-                num_of_relationships_to_fetch=num_of_relationships_to_fetch
+                num_of_entities_to_fetch=num_of_entities_per_batch,
             )
-            for entity in entities_to_deduplicate
-        ]
 
-        await asyncio.gather(*deduplication_tasks)
+            # Step 2 : Check the exit condition for the loop
+            if not entities_to_deduplicate:
+                graph_construction_logger.info(
+                    "GraphConstructionSystem\nNo more entities to deduplicate. Exiting process."
+                )
+                break
 
-        # Step 3 : Upsert entities in cache into Pinecone
-        await self.resolve_entities_deduplication_pending_tasks(
-            from_company=from_company,
-            entities_to_resolve_per_batch=num_of_entities_per_batch,
+            graph_construction_logger.debug(
+                f"GraphConstructionSystem\nEntities to deduplicate:\n{json.dumps(entities_to_deduplicate,indent=4,default=str)}"
+            )
+
+            # Step 3 : Deduplicate entities concurrently
+            deduplication_tasks = [
+                self.deduplicate_entity(
+                    entity=entity,
+                    from_company=from_company,
+                    similarity_threshold=similarity_threshold,
+                    num_of_relationships_to_fetch=num_of_relationships_to_fetch,
+                    max_wait_time_minutes=max_wait_time_per_task,
+                )
+                for entity in entities_to_deduplicate
+            ]
+
+            results = await asyncio.gather(*deduplication_tasks, return_exceptions=True)
+
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    entity_id = str(entities_to_deduplicate[i].get("_id"))
+                    graph_construction_logger.error(
+                        f"GraphConstructionSystem\nDeduplication for entity {entity_id} failed in batch: {result}"
+                    )
+
+            # Step 4 : Resolve any pending tasks created by the batch (upserting entities into Pinecone)
+            await self.resolve_entities_deduplication_pending_tasks(
+                from_company=from_company,
+                entities_to_resolve_per_batch=num_of_entities_per_batch,
+            )
+
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nContinuous deduplication process for company {from_company} has completed."
         )
 
-        
-
+    @retry(
+        retry=retry_if_exception_type(DatabaseError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
     async def deduplicate_entity(
         self,
         entity: dict,
         from_company: str,
         similarity_threshold: float,
         num_of_relationships_to_fetch: int,
+        max_wait_time_minutes: int,
     ):
-        # Check if there are any similar entities in the vector cache storage
+        """
+        Finds and deduplicates a single entity, with automatic retries for
+        transient database errors like WriteConflict.
+        """
+        # Step 1 : Find a candidate in cache storage
         raw_results = await self.pinecone_storage.get_index(
             self.entity_cache_vector_config["index_name"]
         ).get_similar_results(
             query_texts=entity.get("name", ""),
             top_k=1,
-            query_filter={"entity_type": {"$eq": entity.get("type", "")}},
+            query_filter={"type": {"$eq": entity.get("type", "")}},
             score_threshold=similarity_threshold,
             namespace=from_company,
         )
@@ -499,44 +574,191 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             f"GraphConstructionSystem\nSimilar results fetched in deduplicate_entity(): {raw_results}"
         )
 
-        similar_results = raw_results[0]["matches"]
+        similar_results = raw_results[0].get("matches", [])
 
         if similar_results:
-            candidate_entity = similar_results[0]
-            relationships_involved_by_primary_entity = (
-                await (
-                    self._get_relationships_involved_by_entity(
-                        entity_id=entity["_id"],
+            # Step 2a : If there is a matching candidate entity, attempt to acquire its write lock
+            # Response is from Pinecone, thereby it is 'id' not '_id'
+            candidate_entity_id = similar_results[0]["id"]
+            lock_acquired = False
+            wait_time = timedelta(minutes=max_wait_time_minutes)
+            poll_interval_seconds = 10
+            start_time = get_current_datetime()
+
+            try:
+                while (get_current_datetime() - start_time) < wait_time:
+                    graph_construction_logger.info(
+                        f"GraphConstructionSystem\nAttempting to lock candidate entity: {candidate_entity_id}"
+                    )
+                    # Atomic operation to acquire the lock
+                    lock_result = (
+                        await self.async_mongo_storage.get_database(
+                            self.entity_cache_config["database_name"]
+                        )
+                        .get_collection(from_company)
+                        .update_document(
+                            query={
+                                "_id": ObjectId(candidate_entity_id),
+                                "lock_status": {"$ne": "LOCKED"},
+                            },
+                            update_data={
+                                "lock_status": "LOCKED",
+                                "lock_timestamp": get_current_datetime(),
+                            },
+                        )
+                    )
+
+                    if lock_result == 1:
+                        lock_acquired = True
+                        graph_construction_logger.info(
+                            f"GraphConstructionSystem\nSuccessfully acquired lock on candidate: {candidate_entity_id}"
+                        )
+                        break
+                    else:
+                        graph_construction_logger.info(
+                            f"GraphConstructionSystem\nCandidate {candidate_entity_id} is locked. Waiting for {poll_interval_seconds} seconds..."
+                        )
+                        await asyncio.sleep(poll_interval_seconds)
+
+                # Step 3a : Check if the write lock is acquired
+                if not lock_acquired:
+                    graph_construction_logger.error(
+                        f"GraphConstructionSystem\nFailed to acquire lock on {candidate_entity_id} within the timeout period. Aborting merge."
+                    )
+                    raise asyncio.TimeoutError(
+                        f"GraphConstructionSystem\nTimed out waiting for lock on entity {candidate_entity_id}"
+                    )
+
+                # Step 4a : Fetch the full candidate entity details after locking
+                candidate_entity = (
+                    await self.async_mongo_storage.get_database(
+                        self.entity_cache_config["database_name"]
+                    )
+                    .get_collection(from_company)
+                    .read_documents(query={"_id": ObjectId(candidate_entity_id)})
+                )[0]
+
+                # Step 5a : Prepare entities details for LLM comparison
+                candidate_entity_details = (
+                    await self.get_formatted_entity_with_relationships(
+                        entity=candidate_entity,
+                        entity_label="Candidate Entity",
                         from_company=from_company,
                         num_of_relationships_to_fetch=num_of_relationships_to_fetch,
                     )
                 )
-            )
-            relationships_involved_by_candidate_entity = (
-                await (
-                    self._get_relationships_involved_by_entity(
-                        entity_id=ObjectId(
-                            candidate_entity["id"]
-                        ),  # Note that the result returned is a Pinecone response
+                primary_entity_details = (
+                    await self.get_formatted_entity_with_relationships(
+                        entity=entity,
+                        entity_label="Primary Entity",
                         from_company=from_company,
                         num_of_relationships_to_fetch=num_of_relationships_to_fetch,
                     )
                 )
-            )
-            # Need to let LLM to decide whether to merge
-            graph_construction_logger.debug(
-                f"GraphConstructionSystem\nRelationships involved by primary entity:\n{json.dumps(relationships_involved_by_primary_entity,indent=4,default=str)}"
-            )
-            graph_construction_logger.debug(
-                f"GraphConstructionSystem\nRelationships involved by candidate entity:\n{json.dumps(relationships_involved_by_candidate_entity,indent=4,default=str)}"
-            )
+                entities_to_compare = (
+                    f"{primary_entity_details}\n\n{candidate_entity_details}"
+                )
+
+                # Step 6a : Call the EntityDeduplicationagent
+                deduplication_raw_response = await self.agents[
+                    "EntityDeduplicationAgent"
+                ].handle_task(
+                    entities_to_compare=entities_to_compare,
+                )
+                deduplication_formatted_response = get_clean_json(
+                    deduplication_raw_response
+                )
+                llm_merging_decision = deduplication_formatted_response["decision"]
+
+                # Step 7a : Execute the merging decision
+                if llm_merging_decision == "MERGE":
+                    await self._merge_entity(
+                        primary_entity=entity,
+                        candidate_entity=candidate_entity,
+                        new_descriptions=deduplication_formatted_response[
+                            "new_description"
+                        ],
+                        from_company=from_company,
+                    )
+
+                    graph_construction_logger.debug(
+                        f"GraphConstructionSystem\nSuccessfully merge primary_entity with id: {str(entity['_id'])} into candidate_entity with id: {str(candidate_entity['_id'])}"
+                    )
+
+                else:
+                    await self._insert_entity_into_cache(
+                        entity=entity, from_company=from_company
+                    )
+                    graph_construction_logger.debug(
+                        f"GraphConstructionSystem\nSuccessfully inserted entity with id: {str(entity['_id'])}"
+                    )
+            except Exception as e:
+                graph_construction_logger.error(
+                    f"GraphConstructionSystem\nAn error occurred during deduplication for entity {candidate_entity_id}: {e}",
+                    exc_info=True,
+                )
+                raise
+            finally:
+                # Step 8a : Release the lock regardless of writing is performed
+                if lock_acquired:
+                    graph_construction_logger.info(
+                        f"GraphConstructionSystem\nReleasing lock on candidate entity: {candidate_entity_id}"
+                    )
+                    await self.async_mongo_storage.get_database(
+                        self.entity_cache_config["database_name"]
+                    ).get_collection(from_company).update_document(
+                        query={"_id": ObjectId(candidate_entity_id)},
+                        update_data={
+                            "$unset": {"lock_status": "", "lock_timestamp": ""}
+                        },
+                    )
         else:
+            # Step 2b : If there is no matching candidate entity, insert the entity
+
             await self._insert_entity_into_cache(
                 entity=entity, from_company=from_company
             )
             graph_construction_logger.debug(
                 f"GraphConstructionSystem\nSuccessfully inserted entity with id: {str(entity['_id'])}"
             )
+
+    # async def _update_cache_size(
+    #     self, max_cache_size: int, num_of_entities_per_batch: int, from_company: str
+    # ):
+    #     current_cache_size = await (
+    #         self.async_mongo_storage.get_database(
+    #             self.entity_cache_config["database_name"]
+    #         )
+    #         .get_collection(from_company)
+    #         .get_doc_counts()
+    #     )
+
+    #     if current_cache_size >= (max_cache_size - num_of_entities_per_batch):
+    #         num_of_cache_to_remove = current_cache_size - (
+    #             max_cache_size - num_of_entities_per_batch
+    #         )
+
+    #         async with self.async_mongo_storage.with_transaction() as session:
+    #             last_n_items = await (
+    #                 self.async_mongo_storage.get_database(
+    #                     self.entity_cache_config["database_name"]
+    #                 )
+    #                 .get_collection(from_company)
+    #                 .read_documents(
+    #                     query={},
+    #                     sort=[("last_modified_at", ASCENDING)],
+    #                     limit=num_of_entities_per_batch,
+    #                     session=session,
+    #                 ),
+    #             )
+
+    #             ids_to_delete = [item["_id"] for item in last_n_items]
+
+    #             self.async_mongo_storage.get_database(
+    #                 self.entity_cache_config["database_name"]
+    #             ).get_collection(from_company).update_documents(
+    #                 query={"_id": {"$in": ids_to_delete}}, update={}, session=session
+    #             )
 
     async def _get_entities_to_deduplicate(
         self, from_company: str, num_of_entities_to_fetch: int
@@ -553,24 +775,14 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             )
         )
 
-    async def get_relationships_involved_by_entity(
+    async def get_formatted_entity_with_relationships(
         self,
-        entity_id: ObjectId,
+        entity: dict,
+        entity_label: str,
         from_company: str,
         num_of_relationships_to_fetch: int = 5,
     ):
-        # For debugging purpose
-        return await self._get_relationships_involved_by_entity(
-            entity_id, from_company, num_of_relationships_to_fetch
-        )
-
-    async def _get_relationships_involved_by_entity(
-        self,
-        entity_id: ObjectId,
-        from_company: str,
-        num_of_relationships_to_fetch: int = 5,
-    ):
-        return (
+        associated_relationships = (
             await self.async_mongo_storage.get_database(
                 self.relationship_config["database_name"]
             )
@@ -580,25 +792,26 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     "status": "TO_BE_DEDUPLICATED",
                     "originated_from": {"$in": [from_company]},
                     "$or": [
-                        {"source_id": entity_id},
-                        {"target_id": entity_id},
+                        {"source_id": entity["_id"]},
+                        {"target_id": entity["_id"]},
                     ],
                 },
                 limit=num_of_relationships_to_fetch,
             )
         )
+        return get_formatted_entity_details_for_deduplication(
+            entity=entity,
+            entity_label=entity_label,
+            associated_relationships=associated_relationships,
+        )
 
     async def _insert_entity_into_cache(self, entity: dict, from_company: str):
         async with self.async_mongo_storage.with_transaction() as session:
             # Step 1 : Insert the entity into mongodb cache storage
-            formatted_entity_for_mongo_cache = get_formatted_entity_cache_for_db(
-                entity=entity
-            )
-            formatted_entity_for_mongo_cache["_id"] = entity["_id"]
             await self.async_mongo_storage.get_database(
                 self.entity_cache_config["database_name"]
             ).get_collection(from_company).create_document(
-                data=formatted_entity_for_mongo_cache,
+                data=get_formatted_entity_cache_for_db(entity=entity),
                 session=session,
             )
 
@@ -607,7 +820,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 self.entity_config["database_name"]
             ).get_collection(self.entity_config["collection_name"]).update_document(
                 query={"_id": entity["_id"]},
-                new_values={
+                update_data={
                     "status": "TO_BE_UPSERTED_INTO_VECTOR_DB",
                     "last_modified_at": get_current_datetime(),
                 },
@@ -632,6 +845,112 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 session=session,
             )
 
+    async def _merge_entity(
+        self,
+        primary_entity: dict,
+        candidate_entity: dict,
+        new_descriptions: list[str],
+        from_company: str,
+    ):
+        async with self.async_mongo_storage.with_transaction() as session:
+            current_timestamp = get_current_datetime()
+
+            # Step 1 : Update the candidate_entity with new description into mongodb cache storage
+            await self.async_mongo_storage.get_database(
+                self.entity_cache_config["database_name"]
+            ).get_collection(from_company).update_document(
+                query={"_id": candidate_entity["_id"]},
+                update_data={
+                    "description": new_descriptions,
+                    "last_modified_at": current_timestamp,
+                },
+                session=session,
+            )
+
+            # Step 2 : Update the status of the candidate_entity in permanent entities storage
+            await self.async_mongo_storage.get_database(
+                self.entity_config["database_name"]
+            ).get_collection(self.entity_config["collection_name"]).update_document(
+                query={"_id": candidate_entity["_id"]},
+                update_data={
+                    "status": "TO_BE_UPSERTED_INTO_VECTOR_DB",
+                    "description": new_descriptions,
+                    "last_modified_at": current_timestamp,
+                },
+                session=session,
+            )
+
+            # Step 3 : Add a pending task to upsert candidate_entity into vector db
+            await self.async_mongo_storage.get_database(
+                self.entities_deduplication_pending_tasks_config["database_name"]
+            ).get_collection(
+                self.entities_deduplication_pending_tasks_config["collection_name"]
+            ).create_document(
+                data=get_formatted_entities_deduplication_pending_task(
+                    from_company=from_company,
+                    payload={
+                        "_id": candidate_entity["_id"],
+                        "name": candidate_entity["name"],
+                        "type": candidate_entity["type"],
+                        "description": new_descriptions,
+                    },
+                ),
+                session=session,
+            )
+
+            # Step 4 : Update the source_id/target_id of affected relationships due to the deletion of primary_entity
+            update_result_outgoing = (
+                await self.async_mongo_storage.get_database(
+                    self.relationship_config["database_name"]
+                )
+                .get_collection(self.relationship_config["collection_name"])
+                .update_documents(
+                    query={"source_id": primary_entity["_id"]},
+                    update={
+                        "$set": {
+                            "source_id": candidate_entity["_id"],
+                            "last_modified_at": current_timestamp,
+                        }
+                    },
+                    session=session,
+                )
+            )
+            graph_construction_logger.info(
+                f"Updated {update_result_outgoing.modified_count} outgoing relationships for entity with id: {str(primary_entity['_id'])}."
+            )
+
+            update_result_incoming = (
+                await self.async_mongo_storage.get_database(
+                    self.relationship_config["database_name"]
+                )
+                .get_collection(self.relationship_config["collection_name"])
+                .update_documents(
+                    query={"target_id": primary_entity["_id"]},
+                    update={
+                        "$set": {
+                            "target_id": candidate_entity["_id"],
+                            "last_modified_at": current_timestamp,
+                        }
+                    },
+                    session=session,
+                )
+            )
+            graph_construction_logger.info(
+                f"Updated {update_result_incoming.modified_count} incoming relationships for entity with id: {str(primary_entity['_id'])}."
+            )
+
+            # Step 5 : Update the status of the primary_entity in permanent entities storage
+            await self.async_mongo_storage.get_database(
+                self.entity_config["database_name"]
+            ).get_collection(self.entity_config["collection_name"]).update_document(
+                query={"_id": primary_entity["_id"]},
+                update_data={
+                    "status": "TO_BE_DELETED",
+                    "last_modified_at": current_timestamp,
+                },
+                session=session,
+            )
+
     async def resolve_entities_deduplication_pending_tasks(
         self, from_company: str, entities_to_resolve_per_batch: int = 200
     ):
@@ -653,6 +972,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             )
         )
 
+        if not pending_tasks:
+            return
+
         formatted_entities_to_insert = []
         update_tasks = []
 
@@ -671,7 +993,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     self.entities_deduplication_pending_tasks_config["collection_name"]
                 )
                 .update_document(
-                    query={"_id": task["_id"]}, new_values={"status": "COMPLETED"}
+                    query={"_id": task["_id"]}, update_data={"status": "COMPLETED"}
                 )
             )
 
@@ -685,6 +1007,40 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
 
         graph_construction_logger.info(
             f"GraphConstructionSystem\nSuccessfully inserted {len(pending_tasks)} into Pinecone for caching."
+        )
+
+    async def revert_entities_deduplication_status(
+        self, from_company: str, from_status: str, to_status: str
+    ) -> None:
+        # Function for debugging purpose
+        deduplicated_entities = (
+            await self.async_mongo_storage.get_database(
+                self.entity_config["database_name"]
+            )
+            .get_collection(self.entity_config["collection_name"])
+            .read_documents(
+                query={
+                    "status": from_status,
+                    "originated_from": {"$in": [from_company]},
+                }
+            )
+        )
+        await asyncio.gather(
+            *[
+                self.async_mongo_storage.get_database(
+                    self.entity_config["database_name"]
+                )
+                .get_collection(self.entity_config["collection_name"])
+                .update_document(
+                    query={"_id": entity["_id"]},
+                    update_data={"status": to_status},
+                )
+                for entity in deduplicated_entities
+            ]
+        )
+
+        graph_construction_logger.debug(
+            f"GraphConstructionSystem\nChanged the status for {len(deduplicated_entities)}"
         )
 
     async def insert_entities_into_pinecone(self):

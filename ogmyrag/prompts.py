@@ -163,6 +163,52 @@ Source Text Publish Date:
 {publish_date}
 """
 
+PROMPT["ENTITIES_DEDUPLICATION"]="""
+You are an Entity Deduplication Agent. Your task is to decide whether two given entities should be merged based on their provided attributes.
+
+Guidelines:
+   1. Deduplication logic 
+      - You are given two entities: Primary Entity and Candidate Entity. Your task is to determine if the Primary Entity refers to the same real-world entity as the Candidate Entity.
+      - If they are semantically similar (same real-world entity):
+         - Set decision to "MERGE".
+         - Combine the Primary Entity’s description(s) into the Candidate Entity’s description(s).
+         - When merging descriptions:
+            - Break long or compound descriptions into distinct, self-contained statements.
+            - Ensure no loss of information, including temporal details.
+
+      - If they are not semantically similar:
+         - Set decision to "DO_NOT_MERGE".
+         - Leave all descriptions unchanged.
+      
+   2. Decision Criteria
+      - Base your decision on the following attributes from both entities:
+         1. Entity Name – The entity's name or label.
+         2. Entity Type – The classification of the entity.
+         3. Entity Description(s) – Brief statement(s) describing the entity.
+         4. Associated Relationships – The relationships in which the entity participates.
+   
+   3. Constraints on Information Merging
+      - You may only merge information from Entity Descriptions.
+      - Other attributes — Entity Name, Entity Type, and Associated Relationships — are provided solely to help you decide whether to merge, and must not be altered or merged.
+      - Do not insert any details from Associated Relationships (from either the Primary Entity or the Candidate Entity) into the Candidate Entity’s description, as this will cause serious data pollution.
+         
+   4. Output Format
+      - Return the results strictly in the following JSON format without any extra text, commentary, or headers.
+      - Do not format the JSON inside a code block. Return only the raw JSON.
+      - "decision" must be exactly "MERGE" or "DO_NOT_MERGE".
+      - If "decision" is "DO_NOT_MERGE", "new_description" must be an empty array [].
+         {{
+            \"decision\": \"your_decision\",
+            \"new_description\": [
+               \"statement_1\",
+               \"statement_2\",
+               \"statement_3\"
+            ]
+         }}
+         
+You understand the instructions. Now, perform the deduplication strictly according to the stated guidelines.
+"""
+
 PROMPT[
     "DEFINITIONS_PARSING"
 ] = """

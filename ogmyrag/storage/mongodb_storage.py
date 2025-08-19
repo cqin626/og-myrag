@@ -15,7 +15,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorDatabase,
     AsyncIOMotorClientSession,
 )
-from pymongo.results import UpdateResult, BulkWriteResult
+from pymongo.results import UpdateResult, BulkWriteResult, DeleteResult
 from .storage_util import DatabaseError
 
 logger = logging.getLogger("mongodb")
@@ -157,17 +157,77 @@ class AsyncCollectionHandler:
     async def update_document(
         self,
         query: dict,
-        new_values: dict,
+        update_data: dict[str, Any],
         session: AsyncIOMotorClientSession | None = None,
     ) -> int:
+        """
+        Updates a single document in the collection.
+
+        - If `update_data` contains only field-value pairs, it performs a '$set' operation.
+        - If `update_data` contains MongoDB update operators (e.g., '$unset', '$inc'),
+          it uses the dictionary directly as the update operation.
+
+        Args:
+            query: The query to find the document to update.
+            update_data: A dictionary containing either the fields to set or a complete
+                         MongoDB update document with operators.
+            session: An optional client session.
+
+        Returns:
+            The number of documents modified.
+
+        Raises:
+            DatabaseError: If the update operation fails.
+        """
         try:
+            # Check if any key in the update dictionary is a MongoDB operator (starts with '$')
+            has_operators = any(key.startswith("$") for key in update_data)
+
+            if has_operators:
+                # If it already has operators, use it directly.
+                # Example: {"$unset": {"field": ""}, "$set": {"status": "done"}}
+                update_operation = update_data
+            else:
+                # For backward compatibility, wrap plain field-value pairs in '$set'.
+                # Example: {"status": "done", "progress": 100} -> {"$set": {"status": "done", ...}}
+                update_operation = {"$set": update_data}
+
             result = await self.collection.update_one(
-                query, {"$set": new_values}, session=session
+                query, update_operation, session=session
             )
             return result.modified_count
         except PyMongoError as e:
-            logger.error(f"Error updating async document: {e}")
+            logger.error(f"Error updating async document: {e}, full error: {e.details}")
             raise DatabaseError("Update document failed") from e
+        
+    async def update_documents(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        session: AsyncIOMotorClientSession | None = None,
+    ) -> UpdateResult:
+        """
+        Updates all documents that match the specified query.
+
+        Args:
+            query (dict): The filter to select which documents to update.
+            update (dict): The update operation document (e.g., {"$set": {...}}).
+            session (optional): The client session for transactions.
+
+        Returns:
+            UpdateResult: The result object from MongoDB, containing details like matched_count and modified_count.
+        """
+        try:
+            result = await self.collection.update_many(query, update, session=session)
+            logger.info(
+                f"Batch update completed for query {query}. "
+                f"Matched: {result.matched_count}, "
+                f"Modified: {result.modified_count}."
+            )
+            return result
+        except PyMongoError as e:
+            logger.error(f"Error during batch update operation: {e}")
+            raise DatabaseError("Update documents failed") from e
 
     async def upsert_documents(
         self,
@@ -215,6 +275,30 @@ class AsyncCollectionHandler:
         except PyMongoError as e:
             logger.error(f"Error deleting async document: {e}")
             raise DatabaseError("Delete document failed") from e
+
+    async def delete_documents(
+        self, query: dict[str, Any], session: AsyncIOMotorClientSession | None = None
+    ) -> DeleteResult:
+        """
+        Deletes all documents that match the specified query.
+
+        Args:
+            query (dict): The filter to select which documents to delete. An empty query {} will delete ALL documents in the collection.
+            session (optional): The client session for transactions.
+
+        Returns:
+            DeleteResult: The result object from MongoDB, containing details like the number of documents deleted in `deleted_count`.
+        """
+        try:
+            result = await self.collection.delete_many(query, session=session)
+            logger.info(
+                f"Batch delete completed for query {query}. "
+                f"Deleted: {result.deleted_count} document(s)."
+            )
+            return result
+        except PyMongoError as e:
+            logger.error(f"Error during batch delete operation: {e}")
+            raise DatabaseError("Delete documents failed") from e
 
     async def get_doc_counts(self):
         return await self.collection.count_documents({})

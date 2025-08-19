@@ -10,8 +10,8 @@ def get_formatted_similar_entities(
         output_lines.append(f"Target: {query}")
         output_lines.append("Found:")
         for i, match in enumerate(result_set.get("matches", []), start=1):
-            entity_name = match["metadata"].get("entity_name", "Unknown")
-            entity_type = match["metadata"].get("entity_type", "Unknown Type")
+            entity_name = match["metadata"].get("name", "Unknown")
+            entity_type = match["metadata"].get("type", "Unknown Type")
             score = match.get("score", 0.0)
             output_lines.append(
                 f"{i}. {entity_name} ({entity_type}; {score:.9f} similarity score)"

@@ -97,6 +97,7 @@ def get_formatted_entity_cache_for_db(
     entity: dict, timezone: str = "Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
     return {
+        "_id": entity.get("_id"),
         "name": entity.get("name"),
         "type": entity.get("type"),
         "description": entity.get("description"),
@@ -127,24 +128,28 @@ def get_formatted_entity_for_vectordb(
         "id": str(entity["_id"]),
         "name": entity["name"],
         "metadata": {
-            "entity_name": entity["name"],
-            "entity_type": entity["type"],
+            "name": entity["name"],
+            "type": entity["type"],
             "description": entity["description"],
         },
     }
 
 
-# def get_formatted_entity_cache_for_db(
-#     id: ObjectId, entity: dict, timezone="Asia/Kuala_Lumpur"
-# ) -> dict:
-#     return {
-#         "_id": id,
-#         "name": entity.get("name", ""),
-#         "type": entity.get("type", ""),
-#         "entity_id": entity.get("_id"),
-#         "description": entity.get("description", ""),
-#         "last_accessed_at": get_current_datetime(timezone),
-#     }
+def get_formatted_entity_details_for_deduplication(
+    entity: dict, entity_label: str, associated_relationships: list
+):
+    output = []
+
+    output.append(f"{entity_label}: ")
+    output.append(f"- Entity Name: {entity['name']}")
+    output.append(f"- Entity Type: {entity['type']}")
+    output.append(f"- Entity Description(s): {entity['description']}")
+    output.append(f"- Associated Relationships:")
+
+    for i, relationship in enumerate(associated_relationships, start=1):
+        output.append(f"  {i}. {relationship.get('description', '')}")
+
+    return "\n".join(output)
 
 
 def get_formatted_entity_for_graphdb(
@@ -174,45 +179,36 @@ def get_formatted_relationship_for_graphdb(
     }
 
 
-def get_simplified_similar_entities_list(results: list[dict]) -> list[dict]:
-    """
-    Converts Pinecone similarity search results into a simplified list of entity dicts.
+# def get_simplified_similar_entities_list(results: list[dict]) -> list[dict]:
+#     """
+#     Converts Pinecone similarity search results into a simplified list of entity dicts.
 
-    Each dictionary contains:
-      - id: vector ID
-      - entity_name: value from metadata["entity_name"]
-      - entity_type: value from metadata["entity_type"]
-      - description: value from metadata["description"]
-      - similarity_score: value from match["score"]
+#     Each dictionary contains:
+#       - id: vector ID
+#       - entity_name: value from metadata["entity_name"]
+#       - entity_type: value from metadata["entity_type"]
+#       - description: value from metadata["description"]
+#       - similarity_score: value from match["score"]
 
-    Args:
-        results (list[dict]): List of result dicts returned from get_similar_results in pinecone storage.
+#     Args:
+#         results (list[dict]): List of result dicts returned from get_similar_results in pinecone storage.
 
-    Returns:
-        list[dict]: Flattened list of entity info dicts.
-    """
-    simplified = []
+#     Returns:
+#         list[dict]: Flattened list of entity info dicts.
+#     """
+#     simplified = []
 
-    for result in results:
-        for match in result.get("matches", []):
-            metadata = match.get("metadata", {})
-            simplified.append(
-                {
-                    "id": match.get("id", ""),
-                    "entity_name": metadata.get("entity_name", ""),
-                    "entity_type": metadata.get("entity_type", ""),
-                    "description": metadata.get("description", ""),
-                    "similarity_score": match.get("score", 0.0),
-                }
-            )
+#     for result in results:
+#         for match in result.get("matches", []):
+#             metadata = match.get("metadata", {})
+#             simplified.append(
+#                 {
+#                     "id": match.get("id", ""),
+#                     "entity_name": metadata.get("entity_name", ""),
+#                     "entity_type": metadata.get("entity_type", ""),
+#                     "description": metadata.get("description", ""),
+#                     "similarity_score": match.get("score", 0.0),
+#                 }
+#             )
 
-    return simplified
-
-
-# def get_formatted_similar_entities_for_deduplication(entities: list[dict]):
-#     output = "Similar Entities:"
-#     for i, entity in enumerate(entities, 1):
-#         output += f"\n{i}. {entity.get('entity_name', '')}"
-#         output += f"\n- Similarity Score: {entity.get('similarity_score', 0.0)}"
-#         output += f"\n- Description: {entity.get('description', '')}\n"
-#     return output.strip()
+#     return simplified
