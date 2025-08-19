@@ -28,7 +28,13 @@ from ..util import (
     get_clean_json,
     get_current_datetime,
 )
-from ..storage import AsyncMongoDBStorage, PineconeStorage, Neo4jStorage, DatabaseError
+from ..storage import (
+    AsyncMongoDBStorage,
+    PineconeStorage,
+    Neo4jStorage,
+    DatabaseError,
+    AsyncCollectionHandler,
+)
 
 from ..base import (
     BaseAgent,
@@ -122,7 +128,7 @@ class EntityDeduplicationAgent(BaseAgent):
         # )
 
         user_prompt = kwargs.get("entities_to_compare") or ""
-        # graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
+        graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
 
         response = await fetch_responses_openai(
             model="o4-mini",
@@ -494,13 +500,25 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         max_wait_time_per_task: int = 5,
     ):
         while True:
-            # Step 1 : Fetch unparsed entities
+            # Step 1 : Update the cache size
+            await self._update_cache_size(
+                max_cache_size=max_cache_size,
+                num_of_entities_per_batch=num_of_entities_per_batch,
+                from_company=from_company,
+            )
+            
+            # Step 2 : Resolve any pending tasks created by the batch (upserting entities into and deleting from Pinecone)
+            await self.resolve_entities_deduplication_pending_tasks(
+                from_company=from_company,
+            )
+
+            # Step 3 : Fetch unparsed entities
             entities_to_deduplicate = await self._get_entities_to_deduplicate(
                 from_company=from_company,
                 num_of_entities_to_fetch=num_of_entities_per_batch,
             )
 
-            # Step 2 : Check the exit condition for the loop
+            # Step 4 : Check the exit condition for the loop
             if not entities_to_deduplicate:
                 graph_construction_logger.info(
                     "GraphConstructionSystem\nNo more entities to deduplicate. Exiting process."
@@ -511,9 +529,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 f"GraphConstructionSystem\nEntities to deduplicate:\n{json.dumps(entities_to_deduplicate,indent=4,default=str)}"
             )
 
-            # Step 3 : Deduplicate entities concurrently
+            # Step 5 : Deduplicate entities concurrently
             deduplication_tasks = [
-                self.deduplicate_entity(
+                self._deduplicate_entity(
                     entity=entity,
                     from_company=from_company,
                     similarity_threshold=similarity_threshold,
@@ -532,12 +550,6 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                         f"GraphConstructionSystem\nDeduplication for entity {entity_id} failed in batch: {result}"
                     )
 
-            # Step 4 : Resolve any pending tasks created by the batch (upserting entities into Pinecone)
-            await self.resolve_entities_deduplication_pending_tasks(
-                from_company=from_company,
-                entities_to_resolve_per_batch=num_of_entities_per_batch,
-            )
-
         graph_construction_logger.info(
             f"GraphConstructionSystem\nContinuous deduplication process for company {from_company} has completed."
         )
@@ -547,7 +559,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
-    async def deduplicate_entity(
+    async def _deduplicate_entity(
         self,
         entity: dict,
         from_company: str,
@@ -556,30 +568,43 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         max_wait_time_minutes: int,
     ):
         """
-        Finds and deduplicates a single entity, with automatic retries for
-        transient database errors like WriteConflict.
+        Finds and deduplicates a single entity. It first queries for a pool of
+        potential candidates from the vector store, selects the best one that meets
+        the similarity threshold, and then proceeds with the merge/insert logic.
         """
+        CANDIDATE_POOL_SIZE = 10
+        
         # Step 1 : Find a candidate in cache storage
-        raw_results = await self.pinecone_storage.get_index(
+        query_results = await self.pinecone_storage.get_index(
             self.entity_cache_vector_config["index_name"]
         ).get_similar_results(
             query_texts=entity.get("name", ""),
-            top_k=1,
+            top_k=CANDIDATE_POOL_SIZE,
             query_filter={"type": {"$eq": entity.get("type", "")}},
             score_threshold=similarity_threshold,
             namespace=from_company,
         )
+        
+        matches = query_results[0].get("matches", []) if query_results else []
 
         graph_construction_logger.debug(
-            f"GraphConstructionSystem\nSimilar results fetched in deduplicate_entity(): {raw_results}"
+            f"GraphConstructionSystem\nSimilar results fetched in deduplicate_entity() for {entity.get('name')}: {query_results}"
         )
 
-        similar_results = raw_results[0].get("matches", [])
 
-        if similar_results:
+        if matches:
             # Step 2a : If there is a matching candidate entity, attempt to acquire its write lock
             # Response is from Pinecone, thereby it is 'id' not '_id'
-            candidate_entity_id = similar_results[0]["id"]
+            
+            best_candidate = matches[0]
+        
+            graph_construction_logger.info(
+                f"Best candidate name: '{best_candidate.get('name')}'. "
+                f"Best candidate id: {best_candidate.get('id')}, "
+                f"Similarity score: {best_candidate.get('score', 0.0):.4f}"
+            )
+            
+            candidate_entity_id = best_candidate["id"]
             lock_acquired = False
             wait_time = timedelta(minutes=max_wait_time_minutes)
             poll_interval_seconds = 10
@@ -722,43 +747,82 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 f"GraphConstructionSystem\nSuccessfully inserted entity with id: {str(entity['_id'])}"
             )
 
-    # async def _update_cache_size(
-    #     self, max_cache_size: int, num_of_entities_per_batch: int, from_company: str
-    # ):
-    #     current_cache_size = await (
-    #         self.async_mongo_storage.get_database(
-    #             self.entity_cache_config["database_name"]
-    #         )
-    #         .get_collection(from_company)
-    #         .get_doc_counts()
-    #     )
+    async def _update_cache_size(
+        self, max_cache_size: int, num_of_entities_per_batch: int, from_company: str
+    ):
+        """
+        Checks the entity cache size and evicts the oldest items if the cache is nearing its capacity.
+        This is a proactive eviction to make space for an incoming batch.
+        """
+        # DRY: Get collection objects once to improve readability
+        entity_cache_collection = self.async_mongo_storage.get_database(
+            self.entity_cache_config["database_name"]
+        ).get_collection(from_company)
 
-    #     if current_cache_size >= (max_cache_size - num_of_entities_per_batch):
-    #         num_of_cache_to_remove = current_cache_size - (
-    #             max_cache_size - num_of_entities_per_batch
-    #         )
+        pending_tasks_collection = self.async_mongo_storage.get_database(
+            self.entities_deduplication_pending_tasks_config["database_name"]
+        ).get_collection(
+            self.entities_deduplication_pending_tasks_config["collection_name"]
+        )
 
-    #         async with self.async_mongo_storage.with_transaction() as session:
-    #             last_n_items = await (
-    #                 self.async_mongo_storage.get_database(
-    #                     self.entity_cache_config["database_name"]
-    #                 )
-    #                 .get_collection(from_company)
-    #                 .read_documents(
-    #                     query={},
-    #                     sort=[("last_modified_at", ASCENDING)],
-    #                     limit=num_of_entities_per_batch,
-    #                     session=session,
-    #                 ),
-    #             )
+        current_cache_size = await entity_cache_collection.get_doc_counts()
 
-    #             ids_to_delete = [item["_id"] for item in last_n_items]
+        # Proactively make space if the cache is close to full
+        if current_cache_size >= (max_cache_size - num_of_entities_per_batch):
+            num_of_cache_to_remove = current_cache_size - (
+                max_cache_size - num_of_entities_per_batch
+            )
+            if num_of_cache_to_remove <= 0:
+                return
 
-    #             self.async_mongo_storage.get_database(
-    #                 self.entity_cache_config["database_name"]
-    #             ).get_collection(from_company).update_documents(
-    #                 query={"_id": {"$in": ids_to_delete}}, update={}, session=session
-    #             )
+            graph_construction_logger.info(
+                f"Cache size ({current_cache_size}) is nearing limit ({max_cache_size}). "
+                f"Evicting {num_of_cache_to_remove} oldest items from '{from_company}'."
+            )
+
+            try:
+                async with self.async_mongo_storage.with_transaction() as session:
+                    # Step 1 : Get the oldest entities to remove
+                    oldest_items = await entity_cache_collection.read_documents(
+                        query={},
+                        sort=[("last_modified_at", ASCENDING)],
+                        limit=num_of_cache_to_remove,
+                        session=session,
+                    )
+
+                    if not oldest_items:
+                        return
+
+                    ids_to_delete = [item["_id"] for item in oldest_items]
+
+                    # Step 2 : Delete the entities from the MongoDB cache in a single batch
+                    delete_result = await entity_cache_collection.delete_documents(
+                        query={"_id": {"$in": ids_to_delete}}, session=session
+                    )
+
+                    # Step 3 : Prepare the pending "DELETE" tasks for the vector cache
+                    pending_delete_tasks = [
+                        get_formatted_entities_deduplication_pending_task(
+                            from_company=from_company,
+                            task_type="DELETE",
+                            payload={"_id": entity_id},
+                        )
+                        for entity_id in ids_to_delete
+                    ]
+
+                    # Step 4 : Create all pending tasks in a single batch operation
+                    if pending_delete_tasks:
+                        await pending_tasks_collection.create_documents(
+                            data=pending_delete_tasks, session=session
+                        )
+
+                    graph_construction_logger.info(
+                        f"Successfully evicted {delete_result.deleted_count} entities from MongoDB cache "
+                        f"and created {len(pending_delete_tasks)} pending delete tasks."
+                    )
+            except Exception as e:
+                graph_construction_logger.error(f"Failed during cache eviction: {e}")
+                raise
 
     async def _get_entities_to_deduplicate(
         self, from_company: str, num_of_entities_to_fetch: int
@@ -835,6 +899,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             ).create_document(
                 data=get_formatted_entities_deduplication_pending_task(
                     from_company=from_company,
+                    task_type="UPSERT",
                     payload={
                         "_id": entity["_id"],
                         "name": entity["name"],
@@ -888,6 +953,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             ).create_document(
                 data=get_formatted_entities_deduplication_pending_task(
                     from_company=from_company,
+                    task_type="UPSERT",
                     payload={
                         "_id": candidate_entity["_id"],
                         "name": candidate_entity["name"],
@@ -951,63 +1017,103 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 session=session,
             )
 
-    async def resolve_entities_deduplication_pending_tasks(
-        self, from_company: str, entities_to_resolve_per_batch: int = 200
+    async def resolve_entities_deduplication_pending_tasks(self, from_company: str):
+        """
+        Processes pending upsert and delete tasks for the entity cache.
+        This operation is designed to be idempotent and safe to retry.
+        """
+        pending_tasks_collection = self.async_mongo_storage.get_database(
+            self.entities_deduplication_pending_tasks_config["database_name"]
+        ).get_collection(
+            self.entities_deduplication_pending_tasks_config["collection_name"]
+        )
+
+        # Step 1 : Fetch all pending tasks concurrently
+        upsert_fetch_task = pending_tasks_collection.read_documents(
+            query={"pending": True, "type": "UPSERT", "from_company": from_company}
+        )
+        delete_fetch_task = pending_tasks_collection.read_documents(
+            query={"pending": True, "type": "DELETE", "from_company": from_company}
+        )
+
+        upsert_pending_tasks, deletion_pending_tasks = await asyncio.gather(
+            upsert_fetch_task, delete_fetch_task
+        )
+
+        # Step 2 : Create and run processing tasks for upserts and deletes concurrently
+        processing_tasks = []
+        if upsert_pending_tasks:
+            processing_tasks.append(
+                self._process_upsert_tasks(
+                    upsert_pending_tasks, from_company, pending_tasks_collection
+                )
+            )
+        if deletion_pending_tasks:
+            processing_tasks.append(
+                self._process_delete_tasks(
+                    deletion_pending_tasks, from_company, pending_tasks_collection
+                )
+            )
+        if processing_tasks:
+            await asyncio.gather(*processing_tasks)
+
+    async def _process_upsert_tasks(
+        self, tasks: list, from_company: str, collection: AsyncCollectionHandler
     ):
-        """
-        Insert entities for caching in mongodb into vectordb (idempotent).
-        Called after every batch of deduplication OR sudden breakdown that leaves to inconsistent state in Pinecone
-        """
-        # Step 1 : Fetch the entities that are not yet inserted into Pinecone
-        pending_tasks = await (
-            self.async_mongo_storage.get_database(
-                self.entities_deduplication_pending_tasks_config["database_name"]
-            )
-            .get_collection(
-                self.entities_deduplication_pending_tasks_config["collection_name"]
-            )
-            .read_documents(
-                query={"status": "PENDING", "from_company": from_company},
-                limit=entities_to_resolve_per_batch,
-            )
-        )
-
-        if not pending_tasks:
-            return
-
-        formatted_entities_to_insert = []
-        update_tasks = []
-
-        for task in pending_tasks:
-            entity = task["payload"]
-
-            formatted_entities_to_insert.append(
-                get_formatted_entity_for_vectordb(entity)
-            )
-
-            update_tasks.append(
-                self.async_mongo_storage.get_database(
-                    self.entities_deduplication_pending_tasks_config["database_name"]
-                )
-                .get_collection(
-                    self.entities_deduplication_pending_tasks_config["collection_name"]
-                )
-                .update_document(
-                    query={"_id": task["_id"]}, update_data={"status": "COMPLETED"}
-                )
-            )
-
-        # Step 2 : Upsert the entities into Pinecone
-        await self.pinecone_storage.get_index(
-            self.entity_cache_vector_config["index_name"]
-        ).upsert_vectors(items=formatted_entities_to_insert, namespace=from_company)
-
-        # Step 3 : Update the status of pending task to 'COMPLETED'
-        await asyncio.gather(*update_tasks)
-
         graph_construction_logger.info(
-            f"GraphConstructionSystem\nSuccessfully inserted {len(pending_tasks)} into Pinecone for caching."
+            f"Processing {len(tasks)} pending upsert tasks..."
         )
+        task_ids = [task["_id"] for task in tasks]
+
+        try:
+            formatted_entities_to_insert = [
+                get_formatted_entity_for_vectordb(task["payload"]) for task in tasks
+            ]
+
+            # Step 1 : Perform the external operation (Pinecone)
+            await self.pinecone_storage.get_index(
+                self.entity_cache_vector_config["index_name"]
+            ).upsert_vectors(items=formatted_entities_to_insert, namespace=from_company)
+
+            # Step 2 : On success, update internal state in a SINGLE batch operation
+            await collection.update_documents(
+                query={"_id": {"$in": task_ids}}, update={"$set": {"pending": False}}
+            )
+
+            graph_construction_logger.info(
+                f"Successfully upserted {len(tasks)} entities and completed tasks."
+            )
+        except Exception as e:
+            graph_construction_logger.error(f"Failed to process upsert batch: {e}")
+            raise
+
+    async def _process_delete_tasks(
+        self, tasks: list, from_company: str, collection: AsyncCollectionHandler
+    ):
+        graph_construction_logger.info(
+            f"Processing {len(tasks)} pending deletion tasks..."
+        )
+        task_ids = [task["_id"] for task in tasks]
+
+        try:
+            entities_to_remove = [str(task["payload"]["_id"]) for task in tasks]
+
+            # Step 1 : Perform the external operation (Pinecone)
+            await self.pinecone_storage.get_index(
+                self.entity_cache_vector_config["index_name"]
+            ).delete_vectors(ids=entities_to_remove, namespace=from_company)
+
+            # Step 2 : On success, update internal state in a SINGLE batch operation
+            await collection.update_documents(
+                {"_id": {"$in": task_ids}}, {"$set": {"pending": False}}
+            )
+
+            graph_construction_logger.info(
+                f"Successfully deleted {len(tasks)} entities and completed tasks."
+            )
+        except Exception as e:
+            graph_construction_logger.error(f"Failed to process delete batch: {e}")
+            raise
 
     async def revert_entities_deduplication_status(
         self, from_company: str, from_status: str, to_status: str

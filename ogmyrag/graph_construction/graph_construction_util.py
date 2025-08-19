@@ -108,11 +108,13 @@ def get_formatted_entity_cache_for_db(
 def get_formatted_entities_deduplication_pending_task(
     from_company: str,
     payload: dict[str, Any],
+    task_type: str,
     timezone: str = "Asia/Kuala_Lumpur",
 ) -> dict[str, Any]:
     return {
         "from_company": from_company,
-        "status": "PENDING",
+        "pending": True,
+        "type": task_type,
         "payload": payload,
         "created_at": get_current_datetime(timezone),
     }
