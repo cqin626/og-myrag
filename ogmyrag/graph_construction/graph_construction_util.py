@@ -105,21 +105,6 @@ def get_formatted_entity_cache_for_db(
     }
 
 
-def get_formatted_entities_deduplication_pending_task(
-    from_company: str,
-    payload: dict[str, Any],
-    task_type: str,
-    timezone: str = "Asia/Kuala_Lumpur",
-) -> dict[str, Any]:
-    return {
-        "from_company": from_company,
-        "pending": True,
-        "type": task_type,
-        "payload": payload,
-        "created_at": get_current_datetime(timezone),
-    }
-
-
 def get_formatted_entity_for_vectordb(
     entity: dict[str, Any], timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
@@ -135,7 +120,47 @@ def get_formatted_entity_for_vectordb(
             "description": entity["description"],
         },
     }
+    
+def get_formatted_entity_for_graphdb(
+    entity: dict[str, Any], timezone="Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+    return {
+        "id": str(entity["_id"]),
+        "type": entity["type"],
+        "name": entity["name"],
+        "description": entity["description"],
+        "last_modified_at": get_current_datetime(timezone),
+    }
 
+
+def get_formatted_relationship_for_graphdb(
+    relationship: dict[str, Any], timezone="Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+    return {
+        "source_id": str(relationship["source_id"]),
+        "target_id": str(relationship["target_id"]),
+        "type": relationship["type"],
+        "properties": {
+            "id": str(relationship["_id"]),
+            "description": relationship["description"],
+            "last_modified_at": get_current_datetime(timezone),
+            "valid_in": relationship["valid_in"],
+        },
+    }
+
+def get_formatted_entities_deduplication_pending_task(
+    from_company: str,
+    payload: dict[str, Any],
+    task_type: str,
+    timezone: str = "Asia/Kuala_Lumpur",
+) -> dict[str, Any]:
+    return {
+        "from_company": from_company,
+        "pending": True,
+        "type": task_type,
+        "payload": payload,
+        "created_at": get_current_datetime(timezone),
+    }
 
 def get_formatted_entity_details_for_deduplication(
     entity: dict, entity_label: str, associated_relationships: list
@@ -154,63 +179,3 @@ def get_formatted_entity_details_for_deduplication(
     return "\n".join(output)
 
 
-def get_formatted_entity_for_graphdb(
-    entity: dict[str, Any], timezone="Asia/Kuala_Lumpur"
-) -> dict[str, Any]:
-    return {
-        "id": str(entity["_id"]),
-        "name": entity["name"],
-        "description": entity["description"],
-        "last_modified_at": get_formatted_current_datetime(timezone),
-    }
-
-
-def get_formatted_relationship_for_graphdb(
-    relationship: dict[str, Any], timezone="Asia/Kuala_Lumpur"
-) -> dict[str, Any]:
-    return {
-        "source_id": str(relationship["source_id"]),
-        "target_id": str(relationship["target_id"]),
-        "type": relationship["type"],
-        "properties": {
-            "id": str(relationship["_id"]),
-            "description": relationship["description"],
-            "last_modified_at": get_formatted_current_datetime(timezone),
-            "valid_in": relationship["valid_in"],
-        },
-    }
-
-
-# def get_simplified_similar_entities_list(results: list[dict]) -> list[dict]:
-#     """
-#     Converts Pinecone similarity search results into a simplified list of entity dicts.
-
-#     Each dictionary contains:
-#       - id: vector ID
-#       - entity_name: value from metadata["entity_name"]
-#       - entity_type: value from metadata["entity_type"]
-#       - description: value from metadata["description"]
-#       - similarity_score: value from match["score"]
-
-#     Args:
-#         results (list[dict]): List of result dicts returned from get_similar_results in pinecone storage.
-
-#     Returns:
-#         list[dict]: Flattened list of entity info dicts.
-#     """
-#     simplified = []
-
-#     for result in results:
-#         for match in result.get("matches", []):
-#             metadata = match.get("metadata", {})
-#             simplified.append(
-#                 {
-#                     "id": match.get("id", ""),
-#                     "entity_name": metadata.get("entity_name", ""),
-#                     "entity_type": metadata.get("entity_type", ""),
-#                     "description": metadata.get("description", ""),
-#                     "similarity_score": match.get("score", 0.0),
-#                 }
-#             )
-
-#     return simplified

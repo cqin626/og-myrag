@@ -31,7 +31,7 @@ from ..util import (
 from ..storage import (
     AsyncMongoDBStorage,
     PineconeStorage,
-    Neo4jStorage,
+    AsyncNeo4jStorage,
     DatabaseError,
     AsyncCollectionHandler,
 )
@@ -205,7 +205,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 region=entity_cache_vector_config["pinecone_environment"],
             )
 
-            self.graph_storage = Neo4jStorage(**graphdb_config)
+            self.graph_storage = AsyncNeo4jStorage(**graphdb_config)
 
         except Exception as e:
             graph_construction_logger.error(f"GraphConstructionSystem: {e}")
@@ -1148,11 +1148,11 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             f"GraphConstructionSystem\nChanged the status for {len(deduplicated_entities)}"
         )
 
-    async def insert_entities_into_pinecone(self, from_company: str, batch_size: int):
+    async def upsert_entities_into_pinecone(self, from_company: str, batch_size: int):
         """
         Finds and upserts entities into Pinecone in manageable batches.
         """
-        
+
         entity_collection = self.async_mongo_storage.get_database(
             self.entity_config["database_name"]
         ).get_collection(self.entity_config["collection_name"])
@@ -1160,19 +1160,18 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         graph_construction_logger.info(
             "Starting batch upsert process for entities into Pinecone."
         )
-        
+
         total_processed = 0
         while True:
             try:
                 # Step 1: Fetch one batch of entities
                 entities_in_batch = await entity_collection.read_documents(
                     query={
-                    "status": "TO_BE_UPSERTED_INTO_VECTOR_DB",
-                    "originated_from": {"$in": [from_company]},
-                },
-                    limit=batch_size
+                        "status": "TO_BE_UPSERTED_INTO_VECTOR_DB",
+                        "originated_from": {"$in": [from_company]},
+                    },
+                    limit=batch_size,
                 )
-
                 if not entities_in_batch:
                     graph_construction_logger.info(
                         "No more entities to process. Batch upsert completed."
@@ -1181,16 +1180,15 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
 
                 # Step 2: Format and upsert the current batch into Pinecone
                 formatted_entities = [
-                    get_formatted_entity_for_vectordb(entity) for entity in entities_in_batch
+                    get_formatted_entity_for_vectordb(entity)
+                    for entity in entities_in_batch
                 ]
-                
                 await self.pinecone_storage.get_index(
                     self.entity_vector_config["index_name"]
                 ).upsert_vectors(items=formatted_entities)
 
                 # Step 3: Update the status ONLY for the entities in this successful batch
                 entity_ids = [entity["_id"] for entity in entities_in_batch]
-                
                 await entity_collection.update_documents(
                     query={"_id": {"$in": entity_ids}},
                     update={"$set": {"status": "TO_BE_UPSERTED_INTO_GRAPH_DB"}},
@@ -1205,102 +1203,69 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 graph_construction_logger.error(
                     f"An error occurred while processing a batch: {e}. Stopping process."
                 )
-                raise 
+                raise
 
         graph_construction_logger.info(
-            f"GraphConstructionSystem\nFinished upserting. Total entities processed: {total_processed}."
+            f"GraphConstructionSystem\nFinished upserting entities into Pinecone. Total entities processed: {total_processed}."
         )
 
-    async def insert_entities_into_neo4j(self):
-        try:
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nReading entities from MongoDB..."
-            )
+    async def upsert_entities_into_neo4j(self, from_company: str, batch_size: int):
+        """
+        Finds and upserts entities into Neo4j in manageable batches.
+        """
 
-            raw_entities = (
-                await self.async_mongo_storage.get_database(
-                    self.entity_config["database_name"]
+        entity_collection = self.async_mongo_storage.get_database(
+            self.entity_config["database_name"]
+        ).get_collection(self.entity_config["collection_name"])
+
+        graph_construction_logger.info(
+            "Starting batch upsert process for entities into Neo4j."
+        )
+
+        total_processed = 0
+        while True:
+            try:
+                # Step 1: Fetch one batch of entities
+                entities_in_batch = await entity_collection.read_documents(
+                    query={
+                        "status": "TO_BE_UPSERTED_INTO_GRAPH_DB",
+                        "originated_from": {"$in": [from_company]},
+                    },
+                    limit=batch_size,
                 )
-                .get_collection(self.entity_config["collection_name"])
-                .read_documents({"inserted_into_graphdb_at": ""})
-            )
+                if not entities_in_batch:
+                    graph_construction_logger.info(
+                        "No more entities to process. Batch upsert completed."
+                    )
+                    break
 
-            if not raw_entities:
-                graph_construction_logger.info(
-                    f"GraphConstructionSystem\nNo entities that have not been uploaded to Neo4j."
-                )
-                raise RuntimeError(f"No entities that have not been uploaded to Neo4j.")
-
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nRead {len(raw_entities)} entity(ies) that have not been uploaded to Neo4j."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while reading entities from MongoDB:{e}"
-            )
-            raise RuntimeError(f"Failed to read entities from MongoDB: {e}")
-
-        try:
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nInserting {len(raw_entities)} entity(ies) into Neo4j..."
-            )
-
-            grouped_entities = defaultdict(list)
-            for raw_entity in raw_entities:
-                entity_type = raw_entity["type"]
-                grouped_entities[entity_type].append(raw_entity)
-
-            for entity_type, entities in grouped_entities.items():
+                # Step 2 : Format and upsert the current batch into Neo4j
                 formatted_entities = [
-                    get_formatted_entity_for_graphdb(e) for e in entities
+                    get_formatted_entity_for_graphdb(entity)
+                    for entity in entities_in_batch
                 ]
-                self.graph_storage.insert_entities(
-                    entities=formatted_entities, label=entity_type
-                )
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nSuccessfully inserted {len(raw_entities)} entity(ies) into Neo4j."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while inserting entity(ies) into Neo4j:{e}"
-            )
-            raise RuntimeError(f"Failed to insert entity(ies) into Neo4j: {e}")
+                await self.graph_storage.upsert_entities(formatted_entities)
 
-        try:
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nUpdating {len(raw_entities)} entity(ies) with 'inserted_into_graphdb_at' field."
-            )
-
-            update_tasks = []
-
-            for entity in raw_entities:
-                update_tasks.append(
-                    self.async_mongo_storage.get_database(
-                        self.entity_config["database_name"]
-                    )
-                    .get_collection(self.entity_config["collection_name"])
-                    .update_document(
-                        {"_id": entity["_id"]},
-                        {
-                            "inserted_into_graphdb_at": get_formatted_current_datetime(
-                                "Asia/Kuala_Lumpur"
-                            )
-                        },
-                    )
+                # Step 3: Update the status ONLY for the entities in this successful batch
+                entity_ids = [entity["_id"] for entity in entities_in_batch]
+                await entity_collection.update_documents(
+                    query={"_id": {"$in": entity_ids}},
+                    update={"$set": {"status": "UPSERTED_INTO_GRAPH_DB"}},
                 )
 
-            await asyncio.gather(*update_tasks)
+                total_processed += len(entities_in_batch)
+                graph_construction_logger.info(
+                    f"Successfully processed batch. Total entities processed so far: {total_processed}"
+                )
+            except Exception as e:
+                graph_construction_logger.error(
+                    f"An error occurred while processing a batch: {e}. Stopping process."
+                )
+                raise
 
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nUpdated {len(raw_entities)} entity(ies) with 'inserted_into_graphdb_at' field."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while updating entity(ies) with 'inserted_into_graphdb_at' field:{e}"
-            )
-            raise RuntimeError(
-                f"Failed to update entity(ies) with 'inserted_into_graphdb_at' field: {e}"
-            )
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nFinished upserting entities into Neo4j. Total entities processed: {total_processed}."
+        )
 
     async def insert_relationships_into_neo4j(self):
         try:
