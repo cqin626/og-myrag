@@ -156,7 +156,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         entity_config: MongoStorageConfig,
         relationship_config: MongoStorageConfig,
         entity_cache_config: MongoStorageConfig,
+        relationship_cache_config: MongoStorageConfig,
         entities_deduplication_pending_tasks_config: MongoStorageConfig,
+        relationships_deduplication_pending_tasks_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         entity_cache_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
@@ -178,10 +180,14 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             self.entity_config = entity_config
             self.relationship_config = relationship_config
             self.entity_cache_config = entity_cache_config
+            self.relationship_cache_config = relationship_cache_config
             self.entity_vector_config = entity_vector_config
             self.entity_cache_vector_config = entity_cache_vector_config
             self.entities_deduplication_pending_tasks_config = (
                 entities_deduplication_pending_tasks_config
+            )
+            self.relationships_deduplication_pending_tasks_config = (
+                relationships_deduplication_pending_tasks_config
             )
             self.async_mongo_storage = AsyncMongoDBStorage(async_mongo_client)
 
@@ -501,7 +507,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
     ):
         while True:
             # Step 1 : Update the cache size
-            await self._update_cache_size(
+            await self._update_entities_cache_size(
                 max_cache_size=max_cache_size,
                 num_of_entities_per_batch=num_of_entities_per_batch,
                 from_company=from_company,
@@ -551,7 +557,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     )
 
         graph_construction_logger.info(
-            f"GraphConstructionSystem\nContinuous deduplication process for company {from_company} has completed."
+            f"GraphConstructionSystem\nContinuous entities deduplication process for company {from_company} has completed."
         )
 
     @retry(
@@ -746,7 +752,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 f"GraphConstructionSystem\nSuccessfully inserted entity with id: {str(entity['_id'])}"
             )
 
-    async def _update_cache_size(
+    async def _update_entities_cache_size(
         self, max_cache_size: int, num_of_entities_per_batch: int, from_company: str
     ):
         """
@@ -1114,39 +1120,51 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             graph_construction_logger.error(f"Failed to process delete batch: {e}")
             raise
 
-    async def revert_entities_deduplication_status(
-        self, from_company: str, from_status: str, to_status: str
+    async def revert_deduplication_status(
+        self,
+        from_company: str,
+        from_status: str,
+        to_status: str,
+        collection_to_revert: str,
     ) -> None:
-        # Function for debugging purpose
-        deduplicated_entities = (
-            await self.async_mongo_storage.get_database(
-                self.entity_config["database_name"]
+        """
+        Function for debugging purpose
+        """
+        config_map = {
+            "ENTITIES": self.entity_config,
+            "RELATIONSHIPS": self.relationship_config,
+        }
+
+        config = config_map.get(collection_to_revert)
+        if not config:
+            graph_construction_logger.warning(
+                f"Invalid collection name '{collection_to_revert}'. Valid options are: {list(config_map.keys())}. Aborting revert."
             )
-            .get_collection(self.entity_config["collection_name"])
-            .read_documents(
+            return
+
+        try:
+            collection = self.async_mongo_storage.get_database(
+                config["database_name"]
+            ).get_collection(config["collection_name"])
+
+            result = await collection.update_documents(
                 query={
                     "status": from_status,
                     "originated_from": {"$in": [from_company]},
-                }
+                },
+                update={"$set": {"status": to_status}},
             )
-        )
-        await asyncio.gather(
-            *[
-                self.async_mongo_storage.get_database(
-                    self.entity_config["database_name"]
-                )
-                .get_collection(self.entity_config["collection_name"])
-                .update_document(
-                    query={"_id": entity["_id"]},
-                    update_data={"status": to_status},
-                )
-                for entity in deduplicated_entities
-            ]
-        )
 
-        graph_construction_logger.debug(
-            f"GraphConstructionSystem\nChanged the status for {len(deduplicated_entities)}"
-        )
+            graph_construction_logger.info(
+                f"Revert status successful for collection '{collection_to_revert}'. "
+                f"Updated {result.modified_count} documents from status '{from_status}' to '{to_status}'."
+            )
+
+        except Exception as e:
+            graph_construction_logger.error(
+                f"Failed to revert status for collection '{collection_to_revert}': {e}"
+            )
+            raise
 
     async def upsert_entities_into_pinecone(self, from_company: str, batch_size: int):
         """
@@ -1193,7 +1211,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     query={"_id": {"$in": entity_ids}},
                     update={"$set": {"status": "TO_BE_UPSERTED_INTO_GRAPH_DB"}},
                 )
-                
+
                 total_processed += len(entities_in_batch)
                 graph_construction_logger.info(
                     f"Successfully processed batch. Total entities processed so far: {total_processed}"
@@ -1209,7 +1227,19 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             f"GraphConstructionSystem\nFinished upserting entities into Pinecone. Total entities processed: {total_processed}."
         )
 
-    async def upsert_entities_into_neo4j(self, from_company: str, batch_size: int):
+    async def upsert_entities_and_relationships_into_neo4j(
+        self, from_company: str, batch_size: int
+    ):
+        await self._upsert_entities_into_neo4j(
+            from_company=from_company, batch_size=batch_size
+        )
+        await self._upsert_relationships_into_neo4j(
+            from_company=from_company, batch_size=batch_size
+        )
+
+    async def _upsert_entities_into_neo4j(
+        self, from_company: str, batch_size: int = 100
+    ):
         """
         Finds and upserts entities into Neo4j in manageable batches.
         """
@@ -1267,91 +1297,63 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             f"GraphConstructionSystem\nFinished upserting entities into Neo4j. Total entities processed: {total_processed}."
         )
 
-    async def insert_relationships_into_neo4j(self):
-        try:
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nReading relationships from MongoDB..."
-            )
+    async def _upsert_relationships_into_neo4j(
+        self, from_company: str, batch_size: int = 100
+    ):
+        """
+        Finds and upserts relationships into Neo4j in manageable batches.
+        """
+        relationship_collection = self.async_mongo_storage.get_database(
+            self.relationship_config["database_name"]
+        ).get_collection(self.relationship_config["collection_name"])
+        graph_construction_logger.info(
+            "Starting batch upsert process for relationships into Neo4j."
+        )
 
-            raw_relationships = (
-                await self.async_mongo_storage.get_database(
-                    self.relationship_config["database_name"]
+        total_processed = 0
+        while True:
+            try:
+                # Step 1: Fetch one batch of relationships
+                relationships_in_batch = await relationship_collection.read_documents(
+                    query={
+                        "status": "TO_BE_UPSERTED_INTO_GRAPH_DB",
+                        "originated_from": {"$in": [from_company]},
+                    },
+                    limit=batch_size,
                 )
-                .get_collection(self.relationship_config["collection_name"])
-                .read_documents({"inserted_into_graphdb_at": ""})
-            )
+                if not relationships_in_batch:
+                    graph_construction_logger.info("No more relationships to process.")
+                    break
 
-            if not raw_relationships:
+                # Step 2: Format and upsert the current batch into Neo4j
+                formatted_relationships = [
+                    get_formatted_relationship_for_graphdb(relationship)
+                    for relationship in relationships_in_batch
+                ]
+                await self.graph_storage.upsert_relationships(formatted_relationships)
+
+                # Step 3: Update the status ONLY for the relationships in this successful batch
+                relationship_ids = [
+                    relationship["_id"] for relationship in relationships_in_batch
+                ]
+                await relationship_collection.update_documents(
+                    query={"_id": {"$in": relationship_ids}},
+                    update={"$set": {"status": "UPSERTED_INTO_GRAPH_DB"}},
+                )
+
+                total_processed += len(relationships_in_batch)
                 graph_construction_logger.info(
-                    f"GraphConstructionSystem\nNo relationships that have not been uploaded to Neo4j."
-                )
-                raise RuntimeError(
-                    f"No relationships that have not been uploaded to Neo4j."
+                    f"Successfully processed batch. Total relationships processed so far: {total_processed}"
                 )
 
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nRead {len(raw_relationships)} relationship(s) that have not been uploaded to Neo4j."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while reading relationships from MongoDB:{e}"
-            )
-            raise RuntimeError(f"Failed to read relationships from MongoDB: {e}")
-
-        try:
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nInserting {len(raw_relationships)} relationship(s) into Neo4j..."
-            )
-
-            formatted_relationships = []
-            for raw_relationship in raw_relationships:
-                formatted_relationships.append(
-                    get_formatted_relationship_for_graphdb(raw_relationship)
+            except Exception as e:
+                graph_construction_logger.error(
+                    f"An error occurred while processing a batch: {e}. Stopping process."
                 )
-
-            self.graph_storage.insert_relationships(formatted_relationships)
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nSuccessfully inserted {len(raw_relationships)} relationship(s) into Neo4j."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while inserting relationship(s) into Neo4j:{e}"
-            )
-            raise RuntimeError(f"Failed to insert relationship(s) into Neo4j: {e}")
-
-        try:
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nUpdating {len(raw_relationships)} relationship(s) with 'inserted_into_graphdb_at' field."
-            )
-            update_tasks = []
-            for relationship in raw_relationships:
-                update_tasks.append(
-                    self.async_mongo_storage.get_database(
-                        self.relationship_config["database_name"]
-                    )
-                    .get_collection(self.relationship_config["collection_name"])
-                    .update_document(
-                        {"_id": relationship["_id"]},
-                        {
-                            "inserted_into_graphdb_at": get_formatted_current_datetime(
-                                "Asia/Kuala_Lumpur"
-                            )
-                        },
-                    )
-                )
-
-            await asyncio.gather(*update_tasks)
-
-            graph_construction_logger.info(
-                f"GraphConstructionSystem\nUpdated {len(raw_relationships)} relationship(s) with 'inserted_into_graphdb_at' field."
-            )
-        except Exception as e:
-            graph_construction_logger.error(
-                f"GraphConstructionSystem\nError while updating relationship(s) with 'inserted_into_graphdb_at' field:{e}"
-            )
-            raise RuntimeError(
-                f"Failed to update relationship(s) with 'inserted_into_graphdb_at' field: {e}"
-            )
+                raise
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nFinished upserting relationships into Neo4j. Total relationships processed: {total_processed}."
+        )
 
     async def get_formatted_similar_entities_from_pinecone(
         self,

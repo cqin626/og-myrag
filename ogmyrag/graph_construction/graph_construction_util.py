@@ -54,7 +54,7 @@ def _get_formatted_relationships_for_db(
                 "source_id": relationship.get("source_id", ""),
                 "target_id": relationship.get("target_id", ""),
                 "type": relationship.get("type", "").strip(),
-                "description": relationship.get("desc", ""),
+                "description": [relationship.get("desc", "")],
                 "valid_in": relationship.get("valid_in", []),
                 "originated_from": [from_company],
                 "status": "TO_BE_DEDUPLICATED",
@@ -129,7 +129,7 @@ def get_formatted_entity_for_graphdb(
         "type": entity["type"],
         "name": entity["name"],
         "description": entity["description"],
-        "last_modified_at": get_current_datetime(timezone),
+        "last_modified_at": get_formatted_current_datetime(timezone),
     }
 
 
@@ -143,7 +143,7 @@ def get_formatted_relationship_for_graphdb(
         "properties": {
             "id": str(relationship["_id"]),
             "description": relationship["description"],
-            "last_modified_at": get_current_datetime(timezone),
+            "last_modified_at": get_formatted_current_datetime(timezone),
             "valid_in": relationship["valid_in"],
         },
     }

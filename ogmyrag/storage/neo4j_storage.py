@@ -4,6 +4,7 @@ from neo4j import AsyncGraphDatabase
 
 neo4j_logger = logging.getLogger("neo4j")
 
+
 class AsyncNeo4jStorage:
     def __init__(self, uri: str, user: str, password: str):
         self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
@@ -40,7 +41,9 @@ class AsyncNeo4jStorage:
             entity_id = entity.get("id")
 
             if not all([label, entity_id]):
-                neo4j_logger.warning(f"Skipping entity with missing 'type' or 'id': {entity}")
+                neo4j_logger.warning(
+                    f"Skipping entity with missing 'type' or 'id': {entity}"
+                )
                 continue
             entities_by_label[label].append(entity)
 
@@ -67,46 +70,45 @@ class AsyncNeo4jStorage:
             neo4j_logger.error(f"Failed to batch upsert entities: {str(e)}")
             raise
 
-    async def insert_relationships(self, relationships: list[dict]):
+    async def upsert_relationships(self, relationships: list[dict]):
         if not relationships:
             return
 
-        # Step 1: Group relationships by their type.
+        # Step 1: Group relationships by their type
         rels_by_type = defaultdict(list)
         for rel in relationships:
             source_id = rel.get("source_id")
             target_id = rel.get("target_id")
             rel_type = rel.get("type")
-            
-            if not all([source_id, target_id, rel_type]):
-                neo4j_logger.warning(f"Skipping invalid relationship: {rel}")
-                continue
-            
-            # Only source, target, and properties are needed for the query.
-            rel_data = {
-                "source_id": str(source_id),
-                "target_id": str(target_id),
-                "props": rel.get("properties", {})
-            }
-            rels_by_type[rel_type].append(rel_data)
+            rel_id = rel.get("properties", {}).get("id")
 
-        # Step 2: Execute one batch query for each relationship type.
+            if not all([source_id, target_id, rel_type, rel_id]):
+                neo4j_logger.warning(
+                    f"Skipping invalid relationship with missing fields: {rel}"
+                )
+                continue
+
+            rels_by_type[rel_type].append(rel)
+
+        # Step 2: Execute one batch upsert query for each relationship type.
         try:
             async with self.driver.session() as session:
                 for rel_type, rel_list in rels_by_type.items():
                     query = f"""
-                    UNWIND $rels AS rel
-                    MATCH (a {{id: rel.source_id}}), (b {{id: rel.target_id}})
-                    CREATE (a)-[r:{rel_type}]->(b)
-                    SET r = rel.props
+                        UNWIND $rels AS rel
+                        MERGE (a {{id: rel.source_id}})
+                        MERGE (b {{id: rel.target_id}})
+                        MERGE (a)-[r:`{rel_type}` {{id: rel.properties.id}}]->(b)
+                        ON CREATE SET r = rel.properties
+                        ON MATCH SET r += rel.properties
                     """
                     await session.run(query, rels=rel_list)
 
             neo4j_logger.info(
-                f"Successfully inserted {len(relationships)} relationship(s) across {len(rels_by_type)} types."
+                f"Successfully upserted {len(relationships)} relationship(s) across {len(rels_by_type)} types."
             )
         except Exception as e:
-            neo4j_logger.error(f"Failed to batch insert relationships: {str(e)}")
+            neo4j_logger.error(f"Failed to batch upsert relationships: {str(e)}")
             raise
 
     async def update_node(self, node_id: str, properties: dict):
