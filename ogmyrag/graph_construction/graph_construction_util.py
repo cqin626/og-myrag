@@ -105,6 +105,20 @@ def get_formatted_entity_cache_for_db(
     }
 
 
+def get_formatted_relationship_cache_for_db(
+    relationship: dict, timezone: str = "Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+    return {
+        "_id": relationship.get("_id"),
+        "source_id": relationship.get("source_id"),
+        "target_id": relationship.get("target_id"),
+        "type": relationship.get("type"),
+        "description": relationship.get("description"),
+        "valid_in": relationship.get("valid_in"),
+        "last_modified_at": get_current_datetime(timezone),
+    }
+
+
 def get_formatted_entity_for_vectordb(
     entity: dict[str, Any], timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
@@ -120,7 +134,8 @@ def get_formatted_entity_for_vectordb(
             "description": entity["description"],
         },
     }
-    
+
+
 def get_formatted_entity_for_graphdb(
     entity: dict[str, Any], timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
@@ -148,6 +163,7 @@ def get_formatted_relationship_for_graphdb(
         },
     }
 
+
 def get_formatted_entities_deduplication_pending_task(
     from_company: str,
     payload: dict[str, Any],
@@ -161,6 +177,7 @@ def get_formatted_entities_deduplication_pending_task(
         "payload": payload,
         "created_at": get_current_datetime(timezone),
     }
+
 
 def get_formatted_entity_details_for_deduplication(
     entity: dict, entity_label: str, associated_relationships: list
@@ -177,5 +194,3 @@ def get_formatted_entity_details_for_deduplication(
         output.append(f"  {i}. {relationship.get('description', '')}")
 
     return "\n".join(output)
-
-

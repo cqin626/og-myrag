@@ -52,6 +52,7 @@ from .graph_construction_util import (
     get_formatted_entity_details_for_deduplication,
     get_formatted_entities_deduplication_pending_task,
     get_formatted_entity_cache_for_db,
+    get_formatted_relationship_cache_for_db,
     get_formatted_entities_and_relationships_for_db,
 )
 
@@ -122,7 +123,7 @@ class EntityDeduplicationAgent(BaseAgent):
         """
         graph_construction_logger.info(f"EntityDeduplicationAgent is called")
 
-        system_prompt = PROMPT["ENTITIES_DEDUPLICATION"]
+        system_prompt = PROMPT["ENTITY_DEDUPLICATION"]
         # graph_construction_logger.debug(
         #     f"EntityDeduplicationAgent\System prompt used:\n{system_prompt}"
         # )
@@ -147,6 +148,46 @@ class EntityDeduplicationAgent(BaseAgent):
         return response.output_text
 
 
+class RelationshipDeduplicationAgent(BaseAgent):
+    """
+    An agent responsible for deduplicating extracted relationships.
+    Works by merging the descriptions of both relationships
+    """
+
+    async def handle_task(self, **kwargs) -> str:
+        """
+        Parameters:
+           relationship_description (list(str))
+        """
+        graph_construction_logger.info(f"RelationshipDeduplicationAgent is called")
+
+        system_prompt = PROMPT["RELATIONSHIP_DEDUPLICATION"]
+        # graph_construction_logger.debug(
+        #     f"RelationshipDeduplicationAgent\nSystem prompt used:\n{system_prompt}"
+        # )
+
+        user_prompt = kwargs.get("relationship_description") or []
+        # graph_construction_logger.debug(
+        #     f"RelationshipDeduplicationAgent\nUser prompt used:\n{user_prompt}"
+        # )
+
+        response = await fetch_responses_openai(
+            model="o4-mini",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "medium"},
+            max_output_tokens=100000,
+            stream=False,
+            tools=[],
+        )
+        graph_construction_logger.info(
+            f"RelationshipDeduplicationAgent\nRelationship deduplication response details:\n{get_formatted_openai_response(response)}"
+        )
+
+        return response.output_text
+
+
 class GraphConstructionSystem(BaseMultiAgentSystem):
     def __init__(
         self,
@@ -158,7 +199,6 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         entity_cache_config: MongoStorageConfig,
         relationship_cache_config: MongoStorageConfig,
         entities_deduplication_pending_tasks_config: MongoStorageConfig,
-        relationships_deduplication_pending_tasks_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         entity_cache_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
@@ -170,6 +210,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 ),
                 "EntityDeduplicationAgent": EntityDeduplicationAgent(
                     "EntityDeduplicationAgent"
+                ),
+                "RelationshipDeduplicationAgent": RelationshipDeduplicationAgent(
+                    "RelationshipDeduplicationAgent"
                 ),
             }
         )
@@ -185,9 +228,6 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             self.entity_cache_vector_config = entity_cache_vector_config
             self.entities_deduplication_pending_tasks_config = (
                 entities_deduplication_pending_tasks_config
-            )
-            self.relationships_deduplication_pending_tasks_config = (
-                relationships_deduplication_pending_tasks_config
             )
             self.async_mongo_storage = AsyncMongoDBStorage(async_mongo_client)
 
@@ -749,7 +789,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 entity=entity, from_company=from_company
             )
             graph_construction_logger.debug(
-                f"GraphConstructionSystem\nSuccessfully inserted entity with id: {str(entity['_id'])}"
+                f"GraphConstructionSystem\nSuccessfully inserted entity with id: {str(entity['_id'])} into entities cache"
             )
 
     async def _update_entities_cache_size(
@@ -1119,6 +1159,352 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         except Exception as e:
             graph_construction_logger.error(f"Failed to process delete batch: {e}")
             raise
+
+    async def deduplicate_relationships(
+        self,
+        from_company: str,
+        num_of_relationships_per_batch: int,
+        max_cache_size: int,
+        max_wait_time_per_task: int,
+    ):
+        while True:
+            # Step 1 : Update relationships cache size
+            await self._update_relationships_cache_size(
+                max_cache_size=max_cache_size,
+                num_of_relationships_per_batch=num_of_relationships_per_batch,
+                from_company=from_company,
+            )
+
+            # Step 2 : Fetch unprocessed relationships
+            relationships_to_deduplicate = await self._get_relationships_to_deduplicate(
+                from_company=from_company,
+                num_of_relationships_per_batch=num_of_relationships_per_batch,
+            )
+
+            # Step 3 : Check the exit condition for the loop
+            if not relationships_to_deduplicate:
+                graph_construction_logger.info(
+                    "GraphConstructionSystem\nNo more relationsips to deduplicate. Exiting process."
+                )
+                break
+
+            graph_construction_logger.debug(
+                f"GraphConstructionSystem\nRelationships to deduplicate:\n{json.dumps(relationships_to_deduplicate,indent=4,default=str)}"
+            )
+
+            # Step 4 : Deduplicate relationships concurrently
+            deduplication_tasks = [
+                self._deduplicate_relationship(
+                    relationship=relationship,
+                    from_company=from_company,
+                    max_wait_time_minutes=max_wait_time_per_task,
+                )
+                for relationship in relationships_to_deduplicate
+            ]
+
+            results = await asyncio.gather(*deduplication_tasks, return_exceptions=True)
+
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    relationship_id = str(relationships_to_deduplicate[i].get("_id"))
+                    graph_construction_logger.error(
+                        f"GraphConstructionSystem\nDeduplication for relationship {relationship_id} failed in batch: {result}"
+                    )
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nContinuous relationships deduplication process for company {from_company} has completed."
+        )
+
+    @retry(
+        retry=retry_if_exception_type(DatabaseError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
+    async def _deduplicate_relationship(
+        self,
+        relationship: dict,
+        from_company: str,
+        max_wait_time_minutes: int,
+    ):
+        # Step 1 : Find candidate relationship in cache
+        matches = await (
+            self.async_mongo_storage.get_database(
+                self.relationship_cache_config["database_name"]
+            )
+            .get_collection(from_company)
+            .read_documents(
+                query={
+                    "source_id": relationship["source_id"],
+                    "target_id": relationship["target_id"],
+                    "type": relationship["type"],
+                }
+            )
+        )
+        if matches:
+            # Step 2a : If there is a matching relationship, attempt to acquire its write lock
+            candidate_relationship_id = matches[0]["_id"]
+            lock_acquired = False
+            wait_time = timedelta(minutes=max_wait_time_minutes)
+            poll_interval_seconds = 10
+            start_time = get_current_datetime()
+
+            try:
+                while (get_current_datetime() - start_time) < wait_time:
+                    graph_construction_logger.info(
+                        f"GraphConstructionSystem\nAttempting to lock candidate relationship: '{str(candidate_relationship_id)}'"
+                    )
+                    # Atomic operation to acquire the lock
+                    lock_result = (
+                        await self.async_mongo_storage.get_database(
+                            self.relationship_cache_config["database_name"]
+                        )
+                        .get_collection(from_company)
+                        .update_document(
+                            query={
+                                "_id": candidate_relationship_id,
+                                "lock_status": {"$ne": "LOCKED"},
+                            },
+                            update_data={
+                                "lock_status": "LOCKED",
+                                "lock_timestamp": get_current_datetime(),
+                            },
+                        )
+                    )
+
+                    if lock_result == 1:
+                        lock_acquired = True
+                        graph_construction_logger.info(
+                            f"GraphConstructionSystem\nSuccessfully acquired lock on candidate: '{str(candidate_relationship_id)}'"
+                        )
+                        break
+                    else:
+                        graph_construction_logger.info(
+                            f"GraphConstructionSystem\nCandidate '{str(candidate_relationship_id)}' is locked. Waiting for {poll_interval_seconds} seconds..."
+                        )
+                        await asyncio.sleep(poll_interval_seconds)
+
+                # Step 3a : Check if the write lock is acquired
+                if not lock_acquired:
+                    graph_construction_logger.error(
+                        f"GraphConstructionSystem\nFailed to acquire lock on '{str(candidate_relationship_id)}' within the timeout period. Aborting merge."
+                    )
+                    raise asyncio.TimeoutError(
+                        f"GraphConstructionSystem\nTimed out waiting for lock on relationship '{str(candidate_relationship_id)}'"
+                    )
+
+                # Step 4a : Refetch the candidate relalationship after locking
+                candidate_relationship = (
+                    await self.async_mongo_storage.get_database(
+                        self.relationship_cache_config["database_name"]
+                    )
+                    .get_collection(from_company)
+                    .read_documents(query={"_id": candidate_relationship_id})
+                )[0]
+
+                # Step 5a : Merge the relationships
+                await self._merge_relationships(
+                    primary_relationship=relationship,
+                    candidate_relationship=candidate_relationship,
+                    from_company=from_company,
+                )
+                graph_construction_logger.debug(
+                    f"GraphConstructionSystem\nSuccessfully merge primary_relationship with id: {str(relationship['_id'])} into candidate_relationship with id: {str(candidate_relationship['_id'])}"
+                )
+            except Exception as e:
+                graph_construction_logger.error(
+                    f"GraphConstructionSystem\nAn error occurred during deduplication for relationship {str(candidate_relationship_id)}: {e}",
+                    exc_info=True,
+                )
+                raise
+            finally:
+                # Step 6a : Release the lock regardless of writing is performed
+                if lock_acquired:
+                    graph_construction_logger.info(
+                        f"GraphConstructionSystem\nReleasing lock on candidate relationship: {str(candidate_relationship_id)}"
+                    )
+                    await self.async_mongo_storage.get_database(
+                        self.relationship_cache_config["database_name"]
+                    ).get_collection(from_company).update_document(
+                        query={"_id": candidate_relationship_id},
+                        update_data={
+                            "$unset": {"lock_status": "", "lock_timestamp": ""}
+                        },
+                    )
+        else:
+            # Step 2b : If there is no matching relationship, insert the relationship
+            await self._insert_realtionship_into_cache(
+                relationship=relationship, from_company=from_company
+            )
+            graph_construction_logger.debug(
+                f"GraphConstructionSystem\nSuccessfully inserted relationship with id: {str(relationship['_id'])} into relationships cache"
+            )
+
+    async def _insert_realtionship_into_cache(
+        self, relationship: dict, from_company: str
+    ):
+        async with self.async_mongo_storage.with_transaction() as session:
+            # Step 1 : Insert the relationship into mongodb relationships cache
+            await self.async_mongo_storage.get_database(
+                self.relationship_cache_config["database_name"]
+            ).get_collection(from_company).create_document(
+                data=get_formatted_relationship_cache_for_db(relationship=relationship),
+                session=session,
+            )
+
+            # Step 2 : Update the status of the inserted relationship in permanent relationships storage
+            await self.async_mongo_storage.get_database(
+                self.relationship_config["database_name"]
+            ).get_collection(
+                self.relationship_config["collection_name"]
+            ).update_document(
+                query={"_id": relationship["_id"]},
+                update_data={
+                    "status": "TO_BE_UPSERTED_INTO_GRAPH_DB",
+                    "last_modified_at": get_current_datetime(),
+                },
+                session=session,
+            )
+
+    async def _merge_relationships(
+        self,
+        primary_relationship: dict,
+        candidate_relationship: dict,
+        from_company: str,
+    ):
+        # Step 1 : Prepare the merged data
+        new_valid_in = list(
+            set(primary_relationship["valid_in"])
+            | set(candidate_relationship["valid_in"])
+        )
+        llm_raw_result = await self.agents[
+            "RelationshipDeduplicationAgent"
+        ].handle_task(
+            relationship_description=(
+                primary_relationship["description"]
+                + candidate_relationship["description"]
+            ),
+        )
+        new_description = get_clean_json(llm_raw_result)["new_description"]
+
+        async with self.async_mongo_storage.with_transaction() as session:
+            current_timestamp = get_current_datetime()
+
+            # Step 2 : Update the candidate_relationship in mongodb cache storage with new attributes
+            await self.async_mongo_storage.get_database(
+                self.relationship_cache_config["database_name"]
+            ).get_collection(from_company).update_document(
+                query={"_id": candidate_relationship["_id"]},
+                update_data={
+                    "description": new_description,
+                    "valid_in": new_valid_in,
+                    "last_modified_at": current_timestamp,
+                },
+                session=session,
+            )
+
+            # Step 3 : Update the status of the candidate_relationship in permanent relationships storage
+            await self.async_mongo_storage.get_database(
+                self.relationship_config["database_name"]
+            ).get_collection(
+                self.relationship_config["collection_name"]
+            ).update_document(
+                query={"_id": candidate_relationship["_id"]},
+                update_data={
+                    "status": "TO_BE_UPSERTED_INTO_GRAPH_DB",
+                    "description": new_description,
+                    "valid_in": new_valid_in,
+                    "last_modified_at": current_timestamp,
+                },
+                session=session,
+            )
+
+            # Step 4 : Update the status of the primary_relationship in permanent relationships storage
+            await self.async_mongo_storage.get_database(
+                self.relationship_config["database_name"]
+            ).get_collection(
+                self.relationship_config["collection_name"]
+            ).update_document(
+                query={"_id": primary_relationship["_id"]},
+                update_data={
+                    "status": "TO_BE_DELETED",
+                    "last_modified_at": current_timestamp,
+                },
+                session=session,
+            )
+
+    async def _update_relationships_cache_size(
+        self,
+        max_cache_size: int,
+        num_of_relationships_per_batch: int,
+        from_company: str,
+    ):
+        """
+        Checks the relationships cache size and evicts the oldest items if the cache is nearing its capacity.
+        This is a proactive eviction to make space for an incoming batch.
+        """
+        relationship_cache_collection = self.async_mongo_storage.get_database(
+            self.relationship_cache_config["database_name"]
+        ).get_collection(from_company)
+
+        current_cache_size = await relationship_cache_collection.get_doc_counts()
+
+        # Proactively make space if the cache is close to full
+        if current_cache_size >= (max_cache_size - num_of_relationships_per_batch):
+            num_of_cache_to_remove = current_cache_size - (
+                max_cache_size - num_of_relationships_per_batch
+            )
+            if num_of_cache_to_remove <= 0:
+                return
+
+            graph_construction_logger.info(
+                f"Cache size ({current_cache_size}) is nearing limit ({max_cache_size}). "
+                f"Evicting {num_of_cache_to_remove} oldest items from '{from_company}'."
+            )
+
+            try:
+                async with self.async_mongo_storage.with_transaction() as session:
+                    # Step 1 : Get the oldest relationsihps to remove
+                    oldest_items = await relationship_cache_collection.read_documents(
+                        query={},
+                        sort=[("last_modified_at", ASCENDING)],
+                        limit=num_of_cache_to_remove,
+                        session=session,
+                    )
+
+                    if not oldest_items:
+                        return
+
+                    ids_to_delete = [item["_id"] for item in oldest_items]
+
+                    # Step 2 : Delete the relationships from the MongoDB cache in a single batch
+                    delete_result = (
+                        await relationship_cache_collection.delete_documents(
+                            query={"_id": {"$in": ids_to_delete}}, session=session
+                        )
+                    )
+
+                    graph_construction_logger.info(
+                        f"Successfully evicted {delete_result.deleted_count} relationships from MongoDB cache "
+                    )
+            except Exception as e:
+                graph_construction_logger.error(f"Failed during cache eviction: {e}")
+                raise
+
+    async def _get_relationships_to_deduplicate(
+        self, from_company: str, num_of_relationships_per_batch: int
+    ) -> list[dict]:
+        return await (
+            self.async_mongo_storage.get_database(
+                self.relationship_config["database_name"]
+            )
+            .get_collection(self.relationship_config["collection_name"])
+            .read_documents(
+                query={
+                    "status": "TO_BE_DEDUPLICATED",
+                    "originated_from": {"$in": [from_company]},
+                },
+                limit=num_of_relationships_per_batch,
+            )
+        )
 
     async def revert_deduplication_status(
         self,

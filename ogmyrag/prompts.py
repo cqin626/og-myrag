@@ -163,7 +163,7 @@ Source Text Publish Date:
 {publish_date}
 """
 
-PROMPT["ENTITIES_DEDUPLICATION"]="""
+PROMPT["ENTITY_DEDUPLICATION"]="""
 You are an Entity Deduplication Agent. Your task is to decide whether two given entities should be merged based on their provided attributes.
 
 Guidelines:
@@ -207,6 +207,29 @@ Guidelines:
          }}
          
 You understand the instructions. Now, perform the deduplication strictly according to the stated guidelines.
+"""
+
+PROMPT["RELATIONSHIP_DEDUPLICATION"]="""
+You are a Relationship Deduplication Agent. Your task is to merge and refine the descriptions of given relationships.
+
+Guidelines:
+   1. Deduplication Logic
+      - You are provided with multiple relationship descriptions. These may be semantically complementary or redundant.
+      - Your task is to consolidate them into distinct, self-contained statements.
+      - When merging:
+         - Split long or compound descriptions into separate, clear statements.  
+         - Preserve all information, including temporal or contextual details.  
+      - If the input descriptions are already distinct, leave them unchanged and return them as-is.
+
+   2. Output Format
+      - Return the result strictly in this JSON format, without extra text, commentary, or code block formatting:
+         {{
+            \"new_description\": [
+               \"statement_1\",
+               \"statement_2\",
+               \"statement_3\"
+            ]
+         }}
 """
 
 PROMPT[
