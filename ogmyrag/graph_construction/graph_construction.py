@@ -165,8 +165,9 @@ class RelationshipDeduplicationAgent(BaseAgent):
         # graph_construction_logger.debug(
         #     f"RelationshipDeduplicationAgent\nSystem prompt used:\n{system_prompt}"
         # )
-
-        user_prompt = kwargs.get("relationship_description") or []
+        
+        user_prompt_list = kwargs.get("relationship_description") or []
+        user_prompt = "\n".join(user_prompt_list)
         # graph_construction_logger.debug(
         #     f"RelationshipDeduplicationAgent\nUser prompt used:\n{user_prompt}"
         # )
@@ -602,7 +603,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
 
     @retry(
         retry=retry_if_exception_type(DatabaseError),
-        stop=stop_after_attempt(3),
+        stop=stop_after_attempt(10),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
     async def _deduplicate_entity(
@@ -1216,7 +1217,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
 
     @retry(
         retry=retry_if_exception_type(DatabaseError),
-        stop=stop_after_attempt(3),
+        stop=stop_after_attempt(10),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
     async def _deduplicate_relationship(
