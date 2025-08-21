@@ -90,9 +90,9 @@ class ReportRetrievalManager:
         mode, docs_to_process = self.determine_mode(raw_docs, company, report_type, year, forced_process)
 
         if report_type.collection == "ipo_reports":
-            final_md, contents_dict = await self.parse_ipo(company, year, report_type, docs_to_process, mode)
+            final_md = await self.parse_ipo(company, year, report_type, docs_to_process, mode)
         elif report_type.collection == "annual_reports":
-            final_md, contents_dict = await self.parse_annual(company, year, report_type, docs_to_process, mode)
+            final_md = await self.parse_annual(company, year, report_type, docs_to_process, mode)
 
         processed_md_name = f"{processed_location}.md"
         await self.mark_processed(company, report_type, year, processed_md_name)
@@ -156,7 +156,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md), contents
+            return "\n".join(md)    #, contents
         
         if mode == "amend":
             retrieval_logger.info("Amend processing mode, updating existing sections.")
@@ -169,7 +169,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md), contents
+            return "\n".join(md)    #, contents
         
         # If we reach here, it means an unknown mode was provided
         retrieval_logger.error("Unknown processing mode: %s - defaulting to fresh", mode)
@@ -186,7 +186,7 @@ class ReportRetrievalManager:
         for section, text in contents.items():
             md.append(text + "\n")
 
-        return "\n".join(md), contents
+        return "\n".join(md)    #, contents
     
 
     
@@ -228,7 +228,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md), contents
+            return "\n".join(md)    #, contents
         
         if mode == "amend":
             retrieval_logger.info("Amend processing mode, updating existing sections.")
@@ -241,7 +241,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md), contents
+            return "\n".join(md)    #, contents
         
 
         # If we reach here, it means an unknown mode was provided
@@ -259,7 +259,7 @@ class ReportRetrievalManager:
         for section, text in contents.items():
             md.append(text + "\n")
 
-        return "\n".join(md), contents
+        return "\n".join(md)    #, contents
    
 
     def determine_mode(
