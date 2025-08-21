@@ -90,9 +90,9 @@ class ReportRetrievalManager:
         mode, docs_to_process = self.determine_mode(raw_docs, company, report_type, year, forced_process)
 
         if report_type.collection == "ipo_reports":
-            final_md = await self.parse_ipo(company, year, report_type, docs_to_process, mode)
+            final_md, contents_dict = await self.parse_ipo(company, year, report_type, docs_to_process, mode)
         elif report_type.collection == "annual_reports":
-            final_md = await self.parse_annual(company, year, report_type, docs_to_process, mode)
+            final_md, contents_dict = await self.parse_annual(company, year, report_type, docs_to_process, mode)
 
         processed_md_name = f"{processed_location}.md"
         await self.mark_processed(company, report_type, year, processed_md_name)
@@ -156,7 +156,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md)
+            return "\n".join(md), contents
         
         if mode == "amend":
             retrieval_logger.info("Amend processing mode, updating existing sections.")
@@ -169,7 +169,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md)
+            return "\n".join(md), contents
         
         # If we reach here, it means an unknown mode was provided
         retrieval_logger.error("Unknown processing mode: %s - defaulting to fresh", mode)
@@ -186,7 +186,7 @@ class ReportRetrievalManager:
         for section, text in contents.items():
             md.append(text + "\n")
 
-        return "\n".join(md)
+        return "\n".join(md), contents
     
 
     
@@ -228,7 +228,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md)
+            return "\n".join(md), contents
         
         if mode == "amend":
             retrieval_logger.info("Amend processing mode, updating existing sections.")
@@ -241,7 +241,7 @@ class ReportRetrievalManager:
             for section, text in contents.items():
                 md.append(text + "\n")
 
-            return "\n".join(md)
+            return "\n".join(md), contents
         
 
         # If we reach here, it means an unknown mode was provided
@@ -259,7 +259,7 @@ class ReportRetrievalManager:
         for section, text in contents.items():
             md.append(text + "\n")
 
-        return "\n".join(md)
+        return "\n".join(md), contents
    
 
     def determine_mode(
@@ -532,8 +532,41 @@ class ReportRetrievalManager:
 
         year_tag = f"_{year}" if year and year != "N/A" else ""
         doc_type = "PROSPECTUS" if report_type.collection == "ipo_reports" else "ANNUAL_REPORT"
-        
-        for index, section in enumerate(sections, start = 1):
+
+        # NEW: ensure shared RPM state + lock exist
+        if not hasattr(self, "_rpm_lock"):
+            self._rpm_lock = asyncio.Lock()
+        if not hasattr(self, "win_start"):
+            self.win_start = time.time()
+        if not hasattr(self, "reqs_in_window"):
+            self.reqs_in_window = 0
+        if not hasattr(self, "rpm_limit"):
+            self.rpm_limit = 5  # default if not set elsewhere
+
+        # NEW: simple async RPM acquire using your existing counters
+        async def rpm_acquire():
+            while True:
+                # compute wait outside of the lock to avoid blocking others
+                async with self._rpm_lock:
+                    now = time.time()
+                    elapsed = now - self.win_start
+                    if elapsed >= 60:
+                        self.win_start = now
+                        self.reqs_in_window = 0
+
+                    if self.reqs_in_window < self.rpm_limit:
+                        self.reqs_in_window += 1
+                        wait_s = 0.0
+                    else:
+                        wait_s = max(0.01, 60 - (now - self.win_start))
+                if wait_s <= 0:
+                    return
+                await asyncio.sleep(wait_s)
+
+        # NEW: limit concurrency to 5 (or your rpm_limit)
+        sem = asyncio.Semaphore(self.rpm_limit)
+
+        async def process_one(index: int, section: str):
             self.storage.use_collection("company_disclosures")
             filter_query = {
                 "name": f"{company}_{report_type.name}{year_tag}_SECTION_{index}",
@@ -553,92 +586,90 @@ class ReportRetrievalManager:
             else:
                 need_to_extract = not exists
 
-            base = None
-
             if mode == "amend" and exists:
                 base = await self.storage.retrieve_section(filter_query)
                 SECTION_PROMPT_AMEND = PROMPT["SECTION PROMPT AMEND"]
                 prompt_text = SECTION_PROMPT_AMEND.format(base=base, section=section)
-
             else:
                 SECTION_PROMPT_FRESH = PROMPT["SECTION PROMPT FRESH"]
                 prompt_text = SECTION_PROMPT_FRESH.format(section=section)
-                
+
             content = None
-            if need_to_extract:
-                attempts = 0
-                while attempts < 3:
-                    attempts += 1
-                    # RPM guard
-                    now = time.time()
-                    elapsed = now - self.win_start
-                    if elapsed >= 60:
-                        self.win_start = now
-                        self.reqs_in_window = 0
-                    if self.reqs_in_window >= self.rpm_limit:
-                        await asyncio.sleep(60 - (time.time() - self.win_start))
-                        self.win_start = time.time()
-                        self.reqs_in_window = 0
 
-                    try:
+            async with sem:  # NEW: at most 5 in flight
+                if need_to_extract:
+                    attempts = 0
+                    while attempts < 3:
+                        attempts += 1
 
+                        # NEW: global RPM guard (thread-safe via lock)
+                        await rpm_acquire()
 
-                        retrieval_logger.info("Extracting section: %s", section)
+                        try:
+                            retrieval_logger.info("Extracting section: %s", section)
 
-                        response = self.client.models.generate_content(
-                            model=self.genai_model,
-                            contents=[*uploaded, prompt_text]
-                        )
-                        content = clean_markdown_response(response.text.strip())
+                            # NEW: offload blocking call so we don't block the event loop
+                            response = await asyncio.to_thread(
+                                self.client.models.generate_content,
+                                model=self.genai_model,
+                                contents=[*uploaded, prompt_text]
+                            )
+                            content = clean_markdown_response(response.text.strip())
 
-                        usage = response.usage_metadata
+                            usage = getattr(response, "usage_metadata", None)
+                            if usage:
+                                retrieval_logger.info(
+                                    "Definition tokens: prompt = %s, output = %s, total = %s",
+                                    getattr(usage, "prompt_token_count", "?"),
+                                    getattr(usage, "candidates_token_count", "?"),
+                                    getattr(usage, "total_token_count", "?"),
+                                )
 
-                        retrieval_logger.info(
-                            f"Definition tokens: prompt = {usage.prompt_token_count}, "
-                            f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
-                        )
-                
-                        update_query = {
-                            "created_at": datetime.utcnow(),
-                            "is_parsed": True,
-                            "content": content,
-                            "published_at": docs[0]["announced_date"],
-                            "section": section
-                        }
-                        if year and year != "N/A":
-                            update_query["year"] = year
+                            update_query = {
+                                "created_at": datetime.utcnow(),
+                                "is_parsed": True,
+                                "content": content,
+                                "published_at": docs[0]["announced_date"],
+                                "section": section
+                            }
+                            if year and year != "N/A":
+                                update_query["year"] = year
 
-                        self.storage.update_many(filter_query, update_query)
-                        retrieval_logger.info("Section: %s saved in DB", section)
+                            self.storage.update_many(filter_query, update_query)
+                            retrieval_logger.info("Section: %s saved in DB", section)
+                            break
 
-                        break
-                    
-                    except Exception as e:
-                        msg = str(e).lower()
-                        if "429" in msg or "rate" in msg or "quota" in msg or "limit" in msg:
-                            wait_s = max(0.5, 60 - (time.time() - self.win_start))
+                        except Exception as e:
+                            msg = str(e).lower()
+                            if "429" in msg or "rate" in msg or "quota" in msg or "limit" in msg:
+                                wait_s = max(0.5, 60 - (time.time() - self.win_start))
+                            else:
+                                wait_s = 1 if attempts == 1 else 2
+                            retrieval_logger.warning(
+                                "Section '%s' attempt %d failed: %s; sleeping %.1fs",
+                                section, attempts, e, wait_s
+                            )
+                            await asyncio.sleep(wait_s)
+
+                    if content is None:
+                        retrieval_logger.error("Section '%s' failed after retries.", section)
+                        if exists:
+                            content = await self.storage.retrieve_section(filter_query)
                         else:
-                            wait_s = 1 if attempts == 1 else 2
-                        retrieval_logger.warning("Section '%s' attempt %d failed: %s; sleeping %.1fs",
-                                                section, attempts, e, wait_s)
-                        await asyncio.sleep(wait_s)
-
-                if content is None:
-                    retrieval_logger.error("Section '%s' failed after retries.", section)
-                    if exists:
-                        content = await self.storage.retrieve_section(filter_query)
-                    else:
-                        content = f"# {section}\n\n[Extraction failed after retries]"
-            
-            else:
-                retrieval_logger.info("Section %s already exists, updating content", section)
-                content = await self.storage.retrieve_section(filter_query)
+                            content = f"# {section}\n\n[Extraction failed after retries]"
+                else:
+                    retrieval_logger.info("Section %s already exists, updating content", section)
+                    content = await self.storage.retrieve_section(filter_query)
 
             results[section] = content
-            
+
+        # NEW: fire off tasks instead of serial loop
+        tasks = [asyncio.create_task(process_one(i, s)) for i, s in enumerate(sections, start=1)]
+        await asyncio.gather(*tasks)
 
         retrieval_logger.info("All sections extracted.")
         return results
+        
 
 
     async def generate_response_with_docs(self, docs: List[Mapping[str, Any]], prompt: str):
