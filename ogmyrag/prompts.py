@@ -255,98 +255,35 @@ Return only the plain text output—no explanations, metadata, headers, or addit
 """
 
 PROMPT[
-    "USER_REQUEST_TO_RETRIEVAL_QUERY"
+    "REQUEST_DECOMPOSITION"
 ] = """
-You are an ontology-aware query planner. Your task is to generate a high-level natural language query based on a user request that can be executed via Text-to-Cypher retrieval, strictly adhering to the provided ontology.
+You are the RequestDecompositionAgent. Your task is to analyze a user’s natural language request and determine whether it should be:
+   1. Rephrased and kept as a single request, OR
+   2. Rephrased and decomposed into multiple independent sub-requests.
 
 Guidelines:
-	1. Query Generation Logic
-		- If the request is a read-type query:
-         - If the request can be directly answered using the ontology-based knowledge graph through Cypher retrieval:
-            - Generate a **natural language query** using only entities and relationships defined in the ontology (see guideline 2).
-            - Extract and list all **entity instances** mentioned in the query (see guideline 3).
-            - Return the output in the format defined in guideline 4.
+   1. Splitting Logic
+      - Your primary goal is to maximize parallelism by splitting the request into multiple independent sub-requests where possible.
+      - Do NOT split if:
+         [1] The request is already simple and splitting adds no efficiency.
+         [2] The information needs are dependent (i.e., the output of one request is required as the input to another).
+      - Only perform splitting when the sub-requests can be answered independently.
       
-         - Else if the request uses a vague, ambiguous, or informal phrase to describe a relationship, but the intent can be reasonably interpreted using one or more ontology-defined relationships:
-            - Identify the most relevant relationships in the ontology that match the intent.
-            - Generate a **natural language query** using only entities and relationships defined in the ontology (see guideline 2).
-            - Extract and list all **entity instances** mentioned in the query (see guideline 3).
-            - Return the output in the format defined in guideline 4.
-      
-      - Otherwise:
-         - Refuse query generation.
-         - Clearly state the reason in the `note` field.
-         - Return the output using the format in guideline 4 and illustrated in guideline 5.
+   2. Rephrasing Logic
+      - Rephrase the user request into a concise, unambiguous form.
+      - If split into multiple sub-requests, ensure each sub-request is also concise and unambiguous.
+      - Preserve the original meaning of the user’s intent at all times.
+      - Do NOT infer knowledge or add details that are not explicitly present in the user’s request.
 
-	2. Ontology Adherence
-      - The ontology defines **entity types** and **relationship types** with the following schema:
-         - Entities:
-            1. `entity_name`: The name of the entity type.
-            2. `definition`: The definition of the entity type.
-            3. `llm-guidance`: Guidance on how the actual entity instances may appear in the database. This is for reference purposes only, and you should not focus too much on it.
-            4. `examples`: Example instances of the entity type.
-            
-         - Relationships:
-            1. `relationship_name`: The name of the relationship type.
-            2. `source`: The entity type from which the relationship originates.
-            3. `target`: The entity type to which the relationship points.
-            4. `llm-guidance`: Guidance on how and when the relationship applies.
-            5. `examples`: Example usage of the relationship in context.
-
-      - Strictly use only the entities and relationships defined in the ontology. Do **not** invent new types.
-
-   3. Entities to Validate
-      - For each entity instance mentioned in the user request, append it to the `entities_to_validate list`.
-
-      - Do not reject partial or informal entity names that do not align with the definitions, llm-guidance, or examples stated in the ontology. Instead, include them in the `entities_to_validate list` for downstream validation and resolution against the actual entity database. You are not responsible for verifying the correctness or completeness of instance names—your task is only to identify them.
-
-	4. Output Format
-		- Return only the following raw JSON structure - no explanations, comments, or code block formatting:
+   3. Output Format
+       - Return the result strictly in this JSON format, without extra text, commentary, or code block formatting:
          {{
-            \"user_query\": \"<repeat user query here>\",
-            \"generated_query\": \"<natural language query based strictly on ontology>\",
-            \"entities_to_validate\": [\"<Entity Instance 1>\", \"<Entity Instance 2>\"],
-            \"note\": \"<reason if rejected, otherwise blank>\"
+            \"requests\": [
+               \"sub_request_1\",
+               \"sub_request_2\",
+               \"sub_request_3\"
+            ]
          }}
-
-	5. Example
-		a. Ontology
-         Entities:
-            1. Person
-               - definition: An individual human who may hold a position or role within a company.
-               - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
-               - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
-
-            2. Company 
-               - definition: A legally registered business entity involved in commercial or professional activities.
-               - llm-guidance: Extract full legal names of organizations registered as companies. Identify names ending in legal suffixes such as 'Berhad', 'Sdn Bhd', or 'Inc.' Do not include registration numbers or addresses.
-               - examples: ABC Berhad, Apple Inc., United Gomax Sdn Bhd
-
-         Relationships:
-            1. hasIndependentDirector
-               - relationship_name: hasIndependentDirector
-               - source: Company
-               - target: Person
-               - llm-guidance: Use this when a person is described as the independent director of a company.
-               - examples: Banana Inc. hasIndependentDirector John Chua
-
-		b. User Request
-		   "Which companies have Tan Hui Mei as an independent director?"
-
-		c. Output:
-         {{
-            \"user_query\": \"Which companies have Tan Hui Mei as an independent director?\",
-            \"generated_query\": \"Return all Company entities that have a hasIndependentDirector relationship with the Person named 'Tan Hui Mei'.\",
-            \"entities_to_validate\": [\"Tan Hui Mei\"],
-            \"note\": \"\"
-         }}
-
-You now understand the task. Proceed to generate the query based on the user request and the ontology below, while strictly adhering to the guidelines.
-
-Ontology:
-{ontology}
-
-User Request:
 """
 
 PROMPT[
