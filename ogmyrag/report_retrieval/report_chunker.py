@@ -454,14 +454,6 @@ async def rag_answer_with_company_detection(
     hits.sort(key=lambda h: (h["score"] is not None, h["score"]), reverse=True)
     hits = hits[:top_k]
 
-    retrieval_logger.info("Top-%d chunks retrieved: %d", top_k, len(hits))
-    for i, h in enumerate(hits, start=1):
-        retrieval_logger.info(
-            "Hit #%d | id=%s | score=%.3f | company=%s | section=%s | text=%s",
-            i, h.get("id"), (h.get("score") or 0.0),
-            h.get("company"), h.get("section"),
-            _clip(h.get("text"), 300)
-        )
 
     # build (unbounded) context string
     context = "\n\n".join(
@@ -503,11 +495,21 @@ async def rag_answer_with_company_detection(
     total_tokens_all = (detect_usage["total_tokens"] or 0) + (answer_usage["total_tokens"] or 0)
 
 
-    retrieval_logger.info("Final answer: %s", answer)
+    retrieval_logger.info("Final answer: \n\n%s\n\n", answer)
     retrieval_logger.info(
         "Token usage | detect=%s | answer=%s | total=%d",
         detect_usage, answer_usage, total_tokens_all
     )
+
+    # print out top-k chunks on console
+    """retrieval_logger.info("\n\nTop-%d chunks retrieved: %d", top_k, len(hits))
+    for i, h in enumerate(hits, start=1):
+        retrieval_logger.info(
+            "Hit #%d | id=%s | score=%.3f | company=%s | section=%s | text=%s",
+            i, h.get("id"), (h.get("score") or 0.0),
+            h.get("company"), h.get("section"),
+            h.get("text")
+        )"""
 
     return {
         "answer": answer,

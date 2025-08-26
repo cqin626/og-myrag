@@ -16,8 +16,6 @@ from google.genai import types
 from openai import OpenAI
 
 from .retrieval_storage   import RetrievalAsyncStorageManager
-from .retrieval_embedder  import RetrievalEmbedder
-from .retrieval_extractor import RetrievalExtractor
 from ..report_scraper.models import ReportType
 from ..report_retrieval.report_retrieval_util import clean_markdown_response
 from ..prompts import PROMPT
@@ -44,8 +42,6 @@ class ReportRetrievalManager:
     def __init__(
         self,
         storage: RetrievalAsyncStorageManager,
-        embedder: RetrievalEmbedder,
-        extractor: RetrievalExtractor,
         pine: PineconeStorage,
         genai_model: str,
         genai_api_key: str,
@@ -53,8 +49,6 @@ class ReportRetrievalManager:
         dry_run: bool = True
     ):
         self.storage   = storage
-        self.embedder  = embedder
-        self.extractor = extractor
         self.pine = pine
         self.genai_model   = genai_model
         self.genai_api_key = genai_api_key
@@ -100,22 +94,9 @@ class ReportRetrievalManager:
         processed_md_name = f"{processed_location}.md"
         await self.mark_processed(company, report_type, year, processed_md_name)
 
-        # upsert and download
-        #await self.upsert_download(company, year, processed_md, final_md, report_type)
-
         # download to local
         if download_local:
             self.download_to_local(company, processed_md_name, final_md)
-
-        # chunk and replce old vectors in Pinecone
-        """chunks = chunk_markdown_financial_reports(final_md)
-        retrieval_logger.info("Total Chunks: %d", len(chunks))
-        
-        if not self.dry_run:
-            self.embedder.upsert_chunks(chunks, company, year)
-
-        else:
-            retrieval_logger.info("Dry run enabled, skipping chunk upsert.")"""
 
         
         
@@ -757,41 +738,7 @@ class ReportRetrievalManager:
         retrieval_logger.info(f"     Total Tokens: {total_tokens}")
         
         return clean_markdown_response(response.text)
-    
 
-
-
-    def answer_query(
-            self,
-            company: str,
-            query: str,
-            top_k: 5,
-            chat_model: str
-    ) -> str:
-        """
-        Answer a query about a company's reports using the retrieval system.
-        1) Retrieve relevant chunks from Pinecone
-        2) Format them into a prompt
-        3) Use OpenAI to answer the query
-        """
-        top_k_chunks = self.extractor.retrieve_chunks(query, namespace=company, top_k=top_k)
-
-        if not top_k_chunks:
-            return "No relevant information found for this query."
-        
-        context = "\n\n---\n\n".join(top_k_chunks)
-
-        openai = OpenAI(api_key=self.openai_key)
-        messages = [
-            {"role": "system", "content": f"Use the following context:\n\n{context}"},
-            {"role": "user",   "content": query}
-        ]
-        resp = openai.chat.completions.create(model=chat_model, messages=messages)
-
-        retrieval_logger.info("Response generated: %s (TOKEN: %d)", resp.choices[0].message.content, resp.usage.total_tokens)
-        
-        return resp.choices[0].message.content
-    
 
     def download_to_local(self, company: str, filename: str, content: str) -> None:
         company_directory = os.path.join("./processed_report", company)
