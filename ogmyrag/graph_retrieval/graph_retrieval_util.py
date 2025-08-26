@@ -28,7 +28,7 @@ def get_formatted_text2cypher_message(response: dict):
         parameters = item.get("parameters", {})
         obtained_data = item.get("obtained_data", [])
         note = item.get("note", "")
-        
+
         output.append(f"Response {idx}:\n")
         output.append(f"  - Original query: {original_query}")
         output.append(f"  - Cypher query: {cypher_query}")
@@ -50,3 +50,14 @@ def get_formatted_text2cypher_message(response: dict):
         output.append(f"  - Note: {note or 'NA'}")
 
     return "\n".join(output)
+
+
+def get_formatted_decomposed_request(data: dict) -> str:
+    output = ["Decomposed Request:"]
+    for i, req in enumerate(data.get("requests", []), start=1):
+        output.append(f"  Sub-request {i}: {req['sub_request']}")
+        output.append(f"  Validated entities:")
+        for j, entity in enumerate(req.get("validated_entities", []), start=1):
+            output.append(f"    {j}. {entity}")
+        output.append("")
+    return "\n".join(output).strip()
