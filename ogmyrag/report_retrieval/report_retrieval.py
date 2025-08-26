@@ -21,7 +21,8 @@ from .retrieval_extractor import RetrievalExtractor
 from ..report_scraper.models import ReportType
 from ..report_retrieval.report_retrieval_util import clean_markdown_response
 from ..prompts import PROMPT
-from .report_chunker import chunk_markdown_financial_reports
+from .report_chunker import index_markdown_with_pinecone
+from ..storage.pinecone_storage import PineconeStorage
 
 # Background event loop for async storage
 _background_loop = asyncio.new_event_loop()
@@ -45,6 +46,7 @@ class ReportRetrievalManager:
         storage: RetrievalAsyncStorageManager,
         embedder: RetrievalEmbedder,
         extractor: RetrievalExtractor,
+        pine: PineconeStorage,
         genai_model: str,
         genai_api_key: str,
         openai_api_key: str,
@@ -53,6 +55,7 @@ class ReportRetrievalManager:
         self.storage   = storage
         self.embedder  = embedder
         self.extractor = extractor
+        self.pine = pine
         self.genai_model   = genai_model
         self.genai_api_key = genai_api_key
         self.client = genai.Client(api_key=self.genai_api_key)
@@ -142,10 +145,10 @@ class ReportRetrievalManager:
         uploaded = await self.upload_pdfs(docs)
 
         if mode == "fresh":
-            retrieval_logger.info("Fresh processing mode, extracting definitions and TOC.")
+            retrieval_logger.info("Fresh processing mode, extracting TOC.")
 
-            # Definitions & TOC extraction
-            await self.extract_definitions(company, report_type, docs, uploaded, year=year)
+            # TOC extraction
+            #await self.extract_definitions(company, report_type, docs, uploaded, year=year)
             sections = await self.extract_table_of_contents(company, report_type, docs, uploaded, year=year)
 
             # Section extraction
@@ -174,8 +177,8 @@ class ReportRetrievalManager:
         # If we reach here, it means an unknown mode was provided
         retrieval_logger.error("Unknown processing mode: %s - defaulting to fresh", mode)
 
-        # Definitions & TOC extraction
-        await self.extract_definitions(company, report_type, docs, uploaded, year=year)
+        # TOC extraction
+        #await self.extract_definitions(company, report_type, docs, uploaded, year=year)
         sections = await self.extract_table_of_contents(company, report_type, docs, uploaded, year=year)
 
         # Section extraction
@@ -526,12 +529,17 @@ class ReportRetrievalManager:
             uploaded: List[Any],
             sections: List[str],
             mode: str,
-            year: Optional[str] = None
+            year: Optional[str] = None,         
+            embed_workers: int = 5,           
     ) -> Dict[str, str]:
         results: Dict[str, str] = {}
 
         year_tag = f"_{year}" if year and year != "N/A" else ""
         doc_type = "PROSPECTUS" if report_type.collection == "ipo_reports" else "ANNUAL_REPORT"
+
+        # --- NEW: track success/failure ---
+        success_sections: list[str] = []
+        failed_sections: list[tuple[str, str]] = []  # (section, reason)
 
         # NEW: ensure shared RPM state + lock exist
         if not hasattr(self, "_rpm_lock"):
@@ -565,107 +573,150 @@ class ReportRetrievalManager:
 
         # NEW: limit concurrency to 5 (or your rpm_limit)
         sem = asyncio.Semaphore(self.rpm_limit)
+        embed_sem = asyncio.Semaphore(embed_workers)
 
         async def process_one(index: int, section: str):
-            self.storage.use_collection("company_disclosures")
-            filter_query = {
-                "name": f"{company}_{report_type.name}{year_tag}_SECTION_{index}",
-                "type": doc_type,
-                "from_company": company,
-                "section": section
-            }
-            if year and year != "N/A":
-                filter_query["year"] = year
+            try:
+                self.storage.use_collection("company_disclosures")
+                filter_query = {
+                    "name": f"{company}_{report_type.name}{year_tag}_SECTION_{index}",
+                    "type": doc_type,
+                    "from_company": company,
+                    "section": section
+                }
+                if year and year != "N/A":
+                    filter_query["year"] = year
 
-            exists = await self.storage.check_exists(filter_query)
+                exists = await self.storage.check_exists(filter_query)
 
-            if mode == "fresh":
-                need_to_extract = True
-            elif mode == "amend":
-                need_to_extract = True
-            else:
-                need_to_extract = not exists
-
-            if mode == "amend" and exists:
-                base = await self.storage.retrieve_section(filter_query)
-                SECTION_PROMPT_AMEND = PROMPT["SECTION PROMPT AMEND"]
-                prompt_text = SECTION_PROMPT_AMEND.format(base=base, section=section)
-            else:
-                SECTION_PROMPT_FRESH = PROMPT["SECTION PROMPT FRESH"]
-                prompt_text = SECTION_PROMPT_FRESH.format(section=section)
-
-            content = None
-
-            async with sem:  # NEW: at most 5 in flight
-                if need_to_extract:
-                    attempts = 0
-                    while attempts < 3:
-                        attempts += 1
-
-                        # NEW: global RPM guard (thread-safe via lock)
-                        await rpm_acquire()
-
-                        try:
-                            retrieval_logger.info("Extracting section: %s", section)
-
-                            # NEW: offload blocking call so we don't block the event loop
-                            response = await asyncio.to_thread(
-                                self.client.models.generate_content,
-                                model=self.genai_model,
-                                contents=[*uploaded, prompt_text]
-                            )
-                            content = clean_markdown_response(response.text.strip())
-
-                            usage = getattr(response, "usage_metadata", None)
-                            if usage:
-                                retrieval_logger.info(
-                                    "Definition tokens: prompt = %s, output = %s, total = %s",
-                                    getattr(usage, "prompt_token_count", "?"),
-                                    getattr(usage, "candidates_token_count", "?"),
-                                    getattr(usage, "total_token_count", "?"),
-                                )
-
-                            update_query = {
-                                "created_at": datetime.utcnow(),
-                                "is_parsed": True,
-                                "content": content,
-                                "published_at": docs[0]["announced_date"],
-                                "section": section
-                            }
-                            if year and year != "N/A":
-                                update_query["year"] = year
-
-                            self.storage.update_many(filter_query, update_query)
-                            retrieval_logger.info("Section: %s saved in DB", section)
-                            break
-
-                        except Exception as e:
-                            msg = str(e).lower()
-                            if "429" in msg or "rate" in msg or "quota" in msg or "limit" in msg:
-                                wait_s = max(0.5, 60 - (time.time() - self.win_start))
-                            else:
-                                wait_s = 1 if attempts == 1 else 2
-                            retrieval_logger.warning(
-                                "Section '%s' attempt %d failed: %s; sleeping %.1fs",
-                                section, attempts, e, wait_s
-                            )
-                            await asyncio.sleep(wait_s)
-
-                    if content is None:
-                        retrieval_logger.error("Section '%s' failed after retries.", section)
-                        if exists:
-                            content = await self.storage.retrieve_section(filter_query)
-                        else:
-                            content = f"# {section}\n\n[Extraction failed after retries]"
+                if mode == "fresh":
+                    need_to_extract = True
+                elif mode == "amend":
+                    need_to_extract = True
                 else:
-                    retrieval_logger.info("Section %s already exists, updating content", section)
-                    content = await self.storage.retrieve_section(filter_query)
+                    need_to_extract = not exists
 
-            results[section] = content
+                if mode == "amend" and exists:
+                    base = await self.storage.retrieve_section(filter_query)
+                    SECTION_PROMPT_AMEND = PROMPT["IPO SECTION PROMPT AMEND"] if report_type.collection == "ipo_reports" else PROMPT["ANNUAL REPORT SECTION PROMPT AMEND"]
+                    prompt_text = SECTION_PROMPT_AMEND.format(base=base, section=section)
+                else:
+                    SECTION_PROMPT_FRESH = PROMPT["IPO SECTION PROMPT FRESH"] if report_type.collection == "ipo_reports" else PROMPT["ANNUAL REPORT SECTION PROMPT FRESH"]
+                    prompt_text = SECTION_PROMPT_FRESH.format(section=section)
+
+                content = None
+
+                async with sem:  # NEW: at most 5 in flight
+                    if need_to_extract:
+                        attempts = 0
+                        while attempts < 0:
+                            attempts += 1
+
+                            # NEW: global RPM guard (thread-safe via lock)
+                            await rpm_acquire()
+
+                            try:
+                                retrieval_logger.info("Extracting section: %s", section)
+
+                                # NEW: offload blocking call so we don't block the event loop
+                                response = await asyncio.to_thread(
+                                    self.client.models.generate_content,
+                                    model=self.genai_model,
+                                    contents=[*uploaded, prompt_text]
+                                )
+                                content = clean_markdown_response(response.text.strip())
+
+                                usage = getattr(response, "usage_metadata", None)
+                                if usage:
+                                    retrieval_logger.info(
+                                        "Definition tokens: prompt = %s, output = %s, total = %s",
+                                        getattr(usage, "prompt_token_count", "?"),
+                                        getattr(usage, "candidates_token_count", "?"),
+                                        getattr(usage, "total_token_count", "?"),
+                                    )
+
+                                update_query = {
+                                    "created_at": datetime.utcnow(),
+                                    "is_parsed": True,
+                                    "content": content,
+                                    "published_at": docs[0]["announced_date"],
+                                    "section": section
+                                }
+                                if year and year != "N/A":
+                                    update_query["year"] = year
+
+                                self.storage.update_many(filter_query, update_query)
+                                retrieval_logger.info("Section: %s saved in DB", section)
+                                success_sections.append(section)
+                                break
+
+                            except Exception as e:
+                                msg = str(e).lower()
+                                if "429" in msg or "rate" in msg or "quota" in msg or "limit" in msg:
+                                    wait_s = max(0.5, 60 - (time.time() - self.win_start))
+                                else:
+                                    wait_s = 1 if attempts == 1 else 2
+                                retrieval_logger.warning(
+                                    "Section '%s' attempt %d failed: %s; sleeping %.1fs",
+                                    section, attempts, e, wait_s
+                                )
+                                await asyncio.sleep(wait_s)
+
+                        if content is None:
+                            retrieval_logger.error("Section '%s' failed after retries.", section)
+                            if exists:
+                                content = await self.storage.retrieve_section(filter_query)
+                                success_sections.append(section)
+
+                            else:
+                                content = f"# {section}\n\n[Extraction failed after retries]"
+                                failed_sections.append((section, "extraction failed after retries"))
+
+                    else:
+                        retrieval_logger.info("Section %s already exists, updating content", section)
+                        content = await self.storage.retrieve_section(filter_query)
+                        success_sections.append(section)
+
+
+                # ---------- NEW: chunk → embed → upsert (NO namespace) ----------
+                async with embed_sem:
+                    try:
+                        retrieval_logger.info("Chunking, Embedding, Upserting: %s", section)
+                        total = await index_markdown_with_pinecone(
+                            self.pine,
+                            content, 
+                            company=company, 
+                            report_type=report_type, 
+                            year_tag=year_tag, 
+                            doc_type=doc_type, 
+                            index=index, 
+                            section=section
+                        )
+                        retrieval_logger.info("Embedded & upserted %d chunks for section: %s", total, section)
+                    except Exception as e:
+                        retrieval_logger.warning("Chunk/embed/upsert failed for section '%s': %s", section, e)
+                        
+
+                results[section] = content
+
+            except Exception as e:
+                retrieval_logger.exception("Unhandled error for section '%s'", section)
+                failed_sections.append((section, f"unhandled: {e}"))
 
         # NEW: fire off tasks instead of serial loop
         tasks = [asyncio.create_task(process_one(i, s)) for i, s in enumerate(sections, start=1)]
+        #tasks = [asyncio.create_task(process_one(1, sections[15]))] if sections else []
         await asyncio.gather(*tasks)
+
+        # --- Summary logging ---
+        total = len(sections)
+        ok = len(success_sections)
+        ko = len(failed_sections)
+        retrieval_logger.info("Extraction summary: %d/%d sections succeeded, %d failed.", ok, total, ko)
+
+        if failed_sections:
+            for s, reason in failed_sections:
+                retrieval_logger.info("FAILED section: %s | reason: %s", s, reason)
 
         retrieval_logger.info("All sections extracted.")
         return results

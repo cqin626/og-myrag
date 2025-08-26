@@ -158,6 +158,35 @@ class RetrievalAsyncStorageManager:
                                      company, report_type.name, str(year))
             return ""
         
+        # --- minimal: local helpers (no regex) to parse section index ---
+        def _parse_leading_int(s: str | None) -> int | None:
+            if not s:
+                return None
+            s = s.lstrip()
+            i = 0
+            while i < len(s) and s[i].isdigit():
+                i += 1
+            return int(s[:i]) if i > 0 else None
+
+        def _section_order(doc: dict) -> tuple[int, str]:
+            # 1) Try from "section": "12. TITLE"
+            n = _parse_leading_int(doc.get("section"))
+            if n is not None:
+                return (n, doc.get("section") or "")
+            # 2) Fallback from "name": "..._SECTION_12"
+            name = doc.get("name") or ""
+            key = "_SECTION_"
+            pos = name.rfind(key)
+            if pos != -1:
+                n2 = _parse_leading_int(name[pos + len(key):])
+                if n2 is not None:
+                    return (n2, name)
+            # 3) Unknown → push to end, keep stable tie-breaker
+            return (10**9, name or (doc.get("_id") and str(doc["_id"])) or "")
+
+        # Sort results by section index (ascending)
+        results.sort(key=_section_order)
+        
         retrieval_logger.info("Combining all the processed content.")
         # combine all sections into a single Markdown string
         md = [f"# {company} {report_type.name}\n"]
@@ -189,3 +218,4 @@ class RetrievalAsyncStorageManager:
             raise ValueError("Call use_collection() first")
         results = await self.storage.read_documents(query=query)
         return results[0]["content"] 
+    

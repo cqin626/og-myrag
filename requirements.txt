@@ -13,3 +13,5 @@ curl_cffi
 beautifulsoup4
 tiktoken
 google-genai
+lxml
+markdown

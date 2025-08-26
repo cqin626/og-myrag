@@ -107,8 +107,17 @@ class AnnouncementFetcher(BaseScraper):
         if not matches:
             return None
         
+        # 1) exactly 4 digits
+        for code in matches:
+            if len(code) == 4 and code.isdigit():
+                return code
+        # 2) any numeric
         for code in matches:
             if code.isdigit():
                 return code
-        
-        return matches[0]  # return first match if no digit found
+        # 3) any length-4
+        for code in matches:
+            if len(code) == 4:
+                return code
+        # 4) fallback
+        return matches[0]
