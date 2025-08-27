@@ -78,22 +78,64 @@ class ScraperManager:
         except Exception as e:
             scraper_logger.error("Failed %s: %s", url, e)
 
-    def run_one(self, rtype: ReportType, year: Optional[int] = None, company_name: Optional[str] = None):
+    def run_one(self, rtype: ReportType, year: Optional[int] = None, company_name: Optional[str] = None, sector_name: Optional[str] = None):
         year = str(year) if year is not None else "N/A"
         scraper_logger.info("=== %s ===", rtype.keyword)
-        all_links = self.fetcher.fetch(rtype, year, company_name)#[::-1] # reverse to process oldest first
-            
-        links = all_links[:5] # Limit to first 5 for dry run
 
-        if not links:
+        if sector_name is not None:
+            sector_name = sector_name.strip().upper()
+
+        # helper: keep order, drop duplicates
+        def _dedupe_keep_order(seq):
+            seen, out = set(), []
+            for x in seq:
+                if x not in seen:
+                    seen.add(x)
+                    out.append(x)
+            return out
+
+        # ---- FETCH PHASE ----
+        # If company_name is a list/tuple/set: fetch per-company concurrently (5 links each).
+        if isinstance(company_name, (list, tuple, set)) and company_name:
+            names = list(company_name)
+            scraper_logger.info(
+                "Fetching concurrently for %d companies (up to 5 links each)...", len(names)
+            )
+
+            all_links = []
+            fetch_workers = min(self.max_workers, 5)  # limit fetch concurrency to 5
+            with ThreadPoolExecutor(max_workers=fetch_workers) as pool:
+                futs = {
+                    pool.submit(self.fetcher.fetch, rtype, year, name, sector_name, 5): name
+                    for name in names
+                }
+                for fut in as_completed(futs):
+                    name = futs[fut]
+                    try:
+                        links_for_name = fut.result() or []
+                        links_for_name = links_for_name[:1]
+                        scraper_logger.info("Fetched %d links for %s", len(links_for_name), name)
+                        all_links.extend(links_for_name)
+                    except Exception as e:
+                        scraper_logger.error("Fetch failed for %s: %s", name, e)
+
+            all_links = _dedupe_keep_order(all_links)
+
+        else:
+            # Single company (or ALL)
+            all_links = self.fetcher.fetch(rtype, year, company_name)#[::-1] # reverse to process oldest first
+            all_links = _dedupe_keep_order(all_links)
+            all_links = all_links[:5] # Limit to first 5 for dry run
+
+        if not all_links:
             scraper_logger.info("No links for %s %s", rtype.keyword, year)
             return
 
-        scraper_logger.info("Processing %d links with %d workers", len(links), self.max_workers)
+        scraper_logger.info("Processing %d links with %d workers", len(all_links), self.max_workers)
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
                 executor.submit(self._process_link, rtype, url, year)
-                for url in links
+                for url in all_links
             ]
             for fut in as_completed(futures):
                 # results & errors are logged inside _process_link

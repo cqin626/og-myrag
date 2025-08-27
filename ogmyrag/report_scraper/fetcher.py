@@ -14,7 +14,7 @@ class AnnouncementFetcher(BaseScraper):
     """
     Fetches paginated announcement URLs for a given ReportType and year.
     """
-    def fetch(self, report_type: ReportType, year: Optional[int] = None, company_name: Optional[str] = None, per_page: int = 20) -> List[str]:
+    def fetch(self, report_type: ReportType, year: Optional[int] = None, company_name: Optional[str] = None, sector_name: Optional[str] = None, per_page: int = 20) -> List[str]:
         links = []
         if report_type == ReportType.IPO:
             # IPO reports fetching
@@ -25,6 +25,9 @@ class AnnouncementFetcher(BaseScraper):
                 "per_page": per_page,
                 "page":     1,
             }
+            if sector_name:  # only add when provided
+                params["sec"] = sector_name
+                params["mkt"] = "MAIN-MKT"
 
         else:
             # Annual and Quarterly reports fetching
@@ -37,6 +40,9 @@ class AnnouncementFetcher(BaseScraper):
                 "per_page": per_page,
                 "page":     1,
             }
+            if sector_name:  # only add when provided
+                params["sec"] = sector_name
+                params["mkt"] = "MAIN-MKT"
             
 
         # if user specified a company_name, find its code

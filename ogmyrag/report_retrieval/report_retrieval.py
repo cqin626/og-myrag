@@ -590,7 +590,7 @@ class ReportRetrievalManager:
                 async with sem:  # NEW: at most 5 in flight
                     if need_to_extract:
                         attempts = 0
-                        while attempts < 0:
+                        while attempts < 5:
                             attempts += 1
 
                             # NEW: global RPM guard (thread-safe via lock)
