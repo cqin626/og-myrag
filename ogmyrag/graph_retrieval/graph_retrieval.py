@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import asyncio
-from pymongo import MongoClient
+from typing import AsyncGenerator
+from motor.motor_asyncio import AsyncIOMotorClient
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import (
@@ -13,7 +14,7 @@ from ..util import (
 )
 
 from ..storage import (
-    MongoDBStorage,
+    AsyncMongoDBStorage,
     PineconeStorage,
     AsyncNeo4jStorage,
 )
@@ -29,7 +30,8 @@ from ..base import (
 from .graph_retrieval_util import (
     get_formatted_query_formulation_message,
     get_formatted_text2cypher_message,
-    get_formatted_decomposed_request
+    get_formatted_validated_entities,
+    get_formatted_decomposed_request,
 )
 
 graph_retrieval_logger = logging.getLogger("graph_retrieval")
@@ -200,9 +202,7 @@ class RequestDecompositionAgent(BaseAgent):
         user_prompt = (
             kwargs.get("user_request", "")
             + "\n"
-            + self._get_formatted_validated_entities(
-                kwargs.get("validated_entities", [])
-            )
+            + get_formatted_validated_entities(kwargs.get("validated_entities", []))
         )
         graph_retrieval_logger.debug(
             f"RequestDecompositionAgent\nUser prompt used:\n{user_prompt}"
@@ -226,17 +226,65 @@ class RequestDecompositionAgent(BaseAgent):
 
         return formatted_response
 
-    def _get_formatted_validated_entities(self, validated_entities: list[str]):
-        output = ["Validated Entities:"]
-        for i, entity in enumerate(validated_entities, start=1):
-            output.append(f"  {i}. {entity}")
-        return "\n".join(output)
+
+class QueryAgent(BaseAgent):
+    """
+    An agent responsible for interacting with Text2CypherAgent to come up with retrieval result.
+    """
+
+    async def handle_task(self, **kwargs):
+        """
+        Parameters:
+            user_request (str),
+            validated_entities list(str),
+            ontology (dict),
+            previous_response_id (str | None)
+        """
+        graph_retrieval_logger.info(f"QueryAgent is called")
+
+        system_prompt = PROMPT["QUERY"].format(
+            ontology=get_formatted_ontology(
+                data=kwargs.get("ontology", {}), exclude_entity_fields=["llm-guidance"]
+            )
+        )
+        graph_retrieval_logger.debug(
+            f"QueryAgent\nSystem prompt used:\n{system_prompt}"
+        )
+
+        formatted_user_request = (
+            "User Request:\n" + kwargs.get("user_request", "") + "\n"
+        )
+        formatted_validated_entities = get_formatted_validated_entities(
+            kwargs.get("validated_entities", [])
+        )
+        user_prompt = formatted_user_request + formatted_validated_entities
+        graph_retrieval_logger.debug(f"QueryAgent\nUser prompt used:\n{user_prompt}")
+
+        response = await fetch_responses_openai(
+            model="o4-mini",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "high"},
+            max_output_tokens=100000,
+            previous_response_id=kwargs.get("previous_response_id", None),
+            tools=[],
+        )
+
+        graph_retrieval_logger.info(
+            f"QueryAgent\nQueryAgent response details:\n{get_formatted_openai_response(response)}"
+        )
+
+        formatted_response = get_clean_json(response.output_text)
+        formatted_response["id"] = response.id
+
+        return formatted_response
 
 
 class GraphRetrievalSystem(BaseMultiAgentSystem):
     def __init__(
         self,
-        mongo_client: MongoClient,
+        mongo_client: AsyncIOMotorClient,
         ontology_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
@@ -247,6 +295,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 "RequestDecompositionAgent": RequestDecompositionAgent(
                     "RequestDecompositionAgent"
                 ),
+                "QueryAgent": QueryAgent("QueryAgent"),
             }
         )
 
@@ -254,7 +303,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
             self.ontology_config = ontology_config
             self.entity_vector_config = entity_vector_config
 
-            self.mongo_storage = MongoDBStorage(mongo_client)
+            self.async_mongo_storage = AsyncMongoDBStorage(mongo_client)
             self.pinecone_storage = PineconeStorage(
                 pinecone_api_key=entity_vector_config["pinecone_api_key"],
                 openai_api_key=entity_vector_config["openai_api_key"],
@@ -319,27 +368,112 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 previous_chat_id=self.current_chat_id,
             )
             self._update_current_chat_id(chat_agent_response["id"])
-            
+
             if chat_agent_response["type"] != "RESPONSE_GENERATION":
                 yield "Unexpected error occur. Please contact the developer."
             yield chat_agent_response["payload"]["response"]
 
         # Step 5 : Check if tries to call GraphRAGAgent
         elif chat_agent_response["type"] == "CALLING_GRAPH_RAG_AGENT":
+            # Step 5.1 : Decompose and rephrase the user request
             yield "## Calling RequestDecompositionAgent"
-            request_decomposition_agent_response = await self.agents["RequestDecompositionAgent"].handle_task(
+            request_decomposition_agent_response = await self.agents[
+                "RequestDecompositionAgent"
+            ].handle_task(
                 user_request=chat_agent_response["payload"]["user_request"],
                 validated_entities=chat_agent_response["payload"]["validated_entities"],
             )
             yield get_formatted_decomposed_request(request_decomposition_agent_response)
-            
-            # self._update_current_chat_id(chat_agent_response["id"])
+
+            # Step 5.2 : Process the sub-request(s) concurrenctly
+            subrequests = request_decomposition_agent_response["requests"]
+            latest_ontology = await self._get_latest_ontology()
+            gens = []
+
+            for i, subrequest in enumerate(subrequests, start=1):
+                agent_name = f"Query Agent {i}"
+                gens.append(
+                    self._process_subrequest(
+                        agent_name=agent_name,
+                        sub_request=subrequest["sub_request"],
+                        validated_entities=subrequest["validated_entities"],
+                        ontology=latest_ontology,
+                    )
+                )
+
+            # Fan-in results from all subrequests
+            async for result in self._fan_in_generators(gens):
+                yield result
 
         else:
             yield "Unexpected error occur. Please contact the developer."
 
     def _update_current_chat_id(self, new_chat_id: str):
         self.current_chat_id = new_chat_id
+
+    async def _get_latest_ontology(self) -> dict:
+        try:
+            return (
+                await self.async_mongo_storage.get_database(
+                    self.ontology_config["database_name"]
+                )
+                .get_collection(self.ontology_config["collection_name"])
+                .read_documents({"is_latest": True})
+            )[0].get("ontology", {})
+
+        except Exception as e:
+            raise LookupError("Failed to fetch latest ontology") from e
+
+    async def _fan_in_generators(self, gens: list[AsyncGenerator[str, None]]):
+        """
+        Runs multiple async generators concurrently and yields their results as soon as they are available.
+        """
+        queue = asyncio.Queue()
+
+        async def consume(gen: AsyncGenerator[str, None]):
+            try:
+                async for item in gen:
+                    await queue.put(item)
+            except Exception as e:
+                graph_retrieval_logger(
+                    f"GraphRetrievalSystem: Error when retrieving result {e}"
+                )
+            finally:
+                await queue.put(None)
+
+        # Spawn a consumer task per generator
+        tasks = [asyncio.create_task(consume(gen)) for gen in gens]
+        active = len(tasks)
+
+        while active > 0:
+            item = await queue.get()
+            if item is None:
+                active -= 1
+            else:
+                yield item
+
+        # Ensure cleanup
+        await asyncio.gather(*tasks)
+
+    async def _process_subrequest(
+        self,
+        agent_name: str,
+        sub_request: str,
+        validated_entities: list[str],
+        ontology: dict,
+        max_iteration: int = 3,
+    ) -> AsyncGenerator[str, None]:
+        yield f"## Calling Query Agent ({agent_name}) for sub-request '{sub_request}'"
+
+        query_agent_response = await self.agents["QueryAgent"].handle_task(
+            user_request=sub_request,
+            validated_entities=validated_entities,
+            ontology=ontology,
+        )
+        if query_agent_response["type"] == "QUERY":
+            yield f"{agent_name}:\nQuery: {query_agent_response['payload']['query']}\nValidated Entities: {query_agent_response['payload']['validated_entities']}"
+        else:
+            yield f"{agent_name}: Unexpected error occurred. Please contact the developer."
 
     # async def query_from_graph(self, user_request: str):
     #     # Step 1 : Get the latest ontology
