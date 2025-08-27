@@ -61,3 +61,10 @@ def get_formatted_decomposed_request(data: dict) -> str:
             output.append(f"    {j}. {entity}")
         output.append("")
     return "\n".join(output).strip()
+
+
+def get_formatted_validated_entities(validated_entities: list[str]):
+    output = ["Validated Entities:"]
+    for i, entity in enumerate(validated_entities, start=1):
+        output.append(f"  {i}. {entity}")
+    return "\n".join(output)

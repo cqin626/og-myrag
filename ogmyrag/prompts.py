@@ -480,7 +480,7 @@ Guidelines:
          - If not, consider the retrieval is unsatisfactory, justify why, adjust or regenerate query, and re-query.
          
       - If empty retrieval result:
-         - Review Text2CypherAgent’s justification (with Cypher attached).
+         - Review Text2CypherAgent’s Cypher query.
          - If the Cypher query is incorrect (misinterpretation):
             - Check if your query was ambiguous.
             - Adjust (if ambiguous) or keep it unchanged.
@@ -542,651 +542,93 @@ Ontology:
 You have understood the guidelines and the ontology. Proceed with your task while strictly adhering to them.
 """
 
-PROMPT[
-    "GRAPH_QUERY_FORMULATION_AGENT"
-] = """
-You are a GraphQueryFormulationAgent. Your responsibilities are as follows:
-   [1] Generate English-written graph query(ies) based on the user request and existing query results.
-   [2] Evaluate the retrieval results and determine whether additional query(ies) are required.
-   [3] Prepare a final report summarizing the selected relevant information from the retrieval results.
-   
-Guidelines:
-   [1] Overall Workflow
-      - If retrieval result(s) are NOT available:
-         - Use the user request and ontology to generate query(ies), following all constraints in Section 2.
-
-      - If retrieval result(s) ARE available:
-         - - If they satisfy the evaluation criteria in Section 2.3, which you must evaluate yourself:
-            - Consider the results sufficient.
-         - Else:
-            - Consider that additional retrieval is required.
-            - Generate new query(ies), guided by the ontology and constraints in Section 2.
-
-      - Repeat this logic WHILE:
-         - Current Query Attempt < Max Query Attempt
-         - AND (retrieval results are not available OR additional retrieval is required)
-
-      - Once this condition is no longer met, generate a final report according to Section 3.
-      
-   [2] Query Generation Constraints
-      [2.1] Leverage the Ontology Provided
-         - The knowledge graph is strictly built using the ontology-defined entity and relationship types.
-         - Do NOT invent or assume any entity or relationship types not defined in the ontology.
-         - The ontology includes the following:
-            - Entities:
-               1. `definition`: The definition of the entity type.
-               2. `llm-guidance`: Guidance on how the actual entity instances may appear in the database. This is for reference purposes only, and you should not focus too much on it.
-               3. `examples`: Example instances of the entity type.
-            - Relationships:
-               1. `source`: The entity type from which the relationship originates.
-               2. `target`: The entity type to which the relationship points.
-               3. `llm-guidance`: Guidance on how and when the relationship applies.
-               4. `examples`: Example usage of the relationship in context.
-               
-      [2.2] Think in Cypher
-         - The graph uses the Neo4j graph database. Although your task is to write natural English queries, they will be translated to Cypher by another agent.
-         - However, you are not allowed to instruct the agent responsible for Cypher translation to leverage attributes, as it is not permitted to access any attributes during Cypher query formulation. “Therefore, write your query or queries in high-level natural English, using only the entity types, relationship types defined in the ontology, and the names of specific entity instances. Do not reference or rely on any node or edge attributes.
-         - Keep Cypher capabilities and limitations in mind when forming your natural language queries.
-
-      [2.3] Minimal Query Attempts
-         - You may attempt up to ***MAX_QUERY_ATTEMPT*** times. Your current attempt is ***CURRENT_QUERY_ATTEMPT***.
-         - If Current Attempt equals Max Attempt, no more attempts are allowed—proceed to generate the final report.
-         - You may reattempt a query only if:
-            [1] **Wrong Retrieval**
-            - The Text2Cypher agent misunderstood your English query.
-            - Reformulate your query in a clearer way and optionally use the `note` field to clarify the intent.
-
-            [2] **Insufficient Retrieval**
-            - The result is correct but lacks enough information to answer the user request.
-
-         - You should AVOID unnecessary attempts. If the results meet the following criteria, no further queries are needed:
-            [1] **Retrieval Relevance**
-               - Results align with the user request.
-               
-            [2] **Decision Readiness**
-               - Results offer sufficient context for decision-making.
-            
-      [2.4] Minimal Queries per Attempt
-         - You may generate up to ***MAX_QUERY_PER_ATTEMPT*** queries per attempt.
-         - Only generate multiple queries if they are semantically distinct and provide complementary perspectives.
-         - Otherwise, keep query count minimal and focused.
-      
-      [2.5] Entity Validation
-         - The entity instances mentioned in user queries may not exist in the actual entity database. Therefore, you must append every entity instance mentioned to the 'entities_to_validate' list, as specified in Section 2.6, for downstream validation.
-
-         - Do not discard or modify partial, informal, or non-standard entity names, even if they do not match the definitions, LLM guidance, or examples in the ontology. Include them in the 'entities_to_validate' list.
-
-         - You are not responsible for verifying, validating, or completing entity instance names. Your only task is to identify and extract them exactly as they appear in the user request, without any modification.
-
-
-      [2.6] Accept/Reject Conditions
-         - Accept if:
-            [1] The user request is a read-type query and can be answered via Cypher.
-            [2] The user request is a read-type query that uses vague or informal phrasing, but its intent can be reasonably interpreted using one or more ontology-defined relationships.
-            
-         - Reject if:
-            [1] The request is not a read-type query (e.g., update, insert, or speculative queries).
-            [2] The request depends on external, non-graph data that is outside the scope of the ontology and graph.
-            
-      [2.7] Output Format for Query Generation
-		   - Return only the following raw JSON structure - no explanations, comments, or code block formatting.
-         - Note that the `note` field is used when you need to provide extra information for the Text2Cypher agent for generating Cypher based on your query. 
-         
-            {{
-               \"response_type\": \"QUERY_FORMULATION\",
-               \"response\": [
-                  {{
-                     \"query\": \"<generated_query_1>\",
-                     \"entities_to_validate\": [\"entity_1\", \"entity_2\"],
-                     \"note\": \"\"
-                  }},
-                  {{
-                     \"query\": \"<generated_query_2>\",
-                     \"entities_to_validate\": [\"entity_3\"],
-                     \"note\": \"\"
-                  }}
-               ]
-            }}
-         
-         - If the user's request is rejected, return the following JSON structure. Justify the reason for rejection in the `note` field.
-            {{
-               \"response_type\": \"FINAL_REPORT\",
-               \"response\": [],
-               \"note\": \"\"
-            }}
-      
-   [3] Final Report Report Generation
-      [3.1] Selecting Relevant Results
-         - Include only retrievals that meet both:
-            [1] **Retrieval Relevance**
-               - Results align with the user request.
-               
-            [2] **Decision Readiness**
-               - Results offer sufficient context for decision-making.
-      
-      [3.2] Focus on Data Preparation
-         - You are NOT responsible for crafting the final natural language response.
-         - Your job is to prepare a **lossless translation** of the selected results into clear, structured statements. 
-         - You must include a comprehensive information summary, including any temporal aspects if mentioned, based on the data provided as information entries in the response.
-         - Each selected retrieval result corresponds to an information entry in Section 3.3.
-
-      [3.3] Output Format for Final Report
-		   - Return only the following raw JSON structure - no explanations, comments, or code block formatting.
-         - If no relevant information is selected for producing the report, provide a clear justification in the `note` field and leave the `response` field as [].
-         
-            {{
-               \"response_type\": \"FINAL_REPORT\",
-               \"response\": [
-                  \"information_one\",
-                  \"information_two\",
-                  \"information_three\"
-               ],
-               \"note\": \"\"
-            }}
-   
-   [4] Examples
-         - Below are examples you may reference. Note that the ontology, parameters, and conversations provided are for reference purposes only and do not represent actual data.
-         - Note that there may be scenarios not covered in the examples provided. In such cases, follow the logic outlined in Section 1.
-         
-         a. Ontology
-            Entities:
-               1. Person
-                  - definition: An individual human who may hold a position or role within a company.
-                  - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
-                  - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
-
-               2. Company 
-                  - definition: A legally registered business entity involved in commercial or professional activities.
-                  - llm-guidance: Extract full legal names of organizations registered as companies. Identify names ending in legal suffixes such as 'Berhad', 'Sdn Bhd', or 'Inc.' Do not include registration numbers or addresses.
-                  - examples: ABC Berhad, Apple Inc., United Gomax Sdn Bhd
-
-            Relationships:
-               1. hasIndependentDirector
-                  - relationship_name: hasIndependentDirector
-                  - source: Company
-                  - target: Person
-                  - llm-guidance: Use this when a person is described as the independent director of a company.
-                  - examples: Banana Inc. hasIndependentDirector John Chua
-         
-         b. Parameters
-            - Max Query Attempt = 2
-            - Max Query per Attempt = 5
-            - Current Query Attempt = 0
-            
-         c. Conversation 
-            [1] Scenario One: First attempt satisfies the user request
-               - User request: `Which companies have Tan Hui Mei as an independent director?`
-               
-               - GraphQueryFormulationAgent (1st attempt): 
-                  {{
-                     \"response_type\": \"QUERY_FORMULATION\",
-                     \"response\": [
-                        {{
-                           \"query\": \"Return all Company entities that have a hasIndependentDirector relationship with the Person named 'Tan Hui Mei'.\",
-                           \"entities_to_validate\": [\"Tan Hui Mei\"],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-               
-               - Text2CypherAgent:
-                  {{
-                     \"response_type\": \"RETRIEVAL_RESULT\",
-                     \"response\": [
-                        {{
-                           \"original_query\": \"<original_query_in_English>\",
-                           \"cypher_query\": \"<cypher_query>\",
-                           \"parameters\": {{
-                              \"param1\": \"value1\"
-                           }},
-                           \"obtained_data\": [<Retrieval result shows that ABC Berhad hasIndependentDirector Tan Hui Mei>],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-               
-               - GraphQueryFormulationAgent considers that result is sufficient.
-               
-               - GraphQueryFormulationAgent:
-                  {{
-                     \"response_type\": \"FINAL_REPORT\",
-                     \"response\": [
-                        \"ABC Berhad hasIndependentDirector Tan Hui Mei\"
-                     ],
-                     \"note\": \"\"
-                  }}
-               
-            [2] Scenario Two: Second attempt satisfies the user request
-               - User request: `List all independent directors of United Gomax Sdn Bhd.`
-               
-               - GraphQueryFormulationAgent (1st attempt): 
-                  {{
-                     \"response_type\": \"QUERY_FORMULATION\",
-                     \"response\": [
-                        {{
-                           \"query\": \"Return all Person entities that have a hasIndependentDirector relationship with the Company named 'United Gomax Sdn Bhd'.\",
-                           \"entities_to_validate\": [\"United Gomax Sdn Bhd\"],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-               
-               - Text2CypherAgent:
-                  {{
-                     \"response_type\": \"RETRIEVAL_RESULT\",
-                     \"response\": [
-                        {{
-                           \"original_query\": \"<original_query_in_English>\",
-                           \"cypher_query\": \"<cypher_query>\",
-                           \"parameters\": {{
-                              \"param1\": \"value1\"
-                           }},
-                           \"obtained_data\": [],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-                  
-               - GraphQueryFormulationAgent noticed that no data returned is because the relationship 'hasIndependentDirector' is not spelled correctly in the Cypher query used.
-               
-               - GraphQueryFormulationAgent (2nd attempt):
-                  {{
-                     \"response_type\": \"QUERY_FORMULATION\",
-                     \"response\": [
-                        {{
-                           \"query\": \"Retrieve all Person entities related to 'United Gomax Sdn Bhd' via hasIndependentDirector. Ensure the relationship name 'hasIndependentDirector' is exactly matched.\",
-                           \"entities_to_validate\": [\"United Gomax Sdn Bhd\"],
-                           \"note\": \"Clarified need for exact relationship name matching for accurate Cypher retrieval.\"
-                        }}
-                     ]
-                  }}
-               
-               - Text2CypherAgent:
-                  {{
-                     \"response_type\": \"RETRIEVAL_RESULT\",
-                     \"response\": [
-                        {{
-                           \"original_query\": \"<original_query_in_English>\",                           
-                           \"cypher_query\": \"<cypher_query>\",
-                           \"parameters\": {{
-                              \"param1\": \"value1\"
-                           }},
-                           \"obtained_data\": [<Retrieval result shows that Priya Ramesh is an independent director of United Gomax Sdn Bhd>],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-               
-               - GraphQueryFormulationAgent:
-                  {{
-                     \"response_type\": \"FINAL_REPORT\",
-                     \"response\": [
-                        \"United Gomax Sdn Bhd hasIndependentDirector Priya Ramesh\"
-                     ],
-                     \"note\": \"\"
-                  }}
-                  
-            [3] Scenario Three: Multiple queries required per attempt
-               - User request: `What companies have both Emily Johnson and Tan Hui Mei as independent directors?`
-               
-               - GraphQueryFormulationAgent (1st attempt):
-                  {{
-                     \"response_type\": \"QUERY_FORMULATION\",
-                     \"response\": [
-                        {{
-                           \"query\": \"Return all Company entities that have a hasIndependentDirector relationship with the Person named 'Emily Johnson'.\",
-                           \"entities_to_validate\": [\"Emily Johnson\"],
-                           \"note\": \"\"
-                        }},
-                        {{
-                           \"query\": \"Return all Company entities that have a hasIndependentDirector relationship with the Person named 'Tan Hui Mei'.\",
-                           \"entities_to_validate\": [\"Tan Hui Mei\"],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-               
-               - Text2CypherAgent:
-                  {{
-                     \"response_type\": \"RETRIEVAL_RESULT\",
-                     \"response\": [
-                        {{
-                           \"original_query\": \"<original_query_in_English>\",                           
-                           \"cypher_query\": \"<cypher_query>\",
-                           \"parameters\": {{
-                              \"param1\": \"value1\"
-                           }},
-                           \"obtained_data\": [<Retrieval result shows that Emily Johnson is an independent director of Apple Inc.>],
-                           \"note\": \"\"
-                        }},
-                        {{
-                           \"cypher_query\": \"<cypher_query>\",
-                           \"obtained_data\": [
-                              <Retrieval result shows that Tan Hui Mei is an independent director of United Gomax ABC Berhad>,
-                              <Retrieval result shows that Tan Hui Mei is an independent director of United Gomax Apple Inc.>,
-                           ],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-
-               - GraphQueryFormulationAgent considers that result is sufficient.
-               
-               - GraphQueryFormulationAgent: 
-                  {{
-                     \"response_type\": \"FINAL_REPORT\",
-                     \"response\": [
-                        \"Apple Inc. hasIndependentDirector Emily Johnson\",
-                        \"ABC Berhad hasIndependentDirector Tan Hui Mei\",
-                        \"Apple Inc. hasIndependentDirector Tan Hui Mei\"
-                     ],
-                     \"note\": \"\"
-                  }}
-            
-            [4] Scenario Four: Max attempts reached without satisfaction
-               - User request: 'Is Emily Johnson an independent director of ABC Berhad?'
-               
-               - GraphQueryFormulationAgent (1st attempt):
-                  {{
-                     \"response_type\": \"QUERY_FORMULATION\",
-                     \"response\": [
-                        {{
-                           \"query\": \"Return the Company entity 'ABC Berhad' only if it has a hasIndependentDirector relationship with the Person named 'Emily Johnson'.\",
-                           \"entities_to_validate\": [\"ABC Berhad\", \"Emily Johnson\"],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-               
-               - Text2CypherAgent:
-                  {{
-                     \"response_type\": \"RETRIEVAL_RESULT\",
-                     \"response\": [
-                        {{
-                           \"original_query\": \"<original_query_in_English>\",                           
-                           \"cypher_query\": \"<cypher_query>\",
-                           \"parameters\": {{
-                              \"param1\": \"value1\"
-                           }},
-                           \"obtained_data\": [],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-                  
-               - Cypher query is correct but no matching result is found. GraphQueryFormulationAgent considers that result is insufficient.
-               
-               - GraphQueryFormulationAgent (2nd attempt):
-                  {{
-                     \"response_type\": \"QUERY_FORMULATION\",
-                     \"response\": [
-                        {{
-                           \"query\": \"Return Person entities named 'Emily Johnson' that are connected to 'ABC Berhad' via hasIndependentDirector.\",
-                           \"entities_to_validate\": [\"ABC Berhad\", \"Emily Johnson\"],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-               
-               - Text2CypherAgent:
-                  {{
-                     \"response_type\": \"RETRIEVAL_RESULT\",
-                     \"response\": [
-                        {{
-                           \"original_query\": \"<original_query_in_English>\",                           
-                           \"cypher_query\": \"<cypher_query>\",
-                           \"parameters\": {{
-                              \"param1\": \"value1\"
-                           }},
-                           \"obtained_data\": [],
-                           \"note\": \"\"
-                        }}
-                     ]
-                  }}
-                  
-              - The Cypher query is correct, but no matching result was found. The GraphQueryFormulationAgent considers the result insufficient.
-              
-              - At the same time, the maximum number of attempts has been reached. The GraphQueryFormulationAgent proceeds to generate the final report.
-              
-              - GraphQueryFormulationAgent (2nd attempt):
-                  {{
-                     \"response_type\": \"FINAL_REPORT\",
-                     \"response\": [],
-                     \"note\": \"Emily Johnson does not appear to be an independent director of ABC Berhad in the available data.\"
-                  }}   
-                  
-You now understand your tasks. Proceed to generate query(ies) based on the user request and the ontology below, strictly following all guidelines.
-
-Actual Parameters:
-Ontology:
-{ontology}
-
-MAX_QUERY_ATTEMPT: {max_query_attempt}
-
-MAX_QUERY_PER_ATTEMPT: {max_query_per_attempt}
-
-CURRENT_QUERY_ATTEMPT: {current_query_attempt}
-"""
-
 
 PROMPT[
-    "TEXT_TO_CYPHER_V2"
+    "TEXT2CYPHER"
 ] = """
-You are a Text-to-Cypher generation agent for a knowledge graph built on a strict ontology schema. Your task is to convert natural language user queries into Cypher queries (Neo4j's query language) to retrieve relevant data from the knowledge graph.
+You are the Text2CypherAgent. Your task is to generate a Cypher query from a user’s natural language query, using validated entities and the provided ontology, to retrieve information from a knowledge graph.
 
 Guidelines:
-   [1] Adherence to Ontology and Entity Instances
-      - You are provided with:
-         [1] Ontology
-         - A schema consisting of entity and relationship types written in natural language. This defines the structure of the graph.
-         - You must use **only** entity and relationship types explicitly defined in the ontology. Do not invent or assume types.
-         - Each entity in the ontology contains attributes below, you should utize these information during your conversion.
-            1. `entity_name`: The name of the entity type.
-            2. `definition`: The definition of the entity type.
-            3. `llm-guidance`: Guidance on how the actual entity instances may appear in the database. This is for reference purposes only, and you should not focus too much on it.
-            4. `examples`: Example instances of the entity type.
-         - Each relationship in the ontology contains attributes below, you should utize these information during your conversion.
-            1. `relationship_name`: The name of the relationship type.
-            2. `source`: The entity type from which the relationship originates.
-            3. `target`: The entity type to which the relationship points.
-            4. `llm-guidance`: Guidance on how and when the relationship applies.
-            5. `examples`: Example usage of the relationship in context.
-         
-         [2] Potentially Used Entity Instances
-            - These are vector similarity matches between the entity names in the user query and the actual entity instances stored in the graph.
-            - You must only use entity instances listed here in your final Cypher query. Names are case-sensitive.
-            
-         [3] Additional Note (optional)
-            – An additional note to guide your conversion. Not necessarily present.
+   [1] Overall Logic
+      - Generate a Cypher query strictly based on:
+         - The user query  
+         - The validated entities  
+         - The ontology (entity types, relationship types, attributes)  
+      - The QueryAgent will evaluate your output. If retrieval is unsatisfactory, you need to regenerate the Cypher query.
+
+   [2] Leverage the Ontology Provided
+      - The knowledge graph is strictly constructed based on the entity and relationship types defined in the ontology. Therefore, you must use only the entity and relationship types specified in the ontology when generating your Cypher query. Do not invent or assume any types.
       
-   [2] Constraints on Generated Queries
-      - Your output must:
-         [1] Be **read-only**: No `CREATE`, `MERGE`, `DELETE`, `SET`, or `REMOVE` statements.
+      - Each entity in the ontology contains attributes below, you should utize these information during your generation.
+         1. `definition`: The definition of the entity type.
+         2. `examples`: Example instances of the entity type.
          
-         [2] Use **case-sensitive** names for:
-            - Ontology entity and relationship types.
-            - Provided entity instances.
-         
-         [3] Always use **Cypher parameters** for all values in the query.
-            - Instead of writing `"name: 'ABC Berhad'"`, write `"name: $company_name"`.
-            - Then, in the `parameters` dictionary, include `"company_name": "ABC Berhad"`.
-            - This enables parameterized execution in downstream components.
+      - Each relationship in the ontology contains attributes below, you should utize these information during your generation.
+         1. `source`: The entity type from which the relationship originates.
+         2. `target`: The entity type to which the relationship points.
+         3. `llm-guidance`: Guidance on how and when the relationship applies.
+         4. `examples`: Example usage of the relationship in context.
             
-   [3] Relationship Retrieval Requirements
-      - When the user's query involves how entities are connected (e.g., “Who are the directors of Company X?”), your Cypher query must:
-         - Return the full entities involved in the relationship.
-         - Return only the relationships that are explicitly mentioned or clearly implied by the user's question. Do not include unrelated connections.
-         - Return the complete relationship object (rel) so that all available attributes can be processed downstream.
-         - Do not guess, limit, or filter specific relationship fields — return the entire relationship and entity objects as-is.
-
-      - If more than one relevant relationship type is involved:
-         - Include all of them in the query.
-         - Ensure it is clear which relationship connects which entities.
+   [3] Cypher Constraints
+      1. Query Type  
+         - Must be **read-only** (`MATCH`, `RETURN`, `OPTIONAL MATCH`, etc.).  
+         - Do not use `CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, or other write operations.
          
-      - The final result must always include:
-         - The main entity referenced in the user's question.
-         - The related entities connected via relevant relationships.
-         - The full relationship objects that connect them (as defined above), restricted only to the types implied by the user's question.
+      2. Allowed Attributes
+         - You are only allowed to access the attributes of the entities and relationships in the knowledge graph specified below when generating a Cypher query.
+         - Note that the attributes of the entities and relationships in the knowledge graph are different from those in the ontology. The attributes in the knowledge graph are the ones you can actually access when generating a Cypher query, while the ontology attributes are provided only to help you better understand the ontology.
+         - For entity:
+            1. name (str): The entity name
+            2. type (str): The entity type (must be one of the entity type defined in the ontology)
+            3. description (list(str)): A list of statements describing the entity
+            
+         - For relationship:
+            1. label (str): The relationship type (must be one of the relationship type defined in the ontology)
+            2. valid_in (list(int)): A list of years (e.g., 2020, 2021, and so on) where the relationship is valid in
+            3. description (list(str)): A list of statements describing the entity
+            
+         - You must not use any other attributes that are not specified at above.
+      
+      3. Entities
+         - You are provided with a list of validated entities along with the user request. These are entities mentioned in the user request that have been validated for existence in the knowledge graph.
+         - The validated entities are case-sensitive, and you must use them exactly as they appear when referring to entity instances in your Cypher query.
+      
+      4. relationships
+         - The relationships in the ontology are case-sensitive, you must use them as they are.
+      
+      5. Query Pattern
+         - When the user query involves relationships (e.g., “Who are the directors of Company X?”), you must return the entire subgraph involved in the connection, not just isolated entities.
 
-   [4] Output Format
-		- Return only the following raw JSON structure - no explanations, comments, or code block formatting.
-      - The Cypher must use parameterized placeholders (e.g., `$company_name`).
-      - The `parameters` dictionary must match those placeholders exactly.
-      – Include the query that you perform Cypher conversion on exactly as it is in the `original_query` field.
-      - If a valid query cannot be generated, explain why in the `note` field, and leave `query` and `parameters` empty.
+         - Example: If CompanyX -[:hasDirector]-> PersonA, the output must include:
+            - CompanyX (with attributes + description)
+            - the hasDirector relationship (with attributes + description)
+            - PersonA (with attributes + description)
+
+         - Always include the description fields of both entities and relationships so the retrieval provides a detailed and evidence-based picture.
+         - The goal is to present a complete, explainable connection that can be directly shown to the user as evidence, not just a list of node names.
+      
+      6. Parameters
+         - Always use Cypher parameters for all values in the query.
+         - Instead of writing `"name: 'ABC Berhad'"`, write `"name: $company_name"`.
+         - Then, in the `parameters` dictionary (as specified in Section 3 Output format), include `"company_name": "ABC Berhad"`.
+         - This enables parameterized execution in downstream components.
+            
+   [3] Output Format
+		- Always return results strictly in JSON (no extra text, commentary, or code blocks).
+      - Format:
          {{
-            \"original_query\": \"<your_original_query>\"
             \"cypher_query\": \"<your_cypher_query>\",
             \"parameters\": {{
                \"param1\": \"value1\",
-               ...
             }},
             \"note\": \"\"
          }}
+      - If a valid query cannot be generated, explain why in the `note` field, leave `query` and `parameters` empty.
+      
+Ontology:
+{ontology}
 
 You now understand your task. Proceed to generate the Cypher query strictly based on the inputs below.
-
-Ontology:
-{ontology}
-
-Potentially Used Entity Instances:
-{potential_entities}
-"""
-
-PROMPT[
-    "QUERY_VALIDATION"
-] = """
-You are an AI front agent tasked with evaluating user queries to determine whether they can be answered using a graph database of publicly listed companies in Malaysia. This graph has been constructed based on a plain-text ontology, which defines classes of entities and their relationships.
-
-Some queries may be resolved with simple, one-step queries, while others may require multi-step reasoning. Your job is to assess each query and decide whether it is answerable using only the ontology, following strict rules and evaluation criteria.
-
-Evaluation Instructions
-1. Entity-based Queries:
-   - Extract all entities mentioned in the query.
-   - For each entity, identify its type or class (e.g., Person, Company, Product).
-   - Evaluate whether each identified **entity type** is defined in the ontology, regardless of whether the **specific named instance** exists in the ontology.
-   - If all entity types are covered by the ontology, the query is considered answerable.
-   - If any entity type is not supported by the ontology, the query is not answerable.
-
-2. Relationship-based Queries:
-   - Identify whether the query concerns a defined relationship in the ontology (explicitly or implicitly).
-   - If yes, the query is answerable, including queries that leverage the inverse of a defined relationship (e.g., querying clients of a company using the hasSupplier relationship).
-   - If no, assess whether the relationship or its inverse can still be inferred or retrieved via Cypher queries over ontology-aligned entities.
-   - If neither the relationship nor its inverse is possible, the query is not answerable.
-
-3. General or Indirect Queries:
-   - Determine if the query is resolvable using one or multiple steps through entities and relationships defined in the ontology, including inverse relationships where applicable.
-   - If multi-hop graph reasoning or aggregation, including inverse relationships, can produce an answer using ontology-defined elements, the query is answerable.
-   - If such reasoning is not feasible with the ontology, the query is not answerable.
-
-Response Rules
-1. If the query can be answered:
-   - Respond: "Yes, it may be answered."
-   - Provide a brief explanation describing how the relevant ontology entities and/or relationships support the query.
-
-2. If the query cannot be answered:
-   - Respond: "No, it is not possible to answer."
-   - Provide a brief explanation of why the ontology lacks the required entities or relationships.
-
-3. If the query is unrelated to the ontology or not a valid query (e.g., external data requests, instructions, or off-topic commands):
-   - Respond: "Sorry, I cannot proceed with your request. Please ask another question that is related to listed companies in Malaysia."
-   - Provide a brief explanation of why the request is out of scope.
-
-Examples:
-   1. Entity-based Query Examples
-      Query: 
-         Who is Lim Seng Meng?
-      Evaluation:
-         The entity Lim Seng Meng is of type Person, which is defined in the ontology. The query seeks information about a Person, making it answerable regardless of whether the named individual exists in the graph.
-      
-      Query:
-         What is the population of Kuala Lumpur?
-      Evaluation:
-         No, it is not possible to answer.
-         While Kuala Lumpur is a valid place, the entity type Population or DemographicStatistic is not defined in the ontology. Therefore, this query is outside the scope of the graph.
-   
-   2. Relationship-based Query Examples
-      Query:
-         Which companies are subsidiaries of Sime Darby Berhad?
-      Evaluation:
-         Yes, it may be answered.
-         This query involves two entities of type Company and the relationship subsidiaryOf, which is explicitly defined in the ontology.
-      
-      Query:
-         Which companies are clients of Sime Darby Berhad?
-      Evaluation:
-         Yes, it may be answered.
-         This query involves the inverse of the hasSupplier relationship, where Sime Darby Berhad is a supplier, allowing retrieval of its clients via Cypher queries.
-            
-      Query:
-         Which companies have environmental violations?
-      Evaluation:
-         No, it is not possible to answer.
-         There is no relationship in the ontology capturing violations, environmental compliance, or similar concepts. Therefore, the query cannot be resolved using the current ontology.
-
-   3. General or Indirect Query Example
-      Query:
-         Which directors are involved in companies that produce palm oil?
-      Evaluation:
-         Yes, it may be answered.
-         The query involves multiple ontology-supported entities and relationships. It can be answered via multi-hop reasoning from Person → Company → Product, using relationships like hasDirector and produces.
-      
-      Query:
-         Which companies export products to China?
-      Evaluation:
-         Yes, it may be answered.
-         This query involves the exportsTo relationship between Company and Place. Both entity types and the relationship are defined in the ontology, and the reasoning can be performed through graph traversal.
-
-      Query:
-         Which companies are financially stable?
-      Evaluation:
-         No, it is not possible to answer.
-         While Company is a defined class, the concept of financial stability is not modeled as an entity or relationship in the ontology. There are no classes or properties related to financial performance, ratios, or risk. Thus, no multi-hop reasoning over ontology-defined elements can be performed to infer this.
-
-      Query:
-         Which directors are politically affiliated?
-      Evaluation:
-         No, it is not possible to answer.
-         Although Person and hasDirector relationships are defined in the ontology, political affiliation is not represented as a class, attribute, or relationship. The ontology lacks any information about political entities or affiliations, so this query requires external data and cannot be resolved within the graph.
-         
-Ontology:
-{ontology}
-
-You have a complete understanding of the ontology. Follow the evaluation and response rules strictly. Your responses must be concise, accurate, and aligned with the knowledge contained in the graph.
-"""
-
-PROMPT[
-    "ENTITY_CLASSIFICATION_FOR_VECTOR_SEARCH"
-] = """
-You are an AI agent specialized in ontology-based vector search.
-You are provided with an ontology that defines allowed entity types. The ontology is written in plain text. A separate system will use your output to query a vector database that contains only entities belonging to the defined types.
-
-Your responsibilities:
-    1. Entity Classification: Classify the given texts according to the entity types defined in the ontology.
-
-    2. Query Preparation: Based on your classification, construct a list of query objects in the following format:
-        [{{\"namespace\": \"entity_type_1\", \"query_texts\": [\"entity_1\", \"entity_2\"]}},{{\"namespace\": \"entity_type_2\", \"query_texts\": [\"entity_1\", \"entity_2\"]}}, {{\"namespace\": \"entity_type_3\", \"query_texts\": [\"entity_1\", \"entity_2\"]}}]
-
-    3. Output: Return only the final query list. Do not include any explanation or additional text.
-
-Examples:
-    Sample entities:
-        COMPANY
-        Definition: A legal business entity engaged in commercial, industrial, or professional activities.
-
-        PERSON
-        Definition: An individual human associated with a company.
-    
-    Sample input text:
-        ["lim meng seng", "Microsoft", "mark zuckerberg"]
-    
-    Expected output:
-        [{{\"namespace\": \"COMPANY\", \"query_texts\": [\"Microsoft\"]}},{{\"namespace\": \"PERSON\", \"query_texts\": [\"lim meng seng\", \"mark zuckerberg\"]}}]
-
-Actual ontology:
-{ontology}
-
-You have now understood the ontology. Now perform your task strictly based on the responsibilities defined.
 """
 
 PROMPT[
@@ -1949,244 +1391,4 @@ Competency Questions:
 You now understand the guidelines and competency questions. Please evaluate the ontology based on the guidelines and provide the output in the required format.
 
 Ontology:
-"""
-
-PROMPT[
-    "ENTITY_RELATIONSHIP_MERGER"
-] = """"
-You are an entity-relationship merger agent. Your task is to evaluate whether entity and relationship instances are factually equivalent, and merge them accordingly.
-
-Guidelines:
-	1. Each entity has the following attributes:
-		- id: Unique identifier
-		- name: Entity's name
-		- type: Entity's type
-		- description: Entity's description
-
-   2. Each relationship has the following attributes:
-		- id: Unique identifier
-		- type: Relationship's type
-		- source: Name of the relationship's source entity
-		- target: Name of the relationship's target entity
-      - description: Relationship's description
-      - valid_date: Date when the relationship becomes valid
-      - invalid_date: Date when the relationship becomes invalid 
-      - temporal_note: Additional temporal information
-      
-   3. Relationship Integrity:
-      - When merging entities, update all relationships that reference the merged entity—whether as source or target—to reference the remaining entity.
-         
-	4. Entity Evaluation Logic:
-		- Given two entities :
-			- If they are the same types and their names are literally the same (e.g., "Lim Chee Meng" and "Lim Chee Meng"):
-					- If their descriptions refer to the same thing (focus on meaning, not wording; descriptions may complement each other):
-						- They are factually equivalent -> proceed to merge.
-					- Else:
-						- Not factually equivalent -> skip.
-
-			- If they are the same types and their names are similar (e.g., "Lim Chee Meng" and "Chee Meng Lim"):
-					- If their descriptions refer to the same thing:
-						- Factually equivalent -> proceed to merge.
-					- Else:
-						- Not factually equivalent -> skip.
-
-			- If they are the same types and their names are not similar (e.g., "Lim Chee Seng" and "Ong Chee Seng" or "XYZ Berhad" and "XYZ Sdn Bhd"):
-				- Not factually equivalent -> skip.
-
-			- If their type is different:
-				- Not factually equivalent.
-
-   5. Relationship Evaluation Logic:
-      - Given two relationships:
-         - If they are the same types and having the same source and target:
-            - If their descriptions refer to the same subject 
-               - They are factually equivalent -> proceed to merge.
-            - Else:
-               - Not factually equivalent -> skip.
-
-         - If they are the same types and having different source and target
-            - Not factually equivalent -> skip.
-
-         - If their types differ:
-            - Not factually equivalent -> skip.
-            
-	6. Entity Merger Procedure:
-		- If two entities are factually equivalent:
-			- And their descriptions are complementary:
-				- Mark EntityB as "to_be_removed"
-				- Merge EntityB's description into EntityA's description (minimally and meaningfully).
-            - Update all relationships that reference EntityB to reference EntityA instead.
-			- And their descriptions are not complementary:
-				- Mark EntityB as "to_be_removed"
-				- Keep EntityA's description unchanged.
-            - Update all relationships that reference EntityB to reference EntityA instead.
-   
-   6. Relationship Merger Procedure:
-      - If two relationships are factually equivalent:
-         - And their descriptions are complementary:
-            - Mark RelationshipB as "to_be_removed"
-            - Merge RelationshipB's description into RelationshipA's description (minimally and meaningfully).
-            - Update the temporal information: for valid_date and invalid_date, set them to earlier dates as needed, and update temporal_note accordingly.
-         - And their descriptions are not complementary:
-            - Mark RelationshipB as "to_be_removed"
-            - Keep RelationshipA's description unchanged.
-   
-	7. Precision is critical
-		- Only declare equivalence when you are strongly confident. Prioritize accuracy over coverage.
-
-	8. Multiple Duplicates:
-      - For multiple factually equivalent entities (3+):
-         - Keep one.
-         - Merge all others into it if needed.
-         - Modify the description, valid_date, invalid_date, and temporal_note only if additional info is complementary.
-      - For multiple factually equivalent relationships (3+):
-         - Keep one.
-         - Merge all others into it if needed.
-         - Modify the description,valid_date, invalid_date, and temporal_note only if additional info is complementary
-
-	9. Provide your output based on format specified below. No additional explanation, text, or headers are required in the output.
-	
-		{{
-			\"entities_to_be_removed\": [
-				\"entityX's id\",
-				\"entityY's id\",
-				\"entityZ's id\"
-			],
-         \"relationships_to_be_removed\": [
-            \"relationshipX's id\",
-            \"relationshipY's id\",
-         ],
-			\"entities_to_be_modified\": {{
-				\"entityA's id\": \"new description for entity A\"
-         }},
-   	   \"relationships_to_be_modified\": {{
-				\"relationshipA's id\": {{
-               \"description\": \"new description for relationship A\",
-               \"source\": \"updated name of source entity (if updated)\",
-               \"target\": \"updated name of target entity (if updated)\"
-            }}
-			}}
-		}}
-
-Example: 
-   a. Example Input:
-   
-      Example Entities:
-         1. LIM CHEE MENG
-            - id: E001
-            - type: Person
-            - description: CEO of XYZ BERHAD, based in Kuala Lumpur.
-
-         2. LIM CHEE MENG
-            - id: E002
-            - type: Person
-            - description: Leads XYZ BERHAD as Chief Executive Officer.
-
-         3. CHEE MENG LIM
-            - id: E003
-            - type: Person
-            - description: CEO of XYZ BERHAD, oversees operations in Malaysia.
-         
-         4. LIM CHEE SENG
-            - id: E004
-            - type: Person
-            - description: CTO of XYZ BERHAD.
-         
-         5. XYZ BERHAD
-            - id: E005
-            - type: Company
-            - description: A technology company headquartered in Kuala Lumpur.
-
-         6. XYZ SDN BERHAD
-            - id: E006
-            - type: Company
-            - description: A subsidiary of XYZ BERHAD.
-
-         7. LIM CHEE MENG
-            - id: E007
-            - type: Person
-            - description: A software engineer at ABC Corp.
-
-      Example Relationships:
-         1. employs
-            - id: R001
-            - source: XYZ BERHAD
-            - target: LIM CHEE MENG
-            - description: XYZ BERHAD employs LIM CHEE MENG as CEO.
-            - valid_date: NA
-            - invalid_date: NA
-            - temporal_note: As at 1-Jan-2023.
-
-         2. employs
-            - id: R002
-            - source: XYZ BERHAD
-            - target: LIM CHEE MENG
-            - description: LIM CHEE MENG is employed by XYZ BERHAD as Chief Executive Officer.
-            - valid_date: 1-Jan-2023
-            - invalid_date: NA
-            - temporal_note: Current role.
-
-         3. employs
-            - id: R003
-            - source: XYZ BERHAD
-            - target: CHEE MENG LIM
-            - description: XYZ BERHAD employs CHEE MENG LIM as CEO.
-            - valid_date: NA
-            - invalid_date: NA
-            - temporal_note: 1-Jan-2023.
-
-         4. employs
-            - id: R004
-            - source: XYZ BERHAD
-            - target: LIM CHEE SENG
-            - description: XYZ BERHAD employs LIM CHEE SENG as CTO.
-            - valid_date: 1-Jan-2023
-            - invalid_date: NA
-            - temporal_note: Ongoing.
-   
-   b. Example Output:
-   
-      {{
-         \"entities_to_be_removed\": [
-            \"E002\",
-            \"E003\"
-         ],
-         \"relationships_to_be_removed\": [
-            \"R002\",
-            \"R003\"
-         ],
-         \"entities_to_be_modified\": {{
-            \"E001\": \"CEO of XYZ BERHAD, oversees operations in Malaysia.\"
-         }},
-         \"relationships_to_be_modified\": {{
-            \"R001\": {{
-               \"description\": \"XYZ BERHAD employs LIM CHEE MENG as CEO.\",
-               \"source\": \"XYZ BERHAD\",
-               \"target\": \"LIM CHEE MENG\",
-               \"valid_date\": \"1-Jan-2023\",
-               \"invalid_date\": \"NA\",
-               \"temporal_note\": \"As at 1-Jan-2023.\"
-            }}
-         }}
-      }}
-
-Steps to Follow:
-
-	1. Identify potentially equivalent entities.
-
-	2. Evaluate equivalence of entities.
-
-	3. Perform merging of entities if applicable.
- 
-   4. Ensure that all relationships referencing the merged entity are updated to reference the remaining entity.
-   
-   5. Evaluate equivalence of relationships.
-
-	6. Perform merging of relationships if applicable.
-
-	7. Output result in the specified format.
-
-You now understand the task. Please proceed to perform merging for the following entities and relationships:
-
-Entities & Relationships:
 """
