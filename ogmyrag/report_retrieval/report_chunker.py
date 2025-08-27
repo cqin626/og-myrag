@@ -7,7 +7,7 @@ import hashlib
 import logging
 from ..storage.pinecone_storage import PineconeStorage
 
-
+query_logger = logging.getLogger("query")
 retrieval_logger = logging.getLogger("retrieval")
 
 # ---------- tiny, fast DOM chunker ----------
@@ -257,7 +257,7 @@ async def rag_answer_with_company_detection(
         txt = (txt or "").replace("\n", " ").strip()
         return txt if len(txt) <= n else txt[:n] + "…"
     
-    retrieval_logger.info("RAG start | query=%r | top_k=%d", query, top_k)
+    query_logger.info("RAG start | query=%r | top_k=%d", query, top_k)
 
 
     # ---------------- (1) List companies from the catalog namespace ----------------
@@ -269,7 +269,7 @@ async def rag_answer_with_company_detection(
                 lambda: list(pine.index.list(namespace=catalog_namespace, prefix="company::", limit=99))
             )
         except Exception as e:
-            retrieval_logger.warning("list(namespace=%r) failed: %s; falling back to list() without namespace",
+            query_logger.warning("list(namespace=%r) failed: %s; falling back to list() without namespace",
                                     catalog_namespace, e)
             pages = await asyncio.to_thread(
                 lambda: list(pine.index.list(prefix="company::", limit=1000))
@@ -286,7 +286,7 @@ async def rag_answer_with_company_detection(
                     pine.index.fetch, ids=batch_ids, namespace=catalog_namespace
                 )
             except Exception as e:
-                retrieval_logger.warning(
+                query_logger.warning(
                     "fetch(namespace=%r) failed: %s; retrying without namespace",
                     catalog_namespace, e
                 )
@@ -326,10 +326,10 @@ async def rag_answer_with_company_detection(
         companies = sorted(seen)
 
     except Exception as e:
-        retrieval_logger.exception("Catalog company extraction failed")  # <- real stacktrace
+        query_logger.exception("Catalog company extraction failed")  # <- real stacktrace
         companies = []
 
-    retrieval_logger.info("Catalog companies (%d): %s", len(companies), companies)
+    query_logger.info("Catalog companies (%d): %s", len(companies), companies)
 
 
     # ---------------- (2) Detect/normalize company with a small LLM ----------------
@@ -339,21 +339,37 @@ async def rag_answer_with_company_detection(
 
     if companies:
         detect_system = (
-            "You will be given a user query and a list of CANONICAL company names.\n"
-            "Return strict JSON with two keys:\n"
-            '  1) "companies": array of exact canonical names referenced by the query;\n'
-            '  2) "normalized_query": the same query rewritten for semantic search with ALL company mentions removed.\n\n'
-            "Company-matching rules (case-insensitive):\n"
-            "• Match full canonical name OR a meaningful substring/abbreviation.\n"
-            "• Before matching, normalize both sides by removing punctuation, extra spaces, and common corporate suffixes "
-            "(Holdings, Berhad, Bhd, Sdn Bhd, Ltd, Limited, PLC, Inc, Co, Corp, Corporation, Company).\n"
-            "• Substring must be ≥ 4 alphanumeric characters. Do NOT invent names.\n\n"
-            "Normalized query rules:\n"
-            "• Remove any detected company mentions (and their variants/possessives) plus a directly-attached connecting preposition "
-            "(e.g., 'of/for/about/in/at/by/from/on/with/regarding'), if present.\n"
-            "• Keep the rest of the user intent unchanged; do not add new facts.\n"
-            "• Collapse whitespace; keep punctuation; if no company is detected, return the original query.\n\n"
-            'Output EXACT JSON, e.g.: {"companies":["ACME_BERHAD"], "normalized_query":"What is the mission?"}'
+            """You will be given a user query and a list of CANONICAL company names.
+            Return strict JSON with two keys:
+            1) "companies": array of exact canonical names referenced by the query;
+            2) "normalized_query": the query rewritten for semantic search with ALL company mentions removed
+                while remaining grammatical and self-contained.
+
+            Company-matching rules (case-insensitive):
+            • Match full canonical name OR a meaningful substring/abbreviation.
+            • Before matching, normalize both sides by removing punctuation, extra spaces, and common corporate suffixes
+            (Holdings, Berhad, Bhd, Sdn Bhd, Ltd, Limited, PLC, Inc, Co, Corp, Corporation, Company).
+            • Substring must be ≥ 4 alphanumeric characters. Do NOT invent names.
+
+            Normalized-query rules:
+            • Replace any detected company mentions (and their possessives) with “the company” (or “the company’s” for possessive)
+            if removing them would make the sentence ungrammatical or unclear.
+            • If removing a trailing prepositional fragment (“of <company>”, “for <company>”, etc.) causes a dangling phrase,
+            adjust the wording to keep the sentence fluent (e.g., drop the preposition or reattach it to “the company”).
+            • Preserve the rest of the user intent; NEVER add facts. Keep years, section labels (e.g., “Practice 1.1”), numbers, and constraints.
+            • Collapse extra whitespace; retain helpful punctuation.
+            • If no company is detected, return the original query.
+
+            Examples:
+            - "What is the mission of Farm Fresh?" → "What is the mission of the company?"
+            - "Who chairs the audit committee for Edelteq?" → "Who chairs the audit committee for the company?"
+            - "What effective tax rate did AutoCount report and why?" → "What effective tax rate did the company report, and why?"
+            - "Farm Fresh CG Practice 1.1" → "CG Practice 1.1"
+            - "Board remuneration in FY2023 for VETECE" → "Board remuneration in FY2023"
+
+            Output EXACT JSON, e.g.:
+            {"companies":["ACME_BERHAD"], "normalized_query":"What is the mission of the company?"}"""
+
         )
         detect_msgs = [
             {"role": "system", "content": detect_system},
@@ -391,11 +407,11 @@ async def rag_answer_with_company_detection(
             company_used = None  # fall back to no company filter
             search_query = query
 
-    retrieval_logger.info("Detected company: %r", company_used)
+    query_logger.info("Detected company: %r", company_used)
     if search_query != query:
-        retrieval_logger.info("Search query normalized: %r → %r", query, search_query)
+        query_logger.info("Search query normalized: %r → %r", query, search_query)
     else:
-        retrieval_logger.info("Search query unchanged.")
+        query_logger.info("Search query unchanged.")
 
 
     # ---------------- (3) Retrieve top-k chunks from data namespace ----------------
@@ -410,7 +426,7 @@ async def rag_answer_with_company_detection(
     if year:
         flt["year"] = year
 
-    retrieval_logger.info("Query filter: %s", flt or "{}")
+    query_logger.info("Query filter: %s", flt or "{}")
 
 
     try:
@@ -426,7 +442,7 @@ async def rag_answer_with_company_detection(
                    else getattr(result, "matches", [])) or []
     except Exception as e:
         msg = str(e).lower()
-        retrieval_logger.warning("Vector query failed: %s", e)
+        query_logger.warning("Vector query failed: %s", e)
 
         if "namespace not found" in msg or ("404" in msg and "namespace" in msg):
             matches = []
@@ -460,13 +476,26 @@ async def rag_answer_with_company_detection(
         f"[{i}] id={h.get('id')} · score={h.get('score'):.3f} · section={h.get('section') or ''} · company={h.get('company')}\n{(h.get('text') or '').strip()}"
         for i, h in enumerate(hits, start=1)
     )
-    #retrieval_logger.info("Context: %s", context)
+    #query_logger.info("Context: %s", context)
 
     # ---------------- (4) Grounded answer using ONLY the retrieved chunks ----------------
     sys_prompt = (
-        "You are a precise assistant. Use ONLY the provided context to answer the user's question. "
-        "If the answer cannot be found in the context, reply exactly: 'Not found in provided documents.' "
-        "Do not invent facts. Keep the answer concise and specific."
+        """You are a precise assistant. Use ONLY the provided context chunks.
+
+        Rules:
+        1) Group all context by company (see each chunk's 'company' metadata in the context header).
+        2) NEVER mix facts across companies. If the user names a specific company, answer ONLY for that company and ignore others.
+        3) If multiple companies appear in the context AND the question is generic (no single company specified), evaluate each company separately:
+        - If you have enough evidence for a company, produce an answer for that company.
+        - If not enough evidence for that company, write exactly: "Not found in provided documents."
+        4) Do not invent facts. If no company has sufficient evidence, your entire reply must be exactly:
+        "Not found in provided documents."
+        5) Keep answers concise and specific. Prefer quoting key figures/phrases verbatim from the chunks.
+        
+        Output format:
+        - If answering for one company: a short answer with bullet points.
+        - If answering for multiple companies: for each company, add a heading "<Company Name>" followed by its answer (or "Not found in provided documents.").
+        """
     )
     user_msg = f"Question:\n{search_query}\n\nContext (top-{top_k}):\n{context}"
 
@@ -488,23 +517,20 @@ async def rag_answer_with_company_detection(
 
         answer = (ans.choices[0].message.content or "").strip()
     except Exception:
-        retrieval_logger.warning("Answer generation failed: %s", e)
+        query_logger.warning("Answer generation failed: %s", e)
         answer = "Failed to generate an answer."
 
     # compute grand total if both present
     total_tokens_all = (detect_usage["total_tokens"] or 0) + (answer_usage["total_tokens"] or 0)
 
 
-    retrieval_logger.info("Final answer: \n\n%s\n\n", answer)
-    retrieval_logger.info(
-        "Token usage | detect=%s | answer=%s | total=%d",
-        detect_usage, answer_usage, total_tokens_all
-    )
+    query_logger.info("Final answer: \n\n%s\n\n", answer)
+    query_logger.info("Token usage | total = %d", total_tokens_all)
 
     # print out top-k chunks on console
-    """retrieval_logger.info("\n\nTop-%d chunks retrieved: %d", top_k, len(hits))
+    """query_logger.info("\n\nTop-%d chunks retrieved: %d", top_k, len(hits))
     for i, h in enumerate(hits, start=1):
-        retrieval_logger.info(
+        query_logger.info(
             "Hit #%d | id=%s | score=%.3f | company=%s | section=%s | text=%s",
             i, h.get("id"), (h.get("score") or 0.0),
             h.get("company"), h.get("section"),
