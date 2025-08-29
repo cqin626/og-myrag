@@ -1493,31 +1493,31 @@ PROMPT[
 ] = """
       Please extract only the top-level section headings listed under the Table of Contents of the cached PDF.
 
-      DEFINITION (what to capture)
-      - Top-level items are the first-level sections in the TOC.
-      - Accept any of these number styles (case-insensitive):
-      1) "N. Title"  (e.g., "1. CORPORATE DIRECTORY")
-      2) "Section N Title"  (e.g., "Section 2 Key Messages")
-      3) "Chapter N Title"  (e.g., "Chapter 3 Management Discussion and Analysis")
-      4) "Part N Title"     (e.g., "PART 4 Value Creation at Farm Fresh")
-      5) "N — Title" or "N – Title" or "N Title" (dash/space instead of a period)
-      - Ignore sub-sections like "1.1 ...", "A. ...", "B. ...", roman-numeral lists, bullet lists, or any unnumbered headings.
+      WHAT TO CAPTURE
+      - Top-level items = first-level sections in the TOC (not sub-sections).
+      - Titles may appear next to page numbers; treat those numbers as page numbers, not section numbers.
+
+      PAGE-NUMBER VS. SECTION-NUMBER RULES
+      - If a line begins with a bare number (e.g., "02", "4", "156") followed by spaces/dot leaders and then text, that number is a PAGE NUMBER — ignore it.
+      - If a line ends with a number after dot leaders (e.g., "Title .... 35"), that number is a PAGE NUMBER — ignore it.
+      - If the text explicitly contains a section marker ("Section N", "Chapter N", "Part N", "N." before the title), you may use it to confirm the item is top-level, but **do not keep that original number** in output. We will renumber all items sequentially.
+      - Numbers inside the title that are part of the wording (years, amounts, model names) must be preserved.
 
       NORMALIZE EACH CAPTURED ITEM TO THIS EXACT FORM
       - Output as: "N. Title"
-      - N = the Arabic numeral you detected (e.g., 1, 2, 3, …).
+      - N = sequential Arabic numeral starting at 1 based on top-to-bottom order in the TOC (1, 2, 3, …). Ignore any page numbers or original section numbers.
       - Title = the heading text as it appears (preserve casing and words).
-      - Remove dot leaders and page numbers (e.g., "....... 35") and any trailing punctuation.
+      - Remove dot leaders and any page numbers.
       - Collapse internal whitespace to single spaces; trim leading/trailing spaces.
+      - Ignore sub-sections like "1.1 …", lettered items ("A.", "B."), roman-numeral lists, bullet lists, or unnumbered minor headings.
 
       ORDER
       - Keep the original TOC order from top to bottom.
 
       OUTPUT
       - Return a JSON array of strings only (no extra keys, no commentary, no page numbers).
-      - Example (for "Section 1 Overview of Farm Fresh Berhad", "Section 2 Key Messages", "Section 3 Value Creation at Farm Fresh", "Section 4 Management Discussion and Analysis"):
-      ["1. Overview of Farm Fresh Berhad", "2. Key Messages", "3. Value Creation at Farm Fresh", "4. Management Discussion and Analysis"]
-
+      - Example (input lines like "02 Global Presence", "04 Financial Highlights", ...):
+      ["1. Global Presence", "2. Financial Highlights", "3. Corporate Structure", "4. Corporate Information"]
 """
 
 

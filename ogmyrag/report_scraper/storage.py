@@ -157,7 +157,7 @@ class AsyncStorageManager:
         Set processed=True and summary_path for docs matching `query`.
         """
 
-        await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).update_document(
+        await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).update_documents(
             query, 
             {
                 "processed": True,

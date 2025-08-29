@@ -81,8 +81,9 @@ class ReportRetrievalManager:
         disclosure_collection = "company_disclosures"
         
         # Fetch raw pdfs
-        self.storage.use_collection(report_collection)
-        raw_docs = await self.storage.get_raw_reports(company, year, report_type)
+        #self.storage.use_collection(report_collection)
+        self.storage.use_fs_bucket(report_collection)
+        raw_docs = await self.storage.get_raw_reports(company, year, report_collection)
         if not raw_docs:
             retrieval_logger.info(f"No raw reports found for {company} {report_type.keyword} {year}")
             raise ValueError(f"No raw reports found for {company} {report_type.keyword} {year}")
@@ -122,8 +123,8 @@ class ReportRetrievalManager:
 
         if mode == "skip":
             retrieval_logger.info("Skipping processing, using existing content.")
-            self.storage.use_collection("company_disclosures")
-            return await self.storage.extract_combine_processed_content(company, year, report_type)
+            #self.storage.use_collection("company_disclosures")
+            return await self.storage.extract_combine_processed_content(company, year, report_type, "company_disclosures")
 
         # upload PDFs
         uploaded = await self.upload_pdfs(docs)
@@ -193,8 +194,8 @@ class ReportRetrievalManager:
         """
         if mode == "skip":
             retrieval_logger.info("Skipping processing, using existing content.")
-            self.storage.use_collection("company_disclosures")
-            return await self.storage.extract_combine_processed_content(company, year, report_type)
+            #self.storage.use_collection("company_disclosures")
+            return await self.storage.extract_combine_processed_content(company, year, report_type, "company_disclosures")
         
     
         # upload PDFs
@@ -288,10 +289,11 @@ class ReportRetrievalManager:
         """
         Mark the raw documents as processed and save the summary path.
         """
-        self.storage.use_collection(report_type.collection)
-        self.storage.update_many(
+        #self.storage.use_collection(report_type.collection)
+        await self.storage.update_data(
             {"company": company, "year": str(year)},
-            {"processed": True, "summary_path": processed_location}
+            {"processed": True, "summary_path": processed_location},
+            report_type.collection
         )
 
 
@@ -338,8 +340,8 @@ class ReportRetrievalManager:
         if year and year != "N/A":
             filter_query["year"] = str(year)
 
-        self.storage.use_collection("constraints")
-        if not await self.storage.check_exists(filter_query):
+        #self.storage.use_collection("constraints")
+        if not await self.storage.check_exists(filter_query, "constraints"):
             # --- retry loop (max 3 attempts) + RPM ---
             attempts = 0
             definition_text = None
@@ -398,7 +400,7 @@ class ReportRetrievalManager:
                 if year and year != "N/A":
                     update_query["year"] = year
                 
-                self.storage.update_many(filter_query, update_query)
+                await self.storage.upsert_many(filter_query, update_query, "constraints")
                 retrieval_logger.info("Saved constraints for %s", company)
 
             else:
@@ -428,9 +430,9 @@ class ReportRetrievalManager:
         if year and year != "N/A":
             filter_query["year"] = year
 
-        self.storage.use_collection("company_disclosures")
+        #self.storage.use_collection("company_disclosures")
 
-        if not await self.storage.check_exists(filter_query):
+        if not await self.storage.check_exists(filter_query, "company_disclosures"):
             sections = []
             attempts = 0
 
@@ -481,7 +483,7 @@ class ReportRetrievalManager:
                     if year and year != "N/A":
                         update_query["year"] = year
                     
-                    self.storage.update_many(filter_query, update_query)
+                    await self.storage.upsert_many(filter_query, update_query, "company_disclosures")
                     retrieval_logger.info("Saved Table of Contents for %s", company)
                     break
 
@@ -500,7 +502,7 @@ class ReportRetrievalManager:
 
         else:
             retrieval_logger.info("Table of Contents already exists, skipping extraction.")
-            sections = json.loads(await self.storage.retrieve_toc(filter_query))
+            sections = json.loads(await self.storage.retrieve_toc(filter_query, "company_disclosures"))
             retrieval_logger.info("Sections to extract: %s", sections)
 
         return sections
@@ -561,7 +563,7 @@ class ReportRetrievalManager:
 
         async def process_one(index: int, section: str):
             try:
-                self.storage.use_collection("company_disclosures")
+                #self.storage.use_collection("company_disclosures")
                 filter_query = {
                     "name": f"{company}_{report_type.name}{year_tag}_SECTION_{index}",
                     "type": doc_type,
@@ -571,7 +573,7 @@ class ReportRetrievalManager:
                 if year and year != "N/A":
                     filter_query["year"] = year
 
-                exists = await self.storage.check_exists(filter_query)
+                exists = await self.storage.check_exists(filter_query, "company_disclosures")
 
                 if mode == "fresh":
                     need_to_extract = True
@@ -581,7 +583,7 @@ class ReportRetrievalManager:
                     need_to_extract = not exists
 
                 if mode == "amend" and exists:
-                    base = await self.storage.retrieve_section(filter_query)
+                    base = await self.storage.retrieve_section(filter_query, "company_disclosures")
                     SECTION_PROMPT_AMEND = PROMPT["IPO SECTION PROMPT AMEND"] if report_type.collection == "ipo_reports" else PROMPT["ANNUAL REPORT SECTION PROMPT AMEND"]
                     prompt_text = SECTION_PROMPT_AMEND.format(base=base, section=section)
                 else:
@@ -629,7 +631,7 @@ class ReportRetrievalManager:
                                 if year and year != "N/A":
                                     update_query["year"] = year
 
-                                self.storage.update_many(filter_query, update_query)
+                                await self.storage.upsert_many(filter_query, update_query, "company_disclosures")
                                 retrieval_logger.info("Section: %s saved in DB", section)
                                 success_sections.append(section)
                                 break
@@ -649,7 +651,7 @@ class ReportRetrievalManager:
                         if content is None:
                             retrieval_logger.error("Section '%s' failed after retries.", section)
                             if exists:
-                                content = await self.storage.retrieve_section(filter_query)
+                                content = await self.storage.retrieve_section(filter_query, "company_disclosures")
                                 success_sections.append(section)
 
                             else:
@@ -658,7 +660,7 @@ class ReportRetrievalManager:
 
                     else:
                         retrieval_logger.info("Section %s already exists, updating content", section)
-                        content = await self.storage.retrieve_section(filter_query)
+                        content = await self.storage.retrieve_section(filter_query, "company_disclosures")
                         success_sections.append(section)
 
 
