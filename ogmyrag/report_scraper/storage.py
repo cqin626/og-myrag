@@ -6,6 +6,8 @@ from typing import Any, Mapping, Optional
 
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+from motor.motor_asyncio import AsyncIOMotorClient
+from ogmyrag.base import MongoStorageConfig
 from bson import ObjectId
 
 from ..report_scraper.session import CloudflareSession
@@ -70,11 +72,15 @@ class AsyncStorageManager:
     - PDF bytes in GridFS via AsyncIOMotorGridFSBucket
     """
 
-    def __init__(self, mongo_uri: str, db_name: str):
+    def __init__(self, client: AsyncIOMotorClient, mongo_config: MongoStorageConfig):
         # Initialize async MongoDB storage
-        self.storage = AsyncMongoDBStorage(mongo_uri)
-        self.storage.use_database(db_name)
-        scraper_logger.info("Connected to MongoDB database: %s", db_name)
+        self.client = client
+        
+        self.storage = AsyncMongoDBStorage(client)
+        self.storage_config = mongo_config
+        self.storage.get_database(mongo_config["database_name"])
+
+        scraper_logger.info("Connected to MongoDB database: %s", mongo_config["database_name"])
 
         # Initialize Cloudflare session
         self.cf = CloudflareSession()
@@ -87,30 +93,29 @@ class AsyncStorageManager:
         Switch both metadata & GridFS bucket to this collection.
         Must be called before any save/exists/mark_processed.
         """
-        self.storage.use_collection(collection_name)
+        #self.storage.use_collection(collection_name)
         # Initialize GridFS bucket for this collection
-        self.fs_bucket = AsyncIOMotorGridFSBucket(self.storage.db, bucket_name=collection_name)
+        self.fs_bucket = AsyncIOMotorGridFSBucket(self.storage.get_database(self.storage_config["database_name"]), bucket_name=collection_name)
+        
 
     async def exists(self, report_type: ReportType, pdf: PDFDocument, year: int) -> bool:
         """
         Check if a document with this filename + year exists in the collection.
         """
-        if self.storage.collection is None:
-            self.use_collection(report_type.collection)
-
+        
         key = {
             "filename": pdf.name,
             "year": year,
         }
-        docs = await self.storage.read_documents(query=key)
+        docs = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).read_documents(query=key)
         return len(docs) > 0
     
     async def save(self, announcement: Announcement, report_type: ReportType, year: int):
         """
         Download each PDF, upload to GridFS, then insert metadata doc.
         """
-        if self.storage.collection != report_type.collection:
-            self.use_collection(report_type.collection)
+        #if self.storage.collection != report_type.collection:
+        #    self.use_collection(report_type.collection)
 
         for pdf in announcement.pdfs:
             key = {
@@ -128,6 +133,7 @@ class AsyncStorageManager:
             content: bytes = await asyncio.to_thread(self.cf.get_bytes, pdf.url)
 
             # upload to GridFS
+            self.fs_bucket = AsyncIOMotorGridFSBucket(self.storage.get_database(self.storage_config["database_name"]).db, bucket_name=report_type.collection)
             file_id: ObjectId = await self.fs_bucket.upload_from_stream(pdf.name, content)
             scraper_logger.info("Uploaded PDF bytes for %s → GridFS ID %s", pdf.name, file_id)
 
@@ -143,7 +149,7 @@ class AsyncStorageManager:
                 "announced_date": announcement.announced_date
             }
 
-            inserted_id = await self.storage.create_document(doc)
+            inserted_id = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).create_document(doc)
             if inserted_id:
                 scraper_logger.info("Inserted metadata for %s → %s", pdf.name, inserted_id)
             else:
@@ -153,10 +159,8 @@ class AsyncStorageManager:
         """
         Set processed=True and summary_path for docs matching `query`.
         """
-        if self.storage.collection is None:
-            self.use_collection(report_type.collection)
 
-        await self.storage.update_document(
+        await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).update_document(
             query, 
             {
                 "processed": True,
@@ -168,8 +172,6 @@ class AsyncStorageManager:
         """
         Delete all documents for this company + report type + year.
         """
-        if self.storage.collection != report_type.collection:
-            self.use_collection(report_type.collection)
 
         company = company.replace(" ", "_").upper().strip()  # normalize company name
 
@@ -180,7 +182,7 @@ class AsyncStorageManager:
         else:
             query["year"] = "N/A"
 
-        docs = await self.storage.read_documents(query=query)
+        docs = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).read_documents(query=query)
 
         if not docs:
             scraper_logger.warning("No documents found for %s %s %s", company, report_type.keyword, str(year))
@@ -198,7 +200,7 @@ class AsyncStorageManager:
                     scraper_logger.error("Failed to delete GridFS file %s: %s", file_id, e)
             
             # delete metadata document
-            deleted_count = await self.storage.delete_document({"_id": doc["_id"]})
+            deleted_count = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).delete_document({"_id": doc["_id"]})
             if deleted_count > 0:
                 scraper_logger.info("Deleted metadata document for %s (id = %s)", doc["filename"], doc["_id"])
             else:
