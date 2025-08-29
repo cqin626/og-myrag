@@ -151,4 +151,4 @@ class AsyncNeo4jStorage:
                 return records
         except Exception as e:
             neo4j_logger.error(f"Failed to run custom query: {e}")
-            return []
+            raise

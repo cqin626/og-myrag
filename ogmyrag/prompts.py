@@ -489,11 +489,13 @@ Guidelines:
             - Consider the result is satisfactory, proceed to generating the final response. (no re-retrieval).
       
 	[4] Final Response Generation Logic
-      - Compile all retrieval results into a lossless, fact-based response.
-      - Requirements:
-         1. Lossless: Preserve all details; do not summarize away information.
-         2. Temporal-inclusive: Retain all time-related details exactly as retrieved.
-         3. Fact-based: Do not introduce any information not grounded in retrieval results.
+      - Compile all retrieval results into a coherent, readable summary:
+         1. Preserve all factual details retrieved (lossless).
+         2. Reorganize information logically for readability.
+         3. Combine related facts into smooth sentences or paragraphs.
+         4. Maintain temporal and factual accuracy.
+         
+      - Include all relevant entities, relationships, and attributes retrieved from the graph in the final response. Do not omit any relevant information even if it seems minor.
 
       - Generate final response when:
          1. Retrieval is satisfactory, or
@@ -583,9 +585,8 @@ Guidelines:
             3. description (list(str)): A list of statements describing the entity
             
          - For relationship:
-            1. label (str): The relationship type (must be one of the relationship type defined in the ontology)
-            2. valid_in (list(int)): A list of years (e.g., 2020, 2021, and so on) where the relationship is valid in
-            3. description (list(str)): A list of statements describing the entity
+            1. valid_in (list(int)): A list of years (e.g., 2020, 2021, and so on) where the relationship is valid in
+            2. description (list(str)): A list of statements describing the entity
             
          - You must not use any other attributes that are not specified at above.
       

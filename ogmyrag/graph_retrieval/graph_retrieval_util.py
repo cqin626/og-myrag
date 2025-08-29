@@ -1,55 +1,4 @@
-def get_formatted_query_formulation_message(response: dict):
-    output = []
-    output.append(f"Response type: {response.get('response_type', '')}")
-
-    if response.get("response_type") == "QUERY_FORMULATION":
-        for idx, item in enumerate(response.get("response", []), start=1):
-            query = item.get("query", "")
-            entities = ", ".join(item.get("entities_to_validate", []))
-            note = item.get("note", "")
-            output.append(
-                f"Response {idx}:\n  - Query: {query}\n  - Entities to validate: [{entities}]\n  - Note: {note or 'NA'}"
-            )
-    elif response.get("response_type") == "FINAL_REPORT":
-        for idx, item in enumerate(response.get("response", []), start=1):
-            output.append(f"Response {idx}:\n  - {item}")
-        output.append(f"Note: {response.get('note', 'NA')}")
-
-    return "\n".join(output)
-
-
-def get_formatted_text2cypher_message(response: dict):
-    output = []
-    output.append(f"Response type: {response.get('response_type', '')}")
-
-    for idx, item in enumerate(response.get("response", []), start=1):
-        original_query = item.get("original_query", "")
-        cypher_query = item.get("cypher_query", "")
-        parameters = item.get("parameters", {})
-        obtained_data = item.get("obtained_data", [])
-        note = item.get("note", "")
-
-        output.append(f"Response {idx}:\n")
-        output.append(f"  - Original query: {original_query}")
-        output.append(f"  - Cypher query: {cypher_query}")
-
-        if parameters:
-            output.append(f"  - Parameters:")
-            for i, (key, value) in enumerate(parameters.items(), start=1):
-                output.append(f"    {i}. {key}: {value}")
-        else:
-            output.append(f"  - Parameters: NA")
-
-        if obtained_data:
-            output.append(f"  - Obtained data:")
-            for i, data in enumerate(obtained_data, start=1):
-                output.append(f"    {i}. {data}")
-        else:
-            output.append(f"  - Obtained data: []")
-
-        output.append(f"  - Note: {note or 'NA'}")
-
-    return "\n".join(output)
+import json
 
 
 def get_formatted_decomposed_request(data: dict) -> str:
@@ -67,4 +16,42 @@ def get_formatted_validated_entities(validated_entities: list[str]):
     output = ["Validated Entities:"]
     for i, entity in enumerate(validated_entities, start=1):
         output.append(f"  {i}. {entity}")
+    return "\n".join(output)
+
+
+def get_formatted_cypher(query: str, params: dict) -> str:
+    formatted = query
+    for key, value in params.items():
+        if isinstance(value, str):
+            value_repr = f"'{value}'"
+        else:
+            value_repr = str(value)
+        formatted = formatted.replace(f"${key}", value_repr)
+    return formatted
+
+
+def get_formatted_cypher_retrieval_result(data: list[dict]):
+
+    return "\n".join(
+        (json.dumps(item, ensure_ascii=False) if isinstance(item, dict) else str(item))
+        for item in data
+    )
+
+
+def get_formatted_input_for_query_agent(type: str, payload: dict):
+    output = []
+    if type == "QUERY_GENERATION":
+        output.append(f"User request: {payload['user_request']}")
+        output.append(get_formatted_validated_entities(payload["validated_entities"]))
+    elif type == "RETRIEVAL_RESULT_EVALUATION":
+        output.append(f"Retrieval result: {payload['retrieval_result']}")
+        output.append(f"Cypher query used: {payload['cypher_query']}")
+        output.append(f"Note from Text2CypherAgent: {payload['note']}")
+    elif type == "REPORT_GENERATION":
+        output.append(
+            f"Regardless of the retrieval result below, you must generate a final response; you are not allowed to perform any evaluations anymore."
+        )
+        output.append(f"Retrieval result: {payload['retrieval_result']}")
+        output.append(f"Cypher query used: {payload['cypher_query']}")
+        output.append(f"Note from Text2CypherAgent: {payload['note']}")
     return "\n".join(output)

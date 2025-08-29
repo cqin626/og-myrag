@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import asyncio
 from typing import AsyncGenerator
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -28,114 +29,14 @@ from ..base import (
 )
 
 from .graph_retrieval_util import (
-    get_formatted_query_formulation_message,
-    get_formatted_text2cypher_message,
+    get_formatted_cypher_retrieval_result,
+    get_formatted_input_for_query_agent,
+    get_formatted_cypher,
     get_formatted_validated_entities,
     get_formatted_decomposed_request,
 )
 
 graph_retrieval_logger = logging.getLogger("graph_retrieval")
-
-
-# class QueryFormulationAgent(BaseAgent):
-#     """
-#     An agent responsible for converting user requests into queries suitable for input to the Text2CypherAgent.
-#     """
-
-#     async def handle_task(self, **kwargs):
-#         """
-#         Parameters:
-#            user_request (str): The request given by user.
-#            previous_response_id (str): Previous response id.
-#            ontology (dict): The existing ontology.
-#            max_query_attempt (int): Max query attempt.
-#            max_query_per_attempt (int): Max query per attempt.
-#            current_query_attempt (int): Current query attempt.
-#         """
-#         formatted_ontology = get_formatted_ontology(
-#             data=kwargs.get("ontology", {}) or {},
-#         )
-
-#         system_prompt = PROMPT["GRAPH_QUERY_FORMULATION_AGENT"].format(
-#             ontology=formatted_ontology,
-#             max_query_attempt=kwargs.get("max_query_attempt", 1) or 1,
-#             max_query_per_attempt=kwargs.get("max_query_per_attempt", 1) or 1,
-#             current_query_attempt=kwargs.get("current_query_attempt", 0) or 0,
-#         )
-
-#         graph_retrieval_logger.info(f"QueryFormulationAgent is called")
-
-#         try:
-#             response = await fetch_responses_openai(
-#                 model="o4-mini",
-#                 system_prompt=system_prompt,
-#                 user_prompt=kwargs.get("user_request", "") or "",
-#                 text={"format": {"type": "text"}},
-#                 reasoning={"effort": "high"},
-#                 max_output_tokens=100000,
-#                 previous_response_id=kwargs.get("previous_response_id", None) or None,
-#                 tools=[],
-#             )
-
-#             graph_retrieval_logger.info(
-#                 f"QueryFormulationAgent\nResponse details:\n{get_formatted_openai_response(response)}"
-#             )
-#             return response
-
-#         except Exception as e:
-#             graph_retrieval_logger.error(
-#                 f"QueryFormulationAgent\nRetrieval failed: {str(e)}"
-#             )
-#             return ""
-
-
-# class Text2CypherAgent(BaseAgent):
-#     """
-#     An agent responsible for converting query written in natural language into Cypher query.
-#     """
-
-#     async def handle_task(self, **kwargs) -> str:
-#         """
-#         Parameters:
-#            query (str): The query written in natural language.
-#            potential_entities (str): Potential entities to query on.
-#            note (str): Additional note for the Text2CypherAgent.
-#            ontology (dict): The existing ontology.
-#         """
-
-#         formatted_ontology = get_formatted_ontology(
-#             data=kwargs.get("ontology", {}) or {},
-#         )
-
-#         system_prompt = PROMPT["TEXT_TO_CYPHER_V2"].format(
-#             ontology=formatted_ontology,
-#             potential_entities=kwargs.get("potential_entities", "") or "",
-#         )
-#         user_prompt = f"User query: {kwargs.get('query', '')}\nAdditional note: {kwargs.get('note', 'NA')}"
-
-#         graph_retrieval_logger.info(f"Text2CypherAgent is called")
-
-#         try:
-#             response = await fetch_responses_openai(
-#                 model="o4-mini",
-#                 system_prompt=system_prompt,
-#                 user_prompt=user_prompt,
-#                 text={"format": {"type": "text"}},
-#                 reasoning={"effort": "medium"},
-#                 max_output_tokens=100000,
-#                 tools=[],
-#             )
-
-#             graph_retrieval_logger.info(
-#                 f"Text2CypherAgent\nText2Cypher response details:\n{get_formatted_openai_response(response)}"
-#             )
-#             return response
-
-#         except Exception as e:
-#             graph_retrieval_logger.error(
-#                 f"Text2CypherAgent\nConversion from query to Cypher failed: {str(e)}"
-#             )
-#             return ""
 
 
 class ChatAgent(BaseAgent):
@@ -236,7 +137,6 @@ class QueryAgent(BaseAgent):
         """
         Parameters:
             user_request (str),
-            validated_entities list(str),
             ontology (dict),
             previous_response_id (str | None)
         """
@@ -251,13 +151,7 @@ class QueryAgent(BaseAgent):
             f"QueryAgent\nSystem prompt used:\n{system_prompt}"
         )
 
-        formatted_user_request = (
-            "User Request:\n" + kwargs.get("user_request", "") + "\n"
-        )
-        formatted_validated_entities = get_formatted_validated_entities(
-            kwargs.get("validated_entities", [])
-        )
-        user_prompt = formatted_user_request + formatted_validated_entities
+        user_prompt = kwargs.get("user_request", "")
         graph_retrieval_logger.debug(f"QueryAgent\nUser prompt used:\n{user_prompt}")
 
         response = await fetch_responses_openai(
@@ -281,6 +175,65 @@ class QueryAgent(BaseAgent):
         return formatted_response
 
 
+class Text2CypherAgent(BaseAgent):
+    """
+    An agent responsible for generating Cypher query and performing Cypher retrieval.
+    """
+
+    async def handle_task(self, **kwargs):
+        """
+        Parameters:
+            user_query (str),
+            validated_entities list(str),
+            ontology (dict),
+            note (str | None)
+            previous_response_id (str | None)
+        """
+        graph_retrieval_logger.info(f"Text2CypherAgent is called")
+
+        system_prompt = PROMPT["TEXT2CYPHER"].format(
+            ontology=get_formatted_ontology(
+                data=kwargs.get("ontology", {}), exclude_entity_fields=["llm-guidance"]
+            )
+        )
+        graph_retrieval_logger.debug(
+            f"Text2CypherAgent\nSystem prompt used:\n{system_prompt}"
+        )
+
+        formatted_user_query = "User Query: " + kwargs.get("user_query", "") + "\n"
+        formatted_validated_entities = (
+            get_formatted_validated_entities(kwargs.get("validated_entities", []))
+            + "\n"
+        )
+        formattted_note = "Note: " + kwargs.get("note", "NA")
+        user_prompt = (
+            formatted_user_query + formatted_validated_entities + formattted_note
+        )
+        graph_retrieval_logger.debug(
+            f"Text2CypherAgent\nUser prompt used:\n{user_prompt}"
+        )
+
+        response = await fetch_responses_openai(
+            model="o4-mini",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "high"},
+            max_output_tokens=100000,
+            previous_response_id=kwargs.get("previous_response_id", None),
+            tools=[],
+        )
+
+        graph_retrieval_logger.info(
+            f"Text2CypherAgent\nText2CypherAgent response details:\n{get_formatted_openai_response(response)}"
+        )
+
+        formatted_response = get_clean_json(response.output_text)
+        formatted_response["id"] = response.id
+
+        return formatted_response
+
+
 class GraphRetrievalSystem(BaseMultiAgentSystem):
     def __init__(
         self,
@@ -296,6 +249,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                     "RequestDecompositionAgent"
                 ),
                 "QueryAgent": QueryAgent("QueryAgent"),
+                "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent"),
             }
         )
 
@@ -402,9 +356,22 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 )
 
             # Fan-in results from all subrequests
+            final_response=None
             async for result in self._fan_in_generators(gens):
                 yield result
+                if isinstance(result, str) and result.startswith("Combined Final Response from QueryAgents"):
+                    final_response = result
 
+            # Step 5.3 : Generating final result
+            yield "## Calling ChatAgent..."
+            chat_agent_response = await self.agents["ChatAgent"].handle_task(
+                chat_input=final_response,
+                similarity_threshold=similarity_threshold,
+                previous_chat_id=self.current_chat_id,
+            )
+            self._update_current_chat_id(chat_agent_response["id"])
+            if chat_agent_response["type"] == "RESPONSE_GENERATION":
+                yield chat_agent_response["payload"]["response"]
         else:
             yield "Unexpected error occur. Please contact the developer."
 
@@ -429,13 +396,17 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         Runs multiple async generators concurrently and yields their results as soon as they are available.
         """
         queue = asyncio.Queue()
+        final_responses = []
 
         async def consume(gen: AsyncGenerator[str, None]):
             try:
                 async for item in gen:
+                    # Detect if this is a final response line
+                    if item.startswith("**") and "Final Response" in item:
+                        final_responses.append(item)
                     await queue.put(item)
             except Exception as e:
-                graph_retrieval_logger(
+                graph_retrieval_logger.error(
                     f"GraphRetrievalSystem: Error when retrieving result {e}"
                 )
             finally:
@@ -454,6 +425,13 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
 
         # Ensure cleanup
         await asyncio.gather(*tasks)
+        
+        final_response_str = "\n".join(final_responses)
+        graph_retrieval_logger.debug(f"Checking the final response: \n{final_response_str}")
+
+        if final_responses:
+            combined = "\n\n".join(final_responses)
+            yield "Combined Final Response from QueryAgents\n" + combined
 
     async def _process_subrequest(
         self,
@@ -461,174 +439,134 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         sub_request: str,
         validated_entities: list[str],
         ontology: dict,
-        max_iteration: int = 3,
+        max_iteration: int = 2,
     ) -> AsyncGenerator[str, None]:
-        yield f"## Calling Query Agent ({agent_name}) for sub-request '{sub_request}'"
+        """
+        Handles a sub-request by coordinating between QueryAgent and Text2CypherAgent.
+        Iteratively generates queries, translates them to Cypher, executes them,
+        and refines results until a final response is produced or the iteration limit is reached.
+        """
 
+        # Track response IDs for iterative refinement
+        previous_query_agent_response_id = None
+        previous_text2_cypher_agent_response_id = None
+
+        query_agent_response = None
+        text2cypher_agent_response = None
+        current_iteration = 0
+
+        # Step 1 : Initial query generation
+        yield f"## Calling Query Agent ({agent_name}) for sub-request '{sub_request}'..."
         query_agent_response = await self.agents["QueryAgent"].handle_task(
-            user_request=sub_request,
-            validated_entities=validated_entities,
+            user_request=get_formatted_input_for_query_agent(
+                type="QUERY_GENERATION",
+                payload={
+                    "user_request": sub_request,
+                    "validated_entities": validated_entities,
+                },
+            ),
             ontology=ontology,
         )
+        previous_query_agent_response_id = query_agent_response["id"]
+
+        yield (
+            f"**{agent_name}**:\n"
+            f"Query: {query_agent_response['payload']['query']}\n"
+            f"**Validated Entities:** {query_agent_response['payload']['validated_entities']}\n"
+            f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
+        )
+
+        # Step 2 : Iterative refinement process
         if query_agent_response["type"] == "QUERY":
-            yield f"{agent_name}:\nQuery: {query_agent_response['payload']['query']}\nValidated Entities: {query_agent_response['payload']['validated_entities']}"
+            while current_iteration < max_iteration:
+                # Step 2.1: Convert natural query → Cypher
+                yield f"## Calling Text2Cypher Agent for {agent_name}..."
+                text2cypher_agent_response = await self.agents["Text2CypherAgent"].handle_task(
+                    user_query=query_agent_response["payload"]["query"],
+                    validated_entities=query_agent_response["payload"]["validated_entities"],
+                    ontology=ontology,
+                    note=query_agent_response["payload"]["note"],
+                    previous_response_id=previous_text2_cypher_agent_response_id,
+                )
+                previous_text2_cypher_agent_response_id = text2cypher_agent_response["id"]
+
+                # Step 2.2: Run Cypher query
+                cypher_retrieval_result = await self.graph_storage.run_query(
+                    query=text2cypher_agent_response["cypher_query"],
+                    parameters=text2cypher_agent_response["parameters"],
+                )
+
+                # Step 2.3: Report Cypher + results
+                yield (
+                    f"**Response by Text2CypherAgent to {agent_name}:**\n"
+                    f"**Cypher Query:** {get_formatted_cypher(query=text2cypher_agent_response['cypher_query'], params=text2cypher_agent_response['parameters'])}\n"
+                    f"**Note:** {text2cypher_agent_response['note']}\n"
+                    f"**Retrieval Result:**\n{get_formatted_cypher_retrieval_result(cypher_retrieval_result)}"
+                )
+                yield f"## Calling Query Agent ({agent_name}) to evaluate retrieval result..."
+
+                # Step 2.4: If final iteration → force final report
+                if current_iteration == max_iteration - 1:
+                    yield f"## Max iteration reached for Query Agent ({agent_name}), generating final response..."
+                    query_agent_response = await self.agents["QueryAgent"].handle_task(
+                        user_request=get_formatted_input_for_query_agent(
+                            type="REPORT_GENERATION",
+                            payload={
+                                "retrieval_result": get_formatted_cypher_retrieval_result(cypher_retrieval_result),
+                                "cypher_query": get_formatted_cypher(
+                                    query=text2cypher_agent_response["cypher_query"],
+                                    params=text2cypher_agent_response["parameters"],
+                                ),
+                                "note": text2cypher_agent_response["note"],
+                            },
+                        ),
+                        ontology=ontology,
+                        previous_response_id=previous_query_agent_response_id,
+                    )
+                    previous_query_agent_response_id = query_agent_response["id"]
+
+                    yield (
+                        f"**{agent_name}**:\n"
+                        f"**Final Response from {agent_name}:**  {query_agent_response['payload']['response']}\n"
+                        f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
+                    )
+                    break
+
+                else:
+                    # Step 2.5: Intermediate evaluation by QueryAgent
+                    query_agent_response = await self.agents["QueryAgent"].handle_task(
+                        user_request=get_formatted_input_for_query_agent(
+                            type="RETRIEVAL_RESULT_EVALUATION",
+                            payload={
+                                "retrieval_result": get_formatted_cypher_retrieval_result(cypher_retrieval_result),
+                                "cypher_query": get_formatted_cypher(
+                                    query=text2cypher_agent_response["cypher_query"],
+                                    params=text2cypher_agent_response["parameters"],
+                                ),
+                                "note": text2cypher_agent_response["note"],
+                            },
+                        ),
+                        ontology=ontology,
+                        previous_response_id=previous_query_agent_response_id,
+                    )
+                    previous_query_agent_response_id = query_agent_response["id"]
+
+                    # Step 2.6: Decide whether to re-query or finalize
+                    if query_agent_response["type"] == "QUERY":
+                        yield (
+                            f"**{agent_name}**:\n"
+                            f"Query: {query_agent_response['payload']['query']}\n"
+                            f"**Validated Entities:** {query_agent_response['payload']['validated_entities']}\n"
+                            f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
+                        )
+                    elif query_agent_response["type"] == "FINAL_RESPONSE":
+                        yield (
+                            f"**{agent_name}**:\n"
+                            f"**Final Response from {agent_name}:** {query_agent_response['payload']['response']}\n"
+                            f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
+                        )
+                        break
+                current_iteration += 1
         else:
-            yield f"{agent_name}: Unexpected error occurred. Please contact the developer."
+            yield f"**{agent_name}:** Unexpected error occurred. Please contact the developer."
 
-    # async def query_from_graph(self, user_request: str):
-    #     # Step 1 : Get the latest ontology
-    #     try:
-    #         graph_retrieval_logger.info("GraphRetrievalSystem\nPreparing ontology...")
-    #         latest_onto = (
-    #             self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).read_documents({"is_latest": True})[0].get(
-    #                 "ontology", {}
-    #             )
-    #             or {}
-    #         )
-    #     except Exception as e:
-    #         graph_retrieval_logger.error(
-    #             f"GraphRetrievalSystem\nError while getting latest ontology:{e}"
-    #         )
-    #         raise ValueError(f"Failed to fetch the latest ontology: {e}")
-
-    #     # Step 2 : Call QueryFormulationAgent
-
-    #     is_final_report_produced = False
-    #     current_query_attempt = 0
-    #     previous_response_id = None
-
-    #     while not is_final_report_produced and current_query_attempt < 3:
-    #         yield "## Calling QueryFormulationAgent..."
-
-    #         query_formulation_agent_raw_response = (
-    #             await self.get_query_formulation_agent_response(
-    #                 user_request=user_request,
-    #                 ontology=latest_onto,
-    #                 current_query_attempt=current_query_attempt,
-    #                 previous_response_id=previous_response_id,
-    #             )
-    #         )
-
-    #         previous_response_id = query_formulation_agent_raw_response.id
-
-    #         query_formulation_agent_response = get_clean_json(
-    #             query_formulation_agent_raw_response.output_text
-    #         )
-
-    #         if query_formulation_agent_response["response_type"] == "QUERY_FORMULATION":
-    #             yield f"## Response by: QueryFormulationAgent\n {get_formatted_query_formulation_message(query_formulation_agent_response)}"
-
-    #             text2cypher_tasks = []
-
-    #             for item in query_formulation_agent_response["response"]:
-    #                 text2cypher_tasks.append(
-    #                     self.get_text_to_cypher_agent_response(
-    #                         query=item.get("query", ""),
-    #                         potential_entities=item.get("entities_to_validate", []),
-    #                         note=item.get("note", ""),
-    #                         ontology=latest_onto,
-    #                     )
-    #                 )
-
-    #             yield "## Calling Text2CypherAgent..."
-
-    #             text2cypher_response = {
-    #                 "response_type": "RETRIEVAL_RESULT",
-    #                 "response": [],
-    #             }
-
-    #             conversion_results = await asyncio.gather(*text2cypher_tasks)
-
-    #             for result in conversion_results:
-    #                 text2cypher_response["response"].append(result)
-
-    #             yield f"## Response by: Text2CypherAgent\n {get_formatted_text2cypher_message(text2cypher_response)}"
-
-    #             yield "## Calling QueryFormulationAgent..."
-    #             query_formulation_agent_raw_response = (
-    #                 await self.get_query_formulation_agent_response(
-    #                     user_request=str(text2cypher_response),
-    #                     ontology=latest_onto,
-    #                     current_query_attempt=current_query_attempt,
-    #                     previous_response_id=previous_response_id,
-    #                 )
-    #             )
-
-    #             previous_response_id = query_formulation_agent_raw_response.id
-
-    #             query_formulation_agent_response = get_clean_json(
-    #                 query_formulation_agent_raw_response.output_text
-    #             )
-
-    #         if query_formulation_agent_response["response_type"] == "FINAL_REPORT":
-    #             is_final_report_produced = True
-    #             yield f"## Response by: QueryFormulationAgent\n {get_formatted_query_formulation_message(query_formulation_agent_response)}"
-
-    #         current_query_attempt += 1
-
-    # async def get_query_formulation_agent_response(
-    #     self,
-    #     user_request: str,
-    #     ontology: dict,
-    #     current_query_attempt: int,
-    #     previous_response_id: str,
-    # ):
-    #     response = await self.agents["QueryFormulationAgent"].handle_task(
-    #         ontology=ontology,
-    #         user_request=user_request,
-    #         previous_response_id=previous_response_id,
-    #         max_query_attempt=3,
-    #         max_query_per_attempt=5,
-    #         current_query_attempt=current_query_attempt,
-    #     )
-
-    #     return response
-
-    # async def get_text_to_cypher_agent_response(
-    #     self, query: str, potential_entities: list, note: str, ontology: dict
-    # ):
-    #     validated_entities = await self.pinecone_storage.get_index(self.entity_vector_config["index_name"]).get_similar_results(
-    #         query_texts=potential_entities,
-    #         top_k=20,
-    #     )
-
-    #     formatted_validated_entities = get_formatted_similar_entities(
-    #         query_texts=potential_entities,
-    #         results=validated_entities
-    #     )
-
-    #     graph_retrieval_logger.info(
-    #         f"GraphRetrievalSystem\nValidated entities:\n{formatted_validated_entities}"
-    #     )
-
-    #     raw_response = await self.agents["Text2CypherAgent"].handle_task(
-    #         ontology=ontology,
-    #         query=query,
-    #         potential_entities=formatted_validated_entities,
-    #         note=note,
-    #     )
-    #     response = get_clean_json(raw_response.output_text)
-
-    #     cypher_query = response.get("cypher_query", "")
-    #     parameters = response.get("parameters", {})
-
-    #     if cypher_query and parameters:
-    #         response["obtained_data"] = await self.get_cypher_query_response(
-    #             query=cypher_query, parameters=parameters
-    #         )
-
-    #     return response
-
-    # async def get_cypher_query_response(self, query: str, parameters: dict):
-    #     try:
-    #         graph_retrieval_logger.info(
-    #             "GraphRetrievalSystem\nRetrieving data using Cypher query..."
-    #         )
-    #         return await self.graph_storage.run_query(
-    #             query=query, parameters=parameters
-    #         )
-    #     except Exception as e:
-    #         graph_retrieval_logger.error(
-    #             f"GraphRetrievalSystem\nError while retrieving data using Cypher query:{e}"
-    #         )
-    #         return []
