@@ -1,101 +1,137 @@
 import logging
 import json
+from bson import ObjectId
 
-from ..util import get_clean_json
+from ..util import get_clean_json, get_current_datetime
 from typing import Any
 
 from ..util import get_normalized_string, get_formatted_current_datetime
 
 
-def get_formatted_company_data(
-    document: str,
-    document_name: str,
-    document_type: str,
-    company_name: str,
-    published_at: str,
-    timezone_str: str = "Asia/Kuala_Lumpur",
-) -> dict[str, Any]:
-    return {
-        "name": get_normalized_string(document_name),
-        "type": get_normalized_string(document_type),
-        "from_company": get_normalized_string(company_name),
-        "created_at": get_formatted_current_datetime(timezone_str),
-        "is_parsed": False,
-        "content": document,
-        "published_at": published_at,
-    }
-
-
 def get_formatted_entities_and_relationships_for_db(
-    response_string: str,
+    data: dict, from_company: str
 ) -> tuple[list, list]:
-    try:
-        response_data = get_clean_json(response_string)
-        formatted_entities = get_formatted_entities_for_db(
-            response_data.get("entities", [])
-        )
-        formatted_relationships = get_formatted_relationships_for_db(
-            response_data.get("relationships", [])
-        )
+    formatted_entities = _get_formatted_entities_for_db(
+        entities=data.get("entities", []), from_company=from_company
+    )
+    formatted_relationships = _get_formatted_relationships_for_db(
+        relationships=data.get("relationships", []), from_company=from_company
+    )
 
-        return formatted_entities, formatted_relationships
-    except Exception as e:
-        raise ValueError(f"Failed to parse response string: {e}")
+    return formatted_entities, formatted_relationships
 
 
-def get_formatted_entities_for_db(
-    entities: list[dict[str, Any]], timezone: str = "Asia/Kuala_Lumpur"
+def _get_formatted_entities_for_db(
+    entities: list[dict[str, Any]],
+    from_company: str,
+    timezone: str = "Asia/Kuala_Lumpur",
 ) -> list[dict[str, Any]]:
     formatted_entities = []
     for entity in entities:
         formatted_entities.append(
             {
+                "_id": entity.get("id"),
                 "name": entity.get("name", "").strip(),
                 "type": entity.get("type", "").strip(),
-                "description": entity.get("desc", ""),
-                "created_at": get_formatted_current_datetime(timezone),
-                "last_modified_at": get_formatted_current_datetime(timezone),
-                "inserted_into_vectordb_at": "",
-                "inserted_into_graphdb_at": "",
-                "to_be_deleted": False,
+                "description": [entity.get("desc", "")],
+                "originated_from": [from_company],
+                "status": "TO_BE_DEDUPLICATED",
+                "created_at": get_current_datetime(timezone),
+                "last_modified_at": get_current_datetime(timezone),
             }
         )
     return formatted_entities
 
 
-def get_formatted_relationships_for_db(
-    relationships: list[str], timezone: str = "Asia/Kuala_Lumpur"
+def _get_formatted_relationships_for_db(
+    relationships: list[str], from_company: str, timezone: str = "Asia/Kuala_Lumpur"
 ) -> list[dict[str, Any]]:
     formatted_relationships = []
     for relationship in relationships:
         formatted_relationships.append(
             {
+                "_id": relationship.get("id"),
+                "source_id": relationship.get("source_id", ""),
+                "target_id": relationship.get("target_id", ""),
                 "type": relationship.get("type", "").strip(),
-                "source": relationship.get("source", "").strip(),
-                "target": relationship.get("target", "").strip(),
-                "source_type": relationship.get("source_type", "").strip(),
-                "target_type": relationship.get("target_type", "").strip(),
-                "description": relationship.get("desc", ""),
-                "created_at": get_formatted_current_datetime(timezone),
-                "last_modified_at": get_formatted_current_datetime(timezone),
-                "inserted_into_graphdb_at": "",
-                "to_be_deleted": False,
+                "description": [relationship.get("desc", "")],
+                "valid_in": relationship.get("valid_in", []),
+                "originated_from": [from_company],
+                "status": "TO_BE_DEDUPLICATED",
+                "created_at": get_current_datetime(timezone),
+                "last_modified_at": get_current_datetime(timezone),
             }
         )
     return formatted_relationships
 
 
+def get_entities_relationships_with_updated_ids(data: dict):
+    old_to_new_ids = {}
+
+    # Step 1: Assign new ObjectIds to entities
+    for entity in data.get("entities", []):
+        new_id = ObjectId()
+        old_to_new_ids[entity["id"]] = new_id
+        entity["id"] = new_id
+
+    # Step 2: Assign new ObjectIds to relationships and update source/target IDs
+    for rel in data.get("relationships", []):
+        rel["id"] = ObjectId()
+        rel["source_id"] = old_to_new_ids[rel["source_id"]]
+        rel["target_id"] = old_to_new_ids[rel["target_id"]]
+
+    # Step 3: Filter out unused entities
+    used_entity_ids = set()
+    for rel in data.get("relationships", []):
+        used_entity_ids.add(rel["source_id"])
+        used_entity_ids.add(rel["target_id"])
+
+    data["entities"] = [
+        entity for entity in data.get("entities", []) if entity["id"] in used_entity_ids
+    ]
+
+    return data
+
+
+def get_formatted_entity_cache_for_db(
+    entity: dict, timezone: str = "Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+    return {
+        "_id": entity.get("_id"),
+        "name": entity.get("name"),
+        "type": entity.get("type"),
+        "description": entity.get("description"),
+        "last_modified_at": get_current_datetime(timezone),
+    }
+
+
+def get_formatted_relationship_cache_for_db(
+    relationship: dict, timezone: str = "Asia/Kuala_Lumpur"
+) -> dict[str, Any]:
+    return {
+        "_id": relationship.get("_id"),
+        "source_id": relationship.get("source_id"),
+        "target_id": relationship.get("target_id"),
+        "type": relationship.get("type"),
+        "description": relationship.get("description"),
+        "valid_in": relationship.get("valid_in"),
+        "last_modified_at": get_current_datetime(timezone),
+    }
+
+
 def get_formatted_entity_for_vectordb(
     entity: dict[str, Any], timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
+    """
+    Used for both vector entities cache and actual vector entities storage
+    """
     return {
         "id": str(entity["_id"]),
         "name": entity["name"],
         "metadata": {
-            "entity_name": entity["name"],
-            "entity_type": entity["type"],
+            "name": entity["name"],
+            "type": entity["type"],
             "description": entity["description"],
-            "last_modified_at": get_formatted_current_datetime(timezone),
         },
     }
 
@@ -105,6 +141,7 @@ def get_formatted_entity_for_graphdb(
 ) -> dict[str, Any]:
     return {
         "id": str(entity["_id"]),
+        "type": entity["type"],
         "name": entity["name"],
         "description": entity["description"],
         "last_modified_at": get_formatted_current_datetime(timezone),
@@ -115,14 +152,45 @@ def get_formatted_relationship_for_graphdb(
     relationship: dict[str, Any], timezone="Asia/Kuala_Lumpur"
 ) -> dict[str, Any]:
     return {
-        "source_name": relationship["source"],
-        "target_name": relationship["target"],
-        "source_type": relationship["source_type"],
-        "target_type": relationship["target_type"],
+        "source_id": str(relationship["source_id"]),
+        "target_id": str(relationship["target_id"]),
         "type": relationship["type"],
         "properties": {
             "id": str(relationship["_id"]),
             "description": relationship["description"],
             "last_modified_at": get_formatted_current_datetime(timezone),
+            "valid_in": relationship["valid_in"],
         },
     }
+
+
+def get_formatted_entities_deduplication_pending_task(
+    from_company: str,
+    payload: dict[str, Any],
+    task_type: str,
+    timezone: str = "Asia/Kuala_Lumpur",
+) -> dict[str, Any]:
+    return {
+        "from_company": from_company,
+        "pending": True,
+        "type": task_type,
+        "payload": payload,
+        "created_at": get_current_datetime(timezone),
+    }
+
+
+def get_formatted_entity_details_for_deduplication(
+    entity: dict, entity_label: str, associated_relationships: list
+):
+    output = []
+
+    output.append(f"{entity_label}: ")
+    output.append(f"- Entity Name: {entity['name']}")
+    output.append(f"- Entity Type: {entity['type']}")
+    output.append(f"- Entity Description(s): {entity['description']}")
+    output.append(f"- Associated Relationships:")
+
+    for i, relationship in enumerate(associated_relationships, start=1):
+        output.append(f"  {i}. {relationship.get('description', '')}")
+
+    return "\n".join(output)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from typing import TypedDict
+from pymongo import MongoClient
 
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
@@ -151,6 +152,7 @@ class OntologyClarityEnhancementAgent(BaseAgent):
 class OntologyConstructionSystem(BaseMultiAgentSystem):
     def __init__(
         self,
+        mongo_client: MongoClient,
         ontology_purpose: str,
         ontology_config: MongoStorageConfig,
     ):
@@ -167,10 +169,9 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
                 ),
             }
         )
-        try:
-            self.onto_storage = MongoDBStorage(ontology_config["connection_uri"])
-            self.onto_storage.use_database(ontology_config["database_name"])
-            self.onto_storage.use_collection(ontology_config["collection_name"])
+        try:            
+            self.ontology_config=ontology_config
+            self.mongo_storage = MongoDBStorage(mongo_client)
 
             self.ontology_purpose = ontology_purpose
         except Exception as e:
@@ -233,8 +234,8 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
         # Step 4: Upload constructed ontology to db
         try:
-            self.onto_storage.update_document({"is_latest": True}, {"is_latest": False})
-            self.onto_storage.create_document(
+            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).update_document({"is_latest": True}, {"is_latest": False})
+            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).create_document(
                 get_formatted_ontology_for_db(
                     ontology=current_onto,
                     model="o4-mini",
@@ -282,8 +283,8 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
         # Step 3: Upload simplified ontology to db
         try:
-            self.onto_storage.update_document({"is_latest": True}, {"is_latest": False})
-            self.onto_storage.create_document(
+            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).update_document({"is_latest": True}, {"is_latest": False})
+            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).create_document(
                 get_formatted_ontology_for_db(
                     ontology={"entities": entities, "relationships": relationships},
                     model="o4-mini",
@@ -331,8 +332,8 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
         # Step 3: Upload enhanced ontology to db
         try:
-            self.onto_storage.update_document({"is_latest": True}, {"is_latest": False})
-            self.onto_storage.create_document(
+            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).update_document({"is_latest": True}, {"is_latest": False})
+            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).create_document(
                 get_formatted_ontology_for_db(
                     ontology={"entities": entities, "relationships": relationships},
                     model="o4-mini",
@@ -353,7 +354,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
     def get_current_onto(self) -> dict:
         try:
-            current_latest_onto = self.onto_storage.read_documents({"is_latest": True})
+            current_latest_onto = self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).read_documents({"is_latest": True})
             return (
                 current_latest_onto[0].get("ontology", "")
                 if current_latest_onto
@@ -367,7 +368,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
     def get_current_onto_version(self) -> str:
         try:
-            current_latest_onto = self.onto_storage.read_documents({"is_latest": True})
+            current_latest_onto = self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).read_documents({"is_latest": True})
             return (
                 current_latest_onto[0].get("version", "1.0.0")
                 if current_latest_onto

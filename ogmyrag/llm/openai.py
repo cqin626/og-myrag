@@ -37,7 +37,7 @@ def get_openai_async_client_instance() -> AsyncOpenAI:
     return global_openai_async_client
 
 
-@limit_concurrency(max_concurrent_tasks=10)
+@limit_concurrency(max_concurrent_tasks=20)
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=4, max=10),
