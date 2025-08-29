@@ -93,7 +93,6 @@ class AsyncStorageManager:
         Switch both metadata & GridFS bucket to this collection.
         Must be called before any save/exists/mark_processed.
         """
-        #self.storage.use_collection(collection_name)
         # Initialize GridFS bucket for this collection
         self.fs_bucket = AsyncIOMotorGridFSBucket(self.storage.get_database(self.storage_config["database_name"]), bucket_name=collection_name)
         
@@ -114,8 +113,6 @@ class AsyncStorageManager:
         """
         Download each PDF, upload to GridFS, then insert metadata doc.
         """
-        #if self.storage.collection != report_type.collection:
-        #    self.use_collection(report_type.collection)
 
         for pdf in announcement.pdfs:
             key = {

@@ -6,6 +6,7 @@ from typing import Any, List, Dict, Optional
 import hashlib
 import logging
 from ..storage.pinecone_storage import PineconeStorage
+from ogmyrag.base import PineconeStorageConfig
 
 query_logger = logging.getLogger("query")
 retrieval_logger = logging.getLogger("retrieval")
@@ -139,6 +140,7 @@ def build_pinecone_items_from_chunks(
 # ---------- end-to-end helper that uses your PineconeStorage ----------
 async def index_markdown_with_pinecone(
     pine: PineconeStorage,
+    pinecone_config: PineconeStorageConfig,
     md_text: str,
     *,
     company: str,
@@ -161,7 +163,7 @@ async def index_markdown_with_pinecone(
     # Hard-delete previous vectors for this section in the default namespace ("")
     try:
         await asyncio.to_thread(
-            pine.index.delete,
+            pine.pinecone.Index(pinecone_config["index_name"]).delete,
             filter={
                 "from_company": company,
                 "type": doc_type,
@@ -195,7 +197,7 @@ async def index_markdown_with_pinecone(
     total = 0
     for i in range(0, len(items), embed_batch):
         batch = items[i:i+embed_batch]
-        await pine.create_vectors_without_namespace(batch)  # <- uses your class; embeds concurrently + upserts
+        await pine.get_index(pinecone_config["index_name"]).upsert_vectors(batch)  # <- uses your class; embeds concurrently + upserts
         total += len(batch)
 
 
@@ -204,7 +206,7 @@ async def index_markdown_with_pinecone(
         try:
             comp_vec = await pine._embed_text(company)  # match your index dims
             await asyncio.to_thread(
-                pine.index.upsert,
+                pine.pinecone.Index(pinecone_config["index_name"]).upsert,
                 vectors=[{
                     "id": f"company::{company}",
                     "values": comp_vec,
@@ -221,6 +223,7 @@ async def index_markdown_with_pinecone(
 
 async def rag_answer_with_company_detection(
     pine: PineconeStorage,
+    pinecone_config: PineconeStorageConfig,
     *,
     query: str,
     top_k: int = 10,
@@ -258,6 +261,7 @@ async def rag_answer_with_company_detection(
         return txt if len(txt) <= n else txt[:n] + "…"
     
     query_logger.info("RAG start | query=%r | top_k=%d", query, top_k)
+    
 
 
     # ---------------- (1) List companies from the catalog namespace ----------------
@@ -266,13 +270,13 @@ async def rag_answer_with_company_detection(
         # pages: generator of lists of IDs
         try:
             pages = await asyncio.to_thread(
-                lambda: list(pine.index.list(namespace=catalog_namespace, prefix="company::", limit=99))
+                lambda: list(pine.pinecone.Index(pinecone_config["index_name"]).list(namespace=catalog_namespace, prefix="company::", limit=99))
             )
         except Exception as e:
             query_logger.warning("list(namespace=%r) failed: %s; falling back to list() without namespace",
                                     catalog_namespace, e)
             pages = await asyncio.to_thread(
-                lambda: list(pine.index.list(prefix="company::", limit=1000))
+                lambda: list(pine.pinecone.Index(pinecone_config["index_name"]).list(prefix="company::", limit=1000))
             )
 
         # flatten list-of-lists → ids
@@ -283,14 +287,14 @@ async def rag_answer_with_company_detection(
             batch_ids = ids[i:i+100]
             try:
                 fetched = await asyncio.to_thread(
-                    pine.index.fetch, ids=batch_ids, namespace=catalog_namespace
+                    pine.pinecone.Index(pinecone_config["index_name"]).fetch, ids=batch_ids, namespace=catalog_namespace
                 )
             except Exception as e:
                 query_logger.warning(
                     "fetch(namespace=%r) failed: %s; retrying without namespace",
                     catalog_namespace, e
                 )
-                fetched = await asyncio.to_thread(pine.index.fetch, ids=batch_ids)
+                fetched = await asyncio.to_thread(pine.pinecone.Index(pinecone_config["index_name"]).fetch, ids=batch_ids)
 
             vecs = (
                 fetched.get("vectors") if isinstance(fetched, dict)
@@ -431,7 +435,7 @@ async def rag_answer_with_company_detection(
 
     try:
         q_emb = await pine._embed_text(search_query)
-        result = pine.index.query(
+        result = pine.pinecone.Index(pinecone_config["index_name"]).query(
             vector=q_emb,
             top_k=top_k,
             include_metadata=True,

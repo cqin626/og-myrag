@@ -21,6 +21,7 @@ from ..report_retrieval.report_retrieval_util import clean_markdown_response
 from ..prompts import PROMPT
 from .report_chunker import index_markdown_with_pinecone
 from ..storage.pinecone_storage import PineconeStorage
+from ogmyrag.base import PineconeStorageConfig
 
 # Background event loop for async storage
 _background_loop = asyncio.new_event_loop()
@@ -43,6 +44,7 @@ class ReportRetrievalManager:
         self,
         storage: RetrievalAsyncStorageManager,
         pine: PineconeStorage,
+        pinecone_config: PineconeStorageConfig,
         genai_model: str,
         genai_api_key: str,
         openai_api_key: str,
@@ -50,6 +52,7 @@ class ReportRetrievalManager:
     ):
         self.storage   = storage
         self.pine = pine
+        self.pine_config = pinecone_config
         self.genai_model   = genai_model
         self.genai_api_key = genai_api_key
         self.client = genai.Client(api_key=self.genai_api_key)
@@ -79,7 +82,7 @@ class ReportRetrievalManager:
         
         # Fetch raw pdfs
         self.storage.use_collection(report_collection)
-        raw_docs = await self.storage.get_raw_reports(company, year)
+        raw_docs = await self.storage.get_raw_reports(company, year, report_type)
         if not raw_docs:
             retrieval_logger.info(f"No raw reports found for {company} {report_type.keyword} {year}")
             raise ValueError(f"No raw reports found for {company} {report_type.keyword} {year}")
@@ -665,6 +668,7 @@ class ReportRetrievalManager:
                         retrieval_logger.info("Chunking, Embedding, Upserting: %s", section)
                         total = await index_markdown_with_pinecone(
                             self.pine,
+                            self.pine_config,
                             content, 
                             company=company, 
                             report_type=report_type, 

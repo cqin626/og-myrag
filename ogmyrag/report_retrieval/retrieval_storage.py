@@ -6,6 +6,8 @@ from typing import Any, Mapping, Optional, List
 
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+from motor.motor_asyncio import AsyncIOMotorClient
+from ogmyrag.base import MongoStorageConfig
 from bson import ObjectId
 
 from ..report_scraper.models import Announcement, ReportType, PDFDocument
@@ -17,11 +19,13 @@ retrieval_logger = logging.getLogger("retrieval")
 
 
 class RetrievalAsyncStorageManager:
-    def __init__(self, mongo_uri: str, db_name: str):
+    def __init__(self, client: AsyncIOMotorClient, mongo_config: MongoStorageConfig):
         # Initialize async MongoDB storage
-        self.storage = AsyncMongoDBStorage(mongo_uri)
-        self.storage.use_database(db_name)
-        retrieval_logger.info("Connected to MongoDB database: %s", db_name)
+        self.storage = AsyncMongoDBStorage(client)
+        self.storage_config = mongo_config
+        self.storage.get_database(mongo_config["database_name"])
+        
+        retrieval_logger.info("Connected to MongoDB database: %s", mongo_config["database_name"])
 
         # Initialize GridFS bucket
         self.fs_bucket: Optional[AsyncIOMotorGridFSBucket] = None
@@ -33,17 +37,17 @@ class RetrievalAsyncStorageManager:
         """
         self.storage.use_collection(collection_name)
         # Initialize GridFS bucket for this collection
-        self.fs_bucket = AsyncIOMotorGridFSBucket(self.storage.db, bucket_name=collection_name)
+        self.fs_bucket = AsyncIOMotorGridFSBucket(self.storage.get_database(self.storage_config["database_name"]), bucket_name=collection_name)
 
-    async def get_raw_reports(self, company: str, year: int) -> List[Mapping[str, Any]]:
+    async def get_raw_reports(self, company: str, year: int, report_type: ReportType) -> List[Mapping[str, Any]]:
         """
         Return all raw PDF metadata docs for company/year
         from the “raw” collection (e.g. 'annual_reports').
         """
-        if self.storage.collection is None:
-            raise ValueError("Call use_collection() first")
+        #if self.storage.collection is None:
+        #    raise ValueError("Call use_collection() first")
         query = {"company": company, "year": str(year)}
-        return await self.storage.read_documents(query=query)
+        return await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).read_documents(query=query)
     
     async def get_processed_summary(self, summary_filename: str) -> Optional[str]:
         """
@@ -53,7 +57,7 @@ class RetrievalAsyncStorageManager:
         if self.storage.collection is None:
             raise ValueError("Call use_collection() first")
         
-        docs = await self.storage.read_documents(query={"filename": summary_filename})
+        docs = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).read_documents(query={"filename": summary_filename})
 
         if not docs:
             retrieval_logger.warning("No summary metadata for %s", summary_filename)
@@ -91,7 +95,7 @@ class RetrievalAsyncStorageManager:
             "file_id": summary_file_id,
             "timestamp": datetime.utcnow(),
         }
-        summary_doc_id = await self.storage.create_document(summary_doc)
+        summary_doc_id = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).create_document(summary_doc)
 
         # update the original raw report metadata to 'processed'
         self.use_collection(report_type.collection)
@@ -116,8 +120,8 @@ class RetrievalAsyncStorageManager:
         self.storage.collection.update_many(query, {"$set": new_values}, upsert=True)
 
     async def save(self, data: Mapping[str, Any]):
-        if self.storage.collection is None:
-            raise ValueError("Call use_collection() first")
+        #if self.storage.collection is None:
+        #    raise ValueError("Call use_collection() first")
         await self.storage.collection.insert_one(data)
 
 
@@ -130,8 +134,8 @@ class RetrievalAsyncStorageManager:
         """
         Extract and combine all processed content for a given company and year.
         """
-        if self.storage.collection is None:
-            raise ValueError("Call use_collection() first")
+        #if self.storage.collection is None:
+        #    raise ValueError("Call use_collection() first")
         
         if report_type.collection == "ipo_reports":
             type = "PROSPECTUS"
@@ -151,7 +155,7 @@ class RetrievalAsyncStorageManager:
         
         retrieval_logger.info("Extracting all the processed content.")
 
-        results = await self.storage.read_documents(query=query)
+        results = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).read_documents(query=query)
         
         if not results:
             retrieval_logger.warning("No processed content found for %s %s (year: %s)",
@@ -202,20 +206,20 @@ class RetrievalAsyncStorageManager:
         """
         Check if a document exists in the current collection.
         """
-        if self.storage.collection is None:
-            raise ValueError("Call use_collection() first")
+        #if self.storage.collection is None:
+        #    raise ValueError("Call use_collection() first")
         count = await self.storage.collection.count_documents(query)
         return count > 0
     
     async def retrieve_toc(self, query: dict):
-        if self.storage.collection is None:
-            raise ValueError("Call use_collection() first")
-        results = await self.storage.read_documents(query=query)
+        #if self.storage.collection is None:
+        #    raise ValueError("Call use_collection() first")
+        results = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).read_documents(query=query)
         return results[0].get("content", "[]")
     
     async def retrieve_section(self, query: dict):
-        if self.storage.collection is None:
-            raise ValueError("Call use_collection() first")
-        results = await self.storage.read_documents(query=query)
+        #if self.storage.collection is None:
+        #    raise ValueError("Call use_collection() first")
+        results = await self.storage.get_database(self.storage_config["database_name"]).get_collection(report_type.collection).read_documents(query=query)
         return results[0]["content"] 
     
