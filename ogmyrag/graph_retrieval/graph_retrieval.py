@@ -5,6 +5,9 @@ import json
 import asyncio
 from typing import AsyncGenerator
 from motor.motor_asyncio import AsyncIOMotorClient
+
+from ogmyrag.report_retrieval.report_chunker import rag_answer_with_company_detection
+
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import (
@@ -80,6 +83,115 @@ class ChatAgent(BaseAgent):
         formatted_response["id"] = response.id
 
         return formatted_response
+    
+
+class RAGAgent(BaseAgent):
+    """
+    An agent that runs Pinecone-based RAG and returns a structured payload.
+    """
+    def __init__(self, agent_name: str, pinecone_config: dict):
+        super().__init__(agent_name)
+        # pinecone storage for RAG
+        self.pine = PineconeStorage(
+            pinecone_api_key=pinecone_config["pinecone_api_key"],
+            openai_api_key=pinecone_config["openai_api_key"],
+        )
+        self.pine.create_index_if_not_exists(
+            index_name=pinecone_config["index_name"],
+            dimension=pinecone_config["pinecone_dimensions"],
+            metric=pinecone_config["pinecone_metric"],
+            cloud=pinecone_config["pinecone_cloud"],
+            region=pinecone_config["pinecone_environment"],
+        )
+        self.pinecone_config = pinecone_config
+
+    async def handle_task(self, **kwargs):
+        """
+        Parameters (kwargs):
+            user_query (str) | query (str)         [required]
+            top_k (int)                            [default: 10]
+            data_namespace (str)                   [default: ""]
+            catalog_namespace (str)                [default: "company-catalog"]
+            doc_type (str)                         [optional]
+            report_type_name (str)                 [optional]
+            year (str|int)                         [optional]
+            score_threshold (float)                [optional]
+            small_model (str)                      [default: "gpt-5-nano"]
+            answer_model (str)                     [default: "gpt-5-nano"]
+        """
+        graph_retrieval_logger.info("RAGAgent is called")
+
+        user_query = kwargs.get("user_query") or kwargs.get("query") or ""
+        graph_retrieval_logger.debug(f"RAGAgent\nUser query used:\n{user_query}")
+
+        if not user_query.strip():
+            formatted_response = {
+                "type": "RAG_RESPONSE",
+                "payload": {
+                    "answer": "Query is empty.",
+                    "hits": [],
+                    "company_used": None,
+                    "known_companies": [],
+                    "filter_used": {},
+                    "usage": {},
+                }
+            }
+            return formatted_response
+        
+        # Gather optional params
+        top_k = int(kwargs.get("top_k", 10))
+        data_namespace = kwargs.get("data_namespace", "")
+        catalog_namespace = kwargs.get("catalog_namespace", "company-catalog")
+        doc_type = kwargs.get("doc_type")
+        report_type_name = kwargs.get("report_type_name")
+        year = kwargs.get("year")
+        year = str(year) if year is not None else None
+        score_threshold = kwargs.get("score_threshold")
+        small_model = kwargs.get("small_model", "gpt-5-nano")
+        answer_model = kwargs.get("answer_model", "gpt-5-nano")
+
+        # Run the end-to-end RAG
+        try:
+            res = await rag_answer_with_company_detection(
+                pine=self.pine,
+                pinecone_config=self.pinecone_config,
+                query=user_query,
+                top_k=top_k,
+                data_namespace=data_namespace,
+                catalog_namespace=catalog_namespace,
+                small_model=small_model,
+                answer_model=answer_model,
+                doc_type=doc_type,
+                report_type_name=report_type_name,
+                year=year,
+                score_threshold=score_threshold,
+            )
+            graph_retrieval_logger.info("RAGAgent completed RAG call successfully.")
+        except Exception as e:
+            graph_retrieval_logger.error(f"RAGAgent error during RAG call: {e}")
+            res = {
+                "answer": "Failed to generate an answer.",
+                "hits": [],
+                "company_used": None,
+                "known_companies": [],
+                "filter_used": {},
+                "usage": {},
+            }
+        
+        formatted_response = {
+            "type": "RAG_RESPONSE",
+            "payload": {
+                "answer": res.get("answer", ""),
+                "hits": res.get("hits", []),
+                "company_used": res.get("company_used"),
+                "known_companies": res.get("known_companies", []),
+                "filter_used": res.get("filter_used", {}),
+                "usage": res.get("usage", {}),
+            }
+        }
+
+        return formatted_response
+
 
 
 class RequestDecompositionAgent(BaseAgent):
@@ -241,6 +353,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         ontology_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
+        rag_vector_config: PineconeStorageConfig
     ):
         super().__init__(
             {
@@ -250,6 +363,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 ),
                 "QueryAgent": QueryAgent("QueryAgent"),
                 "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent"),
+                "RAGAgent": RAGAgent("RAGAgent", rag_vector_config),
             }
         )
 
@@ -374,6 +488,20 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 yield chat_agent_response["payload"]["response"]
         else:
             yield "Unexpected error occur. Please contact the developer."
+            
+    async def rag_query(
+        self,
+        user_request: str,
+        top_k_for_similarity: int,
+        similarity_threshold: float = 0.5,
+    ):
+        # RAG: Pass the user query to RAG Agent
+        yield "## Calling RAGAgent..."
+        rag_agent_response = await self.agents["RAGAgent"].handle_task(
+            user_query = user_request,
+            top_k = top_k_for_similarity,
+        )
+        yield rag_agent_response["payload"]["answer"]
 
     def _update_current_chat_id(self, new_chat_id: str):
         self.current_chat_id = new_chat_id
