@@ -547,6 +547,9 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         top_k_for_similarity: int,
         similarity_threshold: float = 0.5,
     ):
+        """
+        for RAG testing purposes
+        """
          # normalize to list and strip empties
         queries = user_request if isinstance(user_request, list) else [user_request]
         queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
