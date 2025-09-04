@@ -1393,3 +1393,445 @@ You now understand the guidelines and competency questions. Please evaluate the 
 
 Ontology:
 """
+
+PROMPT[
+    "REPORTS PARSING"
+] = """
+                        You are a professional financial analyst assistant and a PDF-to-text interpreter. Your task is to extract, analyze, and convert the full content of the attached annual report PDF into structured, plain text output with 100% preservation of the original meaning and detail.
+
+                        You must not omit or summarize any portion of the document. The conversion must be complete and exhaustive—even if the document contains 100+ pages.
+
+                        For charts, tables, diagrams, infographics, and illustrations that cannot be converted directly into text, you must not ignore them. Instead, you must interpret them thoroughly and describe their full meaning, trends, values, and structure in context, including any page references. The goal is to preserve the entire informational content of the document.
+
+                        ### Formatting requirements  
+                        1. Use Markdown.  
+                        2. Insert **one empty line**  
+                        - *before and after* every top-level heading (`## …`).  
+                        - *before* each sub-topic block (bold label + content) and *after* its final paragraph or bullet list.  
+                        3. Present every sub-topic label in **bold**, end it with a colon (`:`), then start the narrative or bullet list on the next line.  
+                        4. Within a block, use bullet lists (`*`) where they improve clarity; otherwise use full sentences.  
+                        5. Maintain all page-number references exactly as they appear in the source.
+
+                        Follow this exact section order:
+
+                        ## Company Overview
+                        - General company background
+                        - Business model and operations
+                        - Vision & mission statement
+                        - *(If any images/infographics appear, describe them with page reference, e.g., 'Company Overview Infographic, pg 5')*
+
+                        ## Financial Statements
+                        - Income statement, balance sheet, cash flow highlights
+                        - Revenue/profit trends and financial performance
+                        - Key ratios (e.g. P/E, ROE, Debt-to-Equity)
+                        - *(If tables/charts appear, explain and reference them, e.g., 'Balance Sheet Summary Table, pg 12')*
+
+                        ## Key Messages from Management
+                        - CEO/Chairman statements
+                        - Business strategy and outlook
+                        - *(Summarize speeches or leadership imagery with page reference)*
+
+                        ## Industry Overview
+                        - Market conditions and economic context
+                        - Competitive positioning
+                        - *(Summarize charts with insight and page reference)*
+
+                        ## Leadership & Governance
+                        - Board of directors, org charts, governance policies
+                        - *(Describe structure charts with interpretation and page reference)*
+
+                        ## Shareholder Information
+                        - Shareholding breakdown
+                        - Dividends and ownership data
+                        - *(Interpret shareholder tables with summary and page reference)*
+
+                        ## ESG & Sustainability
+                        - Environmental/social/governance initiatives
+                        - CSR programs and commitments
+                        - *(Interpret ESG metrics/tables with context and reference)*
+
+                        ## Risk Factors
+                        - Strategic, financial, and operational risks
+                        - Legal/regulatory uncertainties
+                        - *(Interpret risk matrices/visuals and explain meaning with page reference)*
+
+                        ## Other Notable Sections
+                        - Any other content not captured above
+
+                        You are to return only the structured plain text Markdown output—no commentary, metadata, or explanation.
+                    """
+
+
+PROMPT[
+    "REPORTS PARSING SYSTEM INSTRUCTION"
+] = """
+   You are a PDF-to-text converter and interpreter. A financial report PDF has been loaded into context and cached. 
+   When I say:
+   Section: "<Section Name>"
+   you must extract only that section (matching the Table of Contents).
+
+   - Extract and convert only the content under the given section heading, preserving 100% of the original meaning.
+   - For any charts, diagrams, tables, or illustrations within that section, provide a comprehensive textual interpretation that fully and accurately conveys their content, including a reference to the section title and page number.
+   - Exclude all content outside the specified section.
+   - Remove any headers, footers, or page numbers.
+   - Return only the plain text of that section—no explanations, metadata, headers, or additional commentary.
+"""
+
+PROMPT[
+    "DEFINITION PARSING"
+] = """
+            You are an information extraction system. The provided PDF contains two relevant sections: “DEFINITION” and “GLOSSARY OF TECHNICAL TERMS.” Extract only the entries under these two sections, mapping each term to its definition as key-value pairs in JSON. Return only the JSON—no explanations, headers, or additional text.
+            Output format example:
+            {
+            "Term": "Definition"
+            }
+        """
+
+
+PROMPT[
+    "TABLE OF CONTENT EXTRACTION"
+] = """
+      Please extract only the top-level section headings listed under the Table of Contents of the cached PDF.
+
+      WHAT TO CAPTURE
+      - Top-level items = first-level sections in the TOC (not sub-sections).
+      - Titles may appear next to page numbers; treat those numbers as page numbers, not section numbers.
+
+      PAGE-NUMBER VS. SECTION-NUMBER RULES
+      - If a line begins with a bare number (e.g., "02", "4", "156") followed by spaces/dot leaders and then text, that number is a PAGE NUMBER — ignore it.
+      - If a line ends with a number after dot leaders (e.g., "Title .... 35"), that number is a PAGE NUMBER — ignore it.
+      - If the text explicitly contains a section marker ("Section N", "Chapter N", "Part N", "N." before the title), you may use it to confirm the item is top-level, but **do not keep that original number** in output. We will renumber all items sequentially.
+      - Numbers inside the title that are part of the wording (years, amounts, model names) must be preserved.
+
+      NORMALIZE EACH CAPTURED ITEM TO THIS EXACT FORM
+      - Output as: "N. Title"
+      - N = sequential Arabic numeral starting at 1 based on top-to-bottom order in the TOC (1, 2, 3, …). Ignore any page numbers or original section numbers.
+      - Title = the heading text as it appears (preserve casing and words).
+      - Remove dot leaders and any page numbers.
+      - Collapse internal whitespace to single spaces; trim leading/trailing spaces.
+      - Ignore sub-sections like "1.1 …", lettered items ("A.", "B."), roman-numeral lists, bullet lists, or unnumbered minor headings.
+
+      ORDER
+      - Keep the original TOC order from top to bottom.
+
+      OUTPUT
+      - Return a JSON array of strings only (no extra keys, no commentary, no page numbers).
+      - Example (input lines like "02 Global Presence", "04 Financial Highlights", ...):
+      ["1. Global Presence", "2. Financial Highlights", "3. Corporate Structure", "4. Corporate Information"]
+"""
+
+
+PROMPT[
+    "IPO SECTION PROMPT FRESH"
+] = """
+      You are extracting authoritative content from one or more PDF filings.
+
+      SECTION: "{section}"
+
+      OBJECTIVE
+      Return STANDARDIZED MARKDOWN optimized for atomic chunking. Do not add or remove meaning.
+
+      CORE RULES
+      1) Fidelity: Preserve 100% of content; no summaries or commentary.
+      2) Scope: Include only text truly under this heading/subheadings (ignore headers/footers/margins).
+      3) Pagination: Add page refs as “(p. X)” where applicable.
+      4) Headings: Use ATX Markdown.
+         - First line: # {section}
+         - Use ## for major subheads and ### for nested subheads you observe in the PDF. Include page refs in the heading when helpful: e.g., "## Risks (p. 14)".
+      5) Paragraphs: Separate with one blank line. No hard wraps inside a paragraph.
+      6) Lists:
+         - Use "- " for bullets; "1." for numbered lists.
+         - Preserve roman enumerations like "(i)", "(ii)" at the start of items.
+         - One list item per line (no wrapping).
+      7) Tables (ROW-AS-BULLETS for chunking):
+         - First add a label line: "Table: <Exact Title or [no title]> (p. X)".
+         - Then output each table row as a single bullet on one line:
+         - "Col A: Val; Col B: Val; Col C: Val"
+         - Do not include a markdown grid table. If the table spans pages, show both pages in the label (e.g., "(p. 121–122)").
+      8) Figures/Diagrams:
+         - Label: "Figure: <Title/description> (p. X)"
+         - Follow with one paragraph describing the figure (no image).
+      9) Numbers: Keep all numeric formats exactly (commas, decimals, signs, currencies).
+      10) Output: Markdown only. Do NOT use code fences.
+
+      OPTIONAL (use only if present in the source)
+      - If the section has a short preface or bulletable outcomes, add:
+      ## Key Points
+      - <verbatim point or heading stub from the source>
+
+      RETURN SKELETON (adapt to the actual content)
+      # {section}
+
+      ## Key Points
+      - …
+
+      ## <Subheading A> (p. X)
+      <paragraphs>
+
+      Table: <Title or [no title]> (p. X)
+      - Col 1: …; Col 2: …; Col 3: …
+      - Col 1: …; Col 2: …; Col 3: …
+
+      Figure: <Title> (p. X)
+      <one-paragraph description>
+
+      ### <Nested Subheading> (p. X)
+      - (i) …
+      - (ii) …
+"""
+
+PROMPT[
+    "IPO SECTION PROMPT AMEND"
+] = """
+      Here is the existing summary:
+      {base}
+
+      Now update it to incorporate these amendments for the specific section below.
+
+      You are extracting authoritative content from one or more PDF filings.
+
+      SECTION: "{section}"
+
+      OBJECTIVE
+      Return STANDARDIZED MARKDOWN optimized for atomic chunking. Do not add or remove meaning.
+
+      CORE RULES
+      1) Fidelity: Preserve 100% of content; no summaries or commentary.
+      2) Scope: Include only text truly under this heading/subheadings (ignore headers/footers/margins).
+      3) Pagination: Add page refs as “(p. X)” where applicable.
+      4) Headings: Use ATX Markdown.
+         - First line: # {section}
+         - Use ## for major subheads and ### for nested subheads you observe in the PDF. Include page refs in the heading when helpful: e.g., "## Risks (p. 14)".
+      5) Paragraphs: Separate with one blank line. No hard wraps inside a paragraph.
+      6) Lists:
+         - Use "- " for bullets; "1." for numbered lists.
+         - Preserve roman enumerations like "(i)", "(ii)" at the start of items.
+         - One list item per line (no wrapping).
+      7) Tables (ROW-AS-BULLETS for chunking):
+         - First add a label line: "Table: <Exact Title or [no title]> (p. X)".
+         - Then output each table row as a single bullet on one line:
+         - "Col A: Val; Col B: Val; Col C: Val"
+         - Do not include a markdown grid table. If the table spans pages, show both pages in the label (e.g., "(p. 121–122)").
+      8) Figures/Diagrams:
+         - Label: "Figure: <Title/description> (p. X)"
+         - Follow with one paragraph describing the figure (no image).
+      9) Numbers: Keep all numeric formats exactly (commas, decimals, signs, currencies).
+      10) Output: Markdown only. Do NOT use code fences.
+
+      OPTIONAL (use only if present in the source)
+      - If the section has a short preface or bulletable outcomes, add:
+      ## Key Points
+      - <verbatim point or heading stub from the source>
+
+      RETURN SKELETON (adapt to the actual content)
+      # {section}
+
+      ## Key Points
+      - …
+
+      ## <Subheading A> (p. X)
+      <paragraphs>
+
+      Table: <Title or [no title]> (p. X)
+      - Col 1: …; Col 2: …; Col 3: …
+      - Col 1: …; Col 2: …; Col 3: …
+
+      Figure: <Title> (p. X)
+      <one-paragraph description>
+
+      ### <Nested Subheading> (p. X)
+      - (i) …
+      - (ii) …
+"""
+
+
+PROMPT[
+    "ANNUAL REPORT SECTION PROMPT FRESH"
+] = """
+      You are extracting authoritative content from one or more PDF filings.
+
+      SECTION: "{section}"
+
+      OBJECTIVE
+      Return STANDARDIZED MARKDOWN optimized for atomic chunking. Do not add or remove meaning.
+
+      CORE RULES
+      1) Fidelity: Preserve 100% of content; no summaries or commentary.
+      2) Scope: Include only text truly under this heading/subheadings (ignore headers/footers/margins).
+      3) Pagination: Add page refs as “(p. X)” where applicable.
+      4) Headings: Use ATX Markdown.
+         - First line: # {section}
+         - Use ## for major subheads and ### for nested subheads you observe in the PDF. Include page refs in the heading when helpful: e.g., "## Risks (p. 14)".
+      5) Paragraphs: Separate with one blank line. No hard wraps inside a paragraph.
+      6) Lists:
+         - Use "- " for bullets; "1." for numbered lists.
+         - Preserve roman enumerations like "(i)", "(ii)" at the start of items.
+         - One list item per line (no wrapping).
+      7) Tables (ROW-AS-BULLETS for chunking):
+         - First add a label line: "Table: <Exact Title or [no title]> (p. X)".
+         - Then output each table row as a single bullet on one line:
+           "Col A: Val; Col B: Val; Col C: Val"
+         - Do not include a markdown grid table. If the table spans pages, show both pages in the label (e.g., "(p. 121–122)").
+      8) Figures/Diagrams:
+         - Label: "Figure: <Title/description> (p. X)"
+         - Follow with one paragraph describing the figure (no image).
+      9) Numbers: Keep all numeric formats exactly (commas, decimals, signs, currencies).
+      10) Output: Markdown only. Do NOT use code fences.
+
+      OPTIONAL (use only if present in the source)
+      - If the section has a short preface or bulletable outcomes, add:
+      ## Key Points
+      - <verbatim point or heading stub from the source>
+
+      ANNUAL REPORT NOTES
+      - Apply the same rules to typical AR sections (e.g., Directors’ Report, Management Discussion & Analysis, Risk Management and Internal Control Statement, Financial Statements notes).
+      - Keep subheads faithful to the document (e.g., "Board Composition", "Shareholdings", "Dividend Policy") as ## or ### with page refs when helpful.
+
+      CORPORATE GOVERNANCE (CG) REPORT SPECIAL RULES
+      - If the content is a Corporate Governance Report (e.g., references to MCCG, “Practice X.Y”, “Intended Outcome”, “Application/Departure”), structure EACH PRACTICE as its own major heading to optimize chunking.
+      - Detect practice markers like: "Practice 1.1", "Practice 8.2", "Intended Outcome", "Application", "Explanation for departure", "Alternative Practice", "Step Up".
+      - For EACH practice:
+         ## Practice X.Y — <Short Title if shown> (p. N)
+         ### Intended Outcome
+         <verbatim text>
+         ### Application
+         <verbatim text>
+         ### Explanation for Departure
+         <verbatim text or "-" if not applicable>
+         ### Alternative Practice (if disclosed)
+         <verbatim text>
+         ### Step Up (if disclosed)
+         <verbatim text>
+      - If the CG report includes a summary table of compliance, output it using the Tables rule (row-as-bullets).
+
+      RETURN SKELETON (adapt to the actual content)
+      # {section}
+
+      ## Key Points
+      - …
+
+      ## <Subheading A> (p. X)
+      <paragraphs>
+
+      Table: <Title or [no title]> (p. X)
+      - Col 1: …; Col 2: …; Col 3: …
+      - Col 1: …; Col 2: …; Col 3: …
+
+      Figure: <Title> (p. X)
+      <one-paragraph description>
+
+      ### <Nested Subheading> (p. X)
+      - (i) …
+      - (ii) …
+
+      ## Practice 1.1 — <Short Title> (p. X)
+      ### Intended Outcome
+      <text>
+      ### Application
+      <text>
+      ### Explanation for Departure
+      <text or "-" >
+      ### Alternative Practice
+      <text>
+      ### Step Up
+      <text>
+"""
+
+PROMPT[
+    "ANNUAL REPORT SECTION PROMPT AMEND"
+] = """
+      Here is the existing summary:
+      {base}
+
+      Now update it to incorporate these amendments for the specific section below.
+
+      You are extracting authoritative content from one or more PDF filings.
+
+      SECTION: "{section}"
+
+      OBJECTIVE
+      Return STANDARDIZED MARKDOWN optimized for atomic chunking. Do not add or remove meaning.
+
+      CORE RULES
+      1) Fidelity: Preserve 100% of content; no summaries or commentary.
+      2) Scope: Include only text truly under this heading/subheadings (ignore headers/footers/margins).
+      3) Pagination: Add page refs as “(p. X)” where applicable.
+      4) Headings: Use ATX Markdown.
+         - First line: # {section}
+         - Use ## for major subheads and ### for nested subheads you observe in the PDF. Include page refs in the heading when helpful: e.g., "## Risks (p. 14)".
+      5) Paragraphs: Separate with one blank line. No hard wraps inside a paragraph.
+      6) Lists:
+         - Use "- " for bullets; "1." for numbered lists.
+         - Preserve roman enumerations like "(i)", "(ii)" at the start of items.
+         - One list item per line (no wrapping).
+      7) Tables (ROW-AS-BULLETS for chunking):
+         - First add a label line: "Table: <Exact Title or [no title]> (p. X)".
+         - Then output each table row as a single bullet on one line:
+           "Col A: Val; Col B: Val; Col C: Val"
+         - Do not include a markdown grid table. If the table spans pages, show both pages in the label (e.g., "(p. 121–122)").
+      8) Figures/Diagrams:
+         - Label: "Figure: <Title/description> (p. X)"
+         - Follow with one paragraph describing the figure (no image).
+      9) Numbers: Keep all numeric formats exactly (commas, decimals, signs, currencies).
+      10) Output: Markdown only. Do NOT use code fences.
+
+      OPTIONAL (use only if present in the source)
+      - If the section has a short preface or bulletable outcomes, add:
+      ## Key Points
+      - <verbatim point or heading stub from the source>
+
+      ANNUAL REPORT NOTES
+      - Apply the same rules to typical AR sections (e.g., Directors’ Report, Management Discussion & Analysis, Risk Management and Internal Control Statement, Financial Statements notes).
+      - Keep subheads faithful to the document (e.g., "Board Composition", "Shareholdings", "Dividend Policy") as ## or ### with page refs when helpful.
+
+      CORPORATE GOVERNANCE (CG) REPORT SPECIAL RULES
+      - If the content is a Corporate Governance Report (e.g., references to MCCG, “Practice X.Y”, “Intended Outcome”, “Application/Departure”), structure EACH PRACTICE as its own major heading to optimize chunking.
+      - Detect practice markers like: "Practice 1.1", "Practice 8.2", "Intended Outcome", "Application", "Explanation for departure", "Alternative Practice", "Step Up".
+      - For EACH practice:
+         ## Practice X.Y — <Short Title if shown> (p. N)
+         ### Intended Outcome
+         <verbatim text>
+         ### Application
+         <verbatim text>
+         ### Explanation for Departure
+         <verbatim text or "-" if not applicable>
+         ### Alternative Practice (if disclosed)
+         <verbatim text>
+         ### Step Up (if disclosed)
+         <verbatim text>
+      - If the CG report includes a summary table of compliance, output it using the Tables rule (row-as-bullets).
+
+      RETURN SKELETON (adapt to the actual content)
+      # {section}
+
+      ## Key Points
+      - …
+
+      ## <Subheading A> (p. X)
+      <paragraphs>
+
+      Table: <Title or [no title]> (p. X)
+      - Col 1: …; Col 2: …; Col 3: …
+      - Col 1: …; Col 2: …; Col 3: …
+
+      Figure: <Title> (p. X)
+      <one-paragraph description>
+
+      ### <Nested Subheading> (p. X)
+      - (i) …
+      - (ii) …
+
+      ## Practice 1.1 — <Short Title> (p. X)
+      ### Intended Outcome
+      <text>
+      ### Application
+      <text>
+      ### Explanation for Departure
+      <text or "-" >
+      ### Alternative Practice
+      <text>
+      ### Step Up
+      <text>
+=======
+>>>>>>> b579b9767da8781dbc0ae2e44331a38f8bc9b9c6
+"""

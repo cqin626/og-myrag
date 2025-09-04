@@ -5,6 +5,9 @@ import json
 import asyncio
 from typing import AsyncGenerator
 from motor.motor_asyncio import AsyncIOMotorClient
+
+from ogmyrag.report_retrieval.report_chunker import rag_answer_with_company_detection
+
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import (
@@ -80,6 +83,167 @@ class ChatAgent(BaseAgent):
         formatted_response["id"] = response.id
 
         return formatted_response
+    
+
+class RAGAgent(BaseAgent):
+    """
+    An agent that runs Pinecone-based RAG and returns a structured payload.
+    """
+    def __init__(self, agent_name: str, pinecone_config: dict):
+        super().__init__(agent_name)
+        # pinecone storage for RAG
+        self.pine = PineconeStorage(
+            pinecone_api_key=pinecone_config["pinecone_api_key"],
+            openai_api_key=pinecone_config["openai_api_key"],
+        )
+        self.pine.create_index_if_not_exists(
+            index_name=pinecone_config["index_name"],
+            dimension=pinecone_config["pinecone_dimensions"],
+            metric=pinecone_config["pinecone_metric"],
+            cloud=pinecone_config["pinecone_cloud"],
+            region=pinecone_config["pinecone_environment"],
+        )
+        self.pinecone_config = pinecone_config
+
+    async def handle_task(self, **kwargs):
+        """
+        Parameters (kwargs):
+            # Single or batch:
+            user_query (str) | query (str)            [OR]
+            user_queries (list[str]) | queries(list[str])
+
+            # Options applied to all queries:
+            top_k (int)                               [default: 10]
+            data_namespace (str)                      [default: ""]
+            catalog_namespace (str)                   [default: "company-catalog"]
+            doc_type (str)                            [optional]
+            report_type_name (str)                    [optional]
+            year (str|int)                            [optional]
+            score_threshold (float)                   [optional]
+            small_model (str)                         [default: "gpt-5-nano"]
+            answer_model (str)                        [default: "gpt-5-nano"]
+
+            # Concurrency:
+            max_concurrency (int)                     [default: 4]
+        """
+        graph_retrieval_logger.info("RAGAgent is called")
+
+        # ---- normalize input to a list of queries ----
+        batch_input = (
+            kwargs.get("user_queries")
+            or kwargs.get("queries")
+            or kwargs.get("user_query")
+            or kwargs.get("query")
+            or []
+        )
+        if isinstance(batch_input, str):
+            queries = [batch_input]
+        else:
+            queries = list(batch_input)
+
+        # Trim & drop empties (but keep order)
+        queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
+
+        if not queries:
+            return {
+                "type": "RAG_BATCH_RESPONSE",
+                "payload": {"results": {}},  # empty mapping
+            }
+
+        graph_retrieval_logger.debug("RAGAgent\nQueries used:\n%s", queries)
+
+        # ---- shared options for all queries ----
+        top_k = int(kwargs.get("top_k", 10))
+        data_namespace = kwargs.get("data_namespace", "")
+        catalog_namespace = kwargs.get("catalog_namespace", "company-catalog")
+        doc_type = kwargs.get("doc_type")
+        report_type_name = kwargs.get("report_type_name")
+        year = kwargs.get("year")
+        year = str(year) if year is not None else None
+        score_threshold = kwargs.get("score_threshold")
+        small_model = kwargs.get("small_model", "gpt-5-nano")
+        answer_model = kwargs.get("answer_model", "gpt-5-nano")
+        max_concurrency = int(kwargs.get("max_concurrency", 4))
+
+        # ---- per-query runner ----
+        async def _run_one(q: str):
+            try:
+                res = await rag_answer_with_company_detection(
+                    pine=self.pine,
+                    pinecone_config=self.pinecone_config,
+                    query=q,
+                    top_k=top_k,
+                    data_namespace=data_namespace,
+                    catalog_namespace=catalog_namespace,
+                    small_model=small_model,
+                    answer_model=answer_model,
+                    doc_type=doc_type,
+                    report_type_name=report_type_name,
+                    year=year,
+                    score_threshold=score_threshold,
+                )
+                graph_retrieval_logger.info("RAGAgent: completed RAG for query=%r", q)
+            except Exception as e:
+                graph_retrieval_logger.error("RAGAgent error during RAG call for %r: %s", q, e)
+                res = {
+                    "answer": "Failed to generate an answer.",
+                    "hits": [],
+                    "company_used": None,
+                    "known_companies": [],
+                    "filter_used": {},
+                    "usage": {},
+                }
+
+            # per-query formatted response (same shape as before)
+            return {
+                "type": "RAG_RESPONSE",
+                "payload": {
+                    "answer": res.get("answer", ""),
+                    "hits": res.get("hits", []),
+                    "company_used": res.get("company_used"),
+                    "known_companies": res.get("known_companies", []),
+                    "filter_used": res.get("filter_used", {}),
+                    "usage": res.get("usage", {}),
+                },
+            }
+
+        # ---- concurrency control ----
+        sem = asyncio.Semaphore(max_concurrency)
+
+        async def _guarded(q: str):
+            async with sem:
+                return await _run_one(q)
+
+        tasks = [asyncio.create_task(_guarded(q)) for q in queries]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # ---- build mapping: query -> formatted_response ----
+        by_query: dict[str, dict] = {}
+        for q, r in zip(queries, results):
+            if isinstance(r, Exception):
+                graph_retrieval_logger.error("RAGAgent task failed for %r: %s", q, r)
+                by_query[q] = {
+                    "type": "RAG_RESPONSE",
+                    "payload": {
+                        "answer": "Failed to generate an answer.",
+                        "hits": [],
+                        "company_used": None,
+                        "known_companies": [],
+                        "filter_used": {},
+                        "usage": {},
+                    },
+                    "error": str(r),
+                }
+            else:
+                by_query[q] = r
+
+        return {
+            "type": "RAG_BATCH_RESPONSE",
+            "payload": {
+                "results": by_query  # mapping: query -> formatted per-query response
+            },
+        }
+
 
 
 class RequestDecompositionAgent(BaseAgent):
@@ -241,6 +405,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         ontology_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
+        rag_vector_config: PineconeStorageConfig
     ):
         super().__init__(
             {
@@ -250,6 +415,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 ),
                 "QueryAgent": QueryAgent("QueryAgent"),
                 "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent"),
+                "RAGAgent": RAGAgent("RAGAgent", rag_vector_config),
             }
         )
 
@@ -374,6 +540,43 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 yield chat_agent_response["payload"]["response"]
         else:
             yield "Unexpected error occur. Please contact the developer."
+            
+    async def rag_query(
+        self,
+        user_request: str | list[str],
+        top_k_for_similarity: int,
+        similarity_threshold: float = 0.5,
+    ):
+        """
+        for RAG testing purposes
+        """
+         # normalize to list and strip empties
+        queries = user_request if isinstance(user_request, list) else [user_request]
+        queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
+
+        # RAG: Pass the a list of user query to RAG Agent
+        yield "## Calling RAGAgent..."
+        rag_agent_response = await self.agents["RAGAgent"].handle_task(
+            user_query = queries,
+            top_k = top_k_for_similarity,
+        )
+
+        results = ((rag_agent_response.get("payload") or {}).get("results") or {})
+        multi = len(queries) > 1
+
+        for q in queries:
+            # try exact, trimmed, then case-insensitive match; otherwise empty
+            entry = results.get(q) or results.get(q.strip())
+            if entry is None:
+                norm = q.strip().casefold()
+                entry = next(
+                    (v for k, v in results.items()
+                    if isinstance(k, str) and k.strip().casefold() == norm),
+                    None
+                )
+
+            answer = (((entry or {}).get("payload")) or {}).get("answer", "") or ""
+            yield f"### {q}\n{answer}" if multi else answer
 
     def _update_current_chat_id(self, new_chat_id: str):
         self.current_chat_id = new_chat_id
