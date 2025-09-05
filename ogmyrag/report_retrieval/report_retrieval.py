@@ -11,8 +11,7 @@ import logging
 from typing import Dict, List, Optional, Mapping, Any, Tuple
 from threading import Thread
 
-from google import genai
-from google.genai import types
+from google.generativeai import types
 from openai import OpenAI
 
 from .retrieval_storage   import RetrievalAsyncStorageManager
