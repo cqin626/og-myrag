@@ -635,480 +635,311 @@ You now understand your task. Proceed to generate the Cypher query strictly base
 PROMPT[
     "ONTOLOGY_CONSTRUCTION"
 ] = """
-You are a relationship-driven, non-taxonomic ontology construction agent. Your task is to extend the current ontology by extracting relevant entity and relationship types from the provided source text that fulfill the specific purpose of the ontology.
+You are a relationship-driven, non-taxonomic ontology construction agent. Your task is to extend the current ontology by extracting relevant entity and relationship types from the provided source text that align with and complement the specific purpose of the ontology.
 
 Guidelines:
 	1. Extraction Logic
-      - Follow this logic strictly throughout the process:
-
-         - For each relationship found in the source text:
-         
-            - If the relationship meets the criteria in Guideline 2:
-            
-               - If the source entity is new (i.e., not already listed in the extracted entities or current ontology):
-                  - Define its attributes based on Guideline 3 and append it to the entities list
-               
-               - If the target entity is new:
-                  - Define its attributes based on Guideline 3 and append it to the entities list
-               
-               - Define the attributes for the relationship as described in Guideline 4 and append it to the relationships list
-               
-            - Output all newly extracted entities and relationships using the structure defined in Guideline 6
-   
-   2. Relationship Extraction Criteria
-      - Only extract a relationship if all of the following conditions are met:
-         1. Ontology Purpose Fulfillment:  
-            It contributes to answering relevant competency questions or supports the analytical goals defined by the ontology.
-
-         2. Non-Redundancy:  
-            It does not duplicate the semantics of any relationship already present in the `relationships` output or the current ontology.
-
-         3. Inference Support:  
-            It enables meaningful reasoning or supports logical inference within the knowledge graph.
-
-         4. Unidirectional:  
-            It must be explicitly directed from a source entity to a target entity (e.g., `hasSubsidiary`).
-
-         5. Role Modeling Preference:  
-            - When a concept could be modeled either as:
-               - Classification (e.g., `Person isA IndependentDirector`) or
-               - Relationship (e.g., `Company hasIndependentDirector Person`)  
-            prefer the relationship form if it improves clarity, scalability, or graph usability.
-
-            - Relationships are strongly preferred when they:
-               - Represent dynamic or contextual roles (e.g., employment, appointments, ownership)
-               - Reflect real-world interconnections between entities
-               - Support multi-role or temporal modeling without duplicating entities
-
-   3. Entity Attributes (for each new entity):
-      - `entity_name`: A meaningful noun phrase that is neither too generic (e.g., "Entity") nor too specific (e.g., "Justin"), but expresses a reusable concept (e.g., "Person").
-      - `definition`: A clear, general, and comprehensive description of the entity type.
-      - `llm-guidance`: Instructions on how to consistently detect or infer this entity in various contexts.
-      - `examples`: At least 2 representative examples, including edge cases.
-
-   4. Relationship Attributes (for each valid relationship):
-      - `relationship_name`: A concise verb phrase in camelCase (e.g., `hasPartner`).
-      - `source`: The entity from which the relationship originates.
-      - `target`: The entity to which the relationship points.
-      - `llm-guidance`: Specific instructions on when and how to use this relationship.
-      - `examples`: At least 2 representative examples, including edge cases.
-
-   5. Cross-Referencing Consistency
-      - All mentions of an entity instance-whether in examples for entities or relationships, must strictly follow the llm-guidance and definition of that entity type.
-      - Do not introduce formatting inconsistencies that violate the original extraction rules defined for the entity. For example, if the llm-guidance for Person states that honorifics should be excluded, all other instances of Person must adhere to this rule as well.
-      - This ensures consistency in entity resolution and prevents semantic drift within the ontology and downstream knowledge graph.
-   
-   6. Output Format
-      - Ensure all `source` and `target` references in `relationships` match keys in the `entities` dictionary.
-      - Do not repeat entities or relationships already present in the current ontology.
-      - Return only the following raw JSON structure — no explanations, comments, or code block formatting:
+      - Given the ontology purpose, the current ontology, and a source text, extract entity and relationship types that fulfill the ontology’s purpose and complement the current ontology without duplication.
       
-         {{
-            \"entities\": {{
-               \"EntityA\": {{
-                  \"definition\": \"\",
-                  \"llm-guidance\": \"\",
-                  \"examples\": []
+      - For each relationship found:
+         - If it supports the ontology purpose and is not semantically redundant:
+            - Model it as unidirectional (source → target).
+            - Extract missing entity types if they do not exist in the current ontology.
+   
+   2. Extraction Constraints
+      1. Quality Requirements for Relationships
+         - Must contribute to the ontology purpose.
+
+         - Must be complementary, not redundant.
+            - Do not insert reversed relationships unless semantics differ.
+            - Example:
+               - employs vs worksFor → redundant → keep one.
+               - supplies vs purchasesFrom → complementary → both valid.
+
+         - Definition requirements:
+            - Flexible enough to capture real-world variations.
+            - Not overly broad (e.g., isRelatedTo).
+
+         - Attributes for each relationship:
+            - 'relationship_name': Verb phrase in camelCase (e.g., hasSupplier).
+            - 'source': Source entity type.
+            - 'target': Target entity type.
+            - 'llm-guidance': Must follow this structure:
+               - When to use: [specific conditions]
+            - 'examples': At least one straightforward, representative instance.
+         
+         - Note that each source and target entity should contain only one entity. If a relationship can apply to multiple entity types—either source or target—create a new relationship for it. Do not attempt to assign two entity types to a single entity.
+      
+      2. Quality Requirements for Entities
+         - Extract entities only if they are part of a relationship.
+
+         - Entity's naming scope:
+            - Prefer the most general type that still supports the ontology purpose.
+            - Only specialize if narrower type adds unique analytical value.
+
+         - Attributes for each entity:
+            - 'entity_name': Noun phrase in camelCase (not too generic, not too specific).
+            - 'definition': Clear explanation of what this entity represents.
+            - 'llm-guidance': Must follow this structure:
+               - When to use: [specific conditions]
+               - Format: [rules for valid instances]
+            - 'examples': At least one straightforward, representative instance.
+
+      3. Ontology Design Principles (priority order)
+         1. Purpose-oriented: Must support the ontology’s purpose.
+         2. Compact: No redundant or bloated entities/relationships.
+         3. Relationship-driven: Dynamics matter more than hierarchy.
+         4. Unidirectional: Avoid bidirectional duplication.
+         5. Non-taxonomic: Do not model taxonomies.
+            
+      4. Insertion Task
+         - Only insert new entities and relationships.
+         - Do not update or delete existing ones.
+      
+   6. Output Format
+      - You are required to return ONLY the newly inserted entity or relationship types. You must not return entity or relationship types that already exist in the current ontology.
+
+      - If no insertion is required, either because the source text does not provide additional value or does not align with the ontology’s purpose, return entities and relationships as an empty dict ({{}}) and provide an explanation in the note field. The note field shall not be used if something is returned; it should remain an empty string in this scenario.
+      
+      - Return only the following raw JSON structure — no explanations, comments, or code block formatting.
+      
+      - Any double quotes inside strings must be escaped using a backslash (\").
+
+         1. When they are valid relationships and entities.
+            {{
+               \"entities\": {{
+                  \"EntityA\": {{
+                     \"definition\": \"\",
+                     \"llm-guidance\": \"When to use: ...\nFormat: ...\",
+                     \"examples\": []
+                  }},
+                  \"EntityB\": {{
+                     \"definition\": \"\",
+                     \"llm-guidance\": \"When to use: ...\nFormat: ...\",
+                     \"examples\": []
+                  }}
                }},
-               \"EntityB\": {{
-                  \"definition\": \"\",
-                  \"llm-guidance\": \"\",
-                  \"examples\": []
-               }}
-            }},
-            \"relationships\": {{
-               \"RelationshipA\": {{
-                  \"source\": \"EntityA\",
-                  \"target\": \"EntityB\",
-                  \"llm-guidance\": \"\",
-                  \"examples\": []
-               }}
+               \"relationships\": {{
+                  \"RelationshipA\": {{
+                     \"source\": \"EntityA\",
+                     \"target\": \"EntityB\",
+                     \"llm-guidance\": \"When to use: ...\",
+                     \"examples\": []
+                  }}
+               }},
+               \"note\": \"\"
             }}
-         }}
-  
-      - If no new valid relationship and entiy is found, return:
+            
+      2. When there are no valid entities and relationships:
          {{
             \"entities\": {{}},
-            \"relationships\": {{}}
+            \"relationships\": {{}},
+            \"note\": \"your_explanation_on_why_empty_onto_is_returned\"
          }}
-	
-   6. Example
-      a. Source Text:
-      “Dr Tan Hui Mei is currently serving as the independent director of ABC Berhad, which is headquartered at 135, Jalan Razak, 59200 Kuala Lumpur, Wilayah Persekutuan (KL), Malaysia.”
-      
-      b. Ontology Purpose
-      To construct a knowledge graph of Malaysian public companies that captures key organizational roles and structural information to support governance analysis, such as identifying board members, corporate relationships, and geographic presence.
-      
-      c. Current Ontology
-         Entities:
-            1. Person
-            - definition: An individual human who may hold a position or role within a company.
-            - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
-            - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
-            
-            2. Company 
-            - definition: A legally registered business entity involved in commercial or professional activities.
-            - llm-guidance: Extract full legal names of organizations registered as companies. Identify names ending in legal suffixes such as 'Berhad', 'Sdn Bhd', or 'Inc.' Do not include registration numbers or addresses.
-            - examples: ABC Berhad, Apple Inc., United Gomax Sdn Bhd
-         
-         Relationships:
-            1. hasIndependentDirector
-            - source: Company
-            - target: Person
-            - llm-guidance: Use this when a person is described as the independent director of a company.
-            - examples: Banana Inc. hasIndependentDirector John Chua, 
-         
-      d. Output:
-         {{
-            \"entities\": {{
-               \"Place\": {{
-                  \"definition\": \"A geographic location such as a city, state, country, or region that serves as a meaningful identifier for a company's operational or legal presence.\",
-                  \"llm-guidance\": \"Extract geographic entities at the city, state, country, or continental level. Exclude street names, postal codes, building numbers, or overly specific location details. Prefer higher-level geographic units that contribute to organizational or jurisdictional context.\",
-                  \"examples\": [
-                     \"Kuala Lumpur\",
-                     \"Texas\",
-                     \"Malaysia\",
-                     \"South America\"
-                  ]
-               }}
-            }},
-            \"relationships\": {{
-               \"headquarteredIn\": {{
-                  \"source\": \"Company\",
-                  \"target\": \"Place\",
-                  \"llm-guidance\": \"Use this when a company is said to be headquartered in a specific location.\",
-                  \"examples\": [
-                     "ABC Berhad headquarteredIn Kuala Lumpur"
-                  ]
-               }}
-            }},
-         }}
-
-You now understand the guidelines. Proceed to construct the ontology using the provided document and strictly following the stated guidelines.
-
-Ontology Purpose:
-{ontology_purpose}
-
-Current Ontology:
-{current_ontology}
-
-Document:
-"""
-
-PROMPT[
-    "ONTOLOGY_SIMPLIFICATION"
-] = """
-You are an ontology simplification agent. Your task is to simplify an ontology according to the listed guidelines.
-
-Guidelines:
-	1. Adherence to Ontology Purpose
-		- All your simplification must support the stated ontology purpose.
-	
-	2. Simplification Constraints
-		1. No Introduction of Attributes:  
-			- You must NOT introduce any new attributes or properties (e.g., roleType, engagementType, etc.) beyond the existing ones during the simplification process.
-		
-		2. Allowed Simplification Methods:
-			- Removing redundant or overly granular entities or relationships.
-			- Flattening contextual or nested structures into direct relationships.
-			- Merging semantically similar concepts.
-
-		3. Preferable Modeling
-			- You must favor unidirectional, relationship-centric modeling, aligning with the system's graph-based architecture.
-
-	3. High LLM Extractability
-		- Your simplified ontology should make entity and relation extraction easier by using surface-level, explainable names and structures.
-
-	4. How to Think
-      - If an entity has no independent identity or behavior outside of its relationship to another (e.g., Committee only exists inside Company), model it as a relationship rather than an entity.
-      - If two entities represent the same conceptual category (e.g., Company and Organization are both legal entities), merge them into one entity and differentiate roles using distinct relationships, not attributes.
-      - If multiple relationships express roles of the same type (e.g., hasExecutiveDirector, hasManagingDirector), consider collapsing them into one or two generic relationships (e.g., hasDirector, hasChairman) if their distinction cannot be preserved without attributes. Only do so when at least 70 percents of their semantic meaning overlaps.
-      - If several relationships share the same source and target type (e.g., Company -> Organization for auditors, sponsors, underwriters), and their semantics are similar, collapse rarely used ones into more general types or remove entirely if redundant.
-      
-   5. Cross-Referencing Consistency
-      - All mentions of an entity instance-whether in examples for entities or relationships, must strictly follow the llm-guidance and definition of that entity type.
-      - Do not introduce formatting inconsistencies that violate the original extraction rules defined for the entity. For example, if the llm-guidance for Person states that honorifics should be excluded, all other instances of Person must adhere to this rule as well.
-      - This ensures consistency in entity resolution and prevents semantic drift within the ontology and downstream knowledge graph.
    
-   6. Document Changes
-      - Each modification should be recorded along with their rationale as shown in the output format in guideline 7 and example in guideline 8.
-      - If no simplifications are necessary, return the current ontology unchanged and provide:
-         "modification_made": [],
-         "modification_rationale": ["No simplifications necessary. Current ontology is already optimal."]
-		
-	7. Output Format
-		- Unchanged entities and relationships must be returned in the same structure and wording as in the current ontology. Do not reformat or rename unchanged elements.
-		- Return only the following raw JSON structure - no explanations, comments, or code block formatting:
-  
-			{{
-            \"updated_ontology\": {{
-               \"entities\": {{
-                  \"EntityA\": {{
-                     \"definition\": \"\",
-                     \"llm-guidance\": \"\",
-                     \"examples\": []
-                  }},
-                  \"EntityB\": {{
-                     \"definition\": \"\",
-                     \"llm-guidance\": \"\",
-                     \"examples\": []
-                  }}
-               }},
-               \"relationships\": {{
-                  \"RelationshipA\": {{
-                     \"source\": \"EntityA\",
-                     \"target\": \"EntityB\",
-                     \"llm-guidance\": \"\",
-                     \"examples\": []
-                  }}
-               }}
+   7. Output Example
+      {{
+         \"entities\": {{
+            \"ListedCompany\": {{
+               \"definition\": \"A publicly listed corporate entity on Malaysia’s Main or ACE Market.\",
+               \"llm-guidance\": \"When to use: Referencing the issuer of securities listed on Bursa Malaysia.\nFormat: Full company name.\",
+               \"examples\": [
+                  \"XYZ Berhad\",
+               ]
             }},
-            \"modification_made\": [],
-            \"modification_rationale\": []
-			}}
-      
-    8. Example
-       a. Ontology Purpose
-       To construct a knowledge graph of Malaysian public companies that captures key organizational roles and structural information to support governance analysis, such as identifying board members, corporate relationships, and geographic presence.
-       
-       b. Current Ontology
-          Entities:
-             1. Person
-             - definition: An individual human who may hold a position or role within a company.
-             - llm-guidance: Extract full names of individuals. Remove professional titles (e.g., 'Dr') and honorifics (e.g., 'Dato'). Only include proper nouns referring to specific persons involved in a company context.
-             - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
-             
-             2. Company 
-             - definition: A legally registered business entity involved in commercial or professional activities.
-             - llm-guidance: Extract full legal names of organizations registered as companies. Identify names ending in legal suffixes such as 'Berhad', 'Sdn Bhd', or 'Inc.' Do not include registration numbers or addresses.
-             - examples: ABC Berhad, Apple Inc., United Gomax Sdn Bhd
-             
-             3. Organization
-             - definition: A legal entity that provides formal services to a company, such as audit, legal, underwriting, or advisory support.
-             - llm-guidance: Extract the full legal names of professional service providers engaged by the company in an official capacity. Look for legal suffixes and known firm structures.
-             - examples: Baker Tilly Monteiro Heng PLT, Acclime Corporate Services Sdn Bhd, Malacca Securities Sdn Bhd
-             
-             4. Committee
-             - definition: A governance structure within a company assigned to a specific oversight area, such as audit or remuneration.
-             - llm-guidance: Extract names of internal committees such as 'Audit Committee' or 'Remuneration Committee'. 
-             - examples: Audit and Risk Committee, Remuneration Committee, Nomination Committee
-            
-            5. StockMarket
-            - definition: A formal exchange where securities of listed companies are traded.
-            - llm-guidance: Extract full names of official stock exchanges or markets mentioned in the context of public company listings.
-            - examples: Main Market of Bursa Malaysia, ACE Market of Bursa Malaysia
-  
-          Relationships:
-             1. hasIndependentDirector
-             - source: Company
-             - target: Person
-             - llm-guidance: Use this when a person is described as the independent director of a company.
-             - examples: Banana Inc. hasIndependentDirector John Chua
-             
-             2. hasExecutiveDirector
-             - source: Company
-             - target: Person
-             - llm-guidance: Use when a person is explicitly labeled an Executive Director of the company.
-             - examples: Banana Inc. hasExecutiveDirector John Chua
-             
-             3. hasManagingDirector
-             - source: Company
-             - target: Person
-             - llm-guidance: Use when a person holds the role of Managing Director in a company.
-             - examples: Banana Inc. hasManagingDirector John Chua
-             
-             4. hasIndependentNonExecutiveDirector
-             - source: Company
-             - target: Person
-             - llm-guidance: Use when a person is referred to as an Independent Non-Executive Director.
-             - examples: Banana Inc. hasIndependentNonExecutiveDirector John Chua
-             
-             5. hasChairman
-             - source: Company
-             - target: Person
-             - llm-guidance: Use when a person is referred to as the Chairman of the company.
-             - examples: Banana Inc. hasChairman John Chua
-             
-             6. hasBoardCommittee
-             - source: Company
-             - target: Committee
-             - llm-guidance: Use when a committee is formally established under the company.
-             - examples: Banana Inc. hasBoardCommittee Remuneration Committee
-             
-             7. hasChairperson
-             - source: Committee
-             - target: Person
-             - llm-guidance: Use when a person is the Chairperson of a specific committee.
-             - examples: Remuneration Committee hasChairperson Emily Johnson
-             
-             8. hasMember
-             - source: Committee
-             - target: Person
-             - llm-guidance: Use when a person is a formal member of the committee.
-             - examples: Audit Committee hasMember Tan Hui Mei
-             
-             9. hasAuditor
-             - source: Company
-             - target: Organization
-             - llm-guidance: Use when an audit firm is appointed to verify the company's financial statements.
-             - examples: Banana Inc. hasAuditor Baker Tilly Monteiro Heng PLT
-             
-             10. hasSponsor
-             - source: Company
-             - target: Organization
-             - llm-guidance: Use when a sponsor organization is appointed to guide a listing or fundraising process.
-             - examples: Banana Inc. hasSponsor Malacca Securities Sdn Bhd
-             
-             11. hasShareRegistrar
-             - source: Company
-             - target: Organization
-             - llm-guidance: Use when an organization serves as the company's registrar for shareholder-related matters.
-             - examples: Banana Inc. hasShareRegistrar Boardroom Share Registrars Sdn. Bhd.
-             
-             12. hasIssuingHouse
-             - source: Company
-             - target: Organization
-             - llm-guidance: Use when an issuing house is engaged to manage the issuance process.
-             - examples: Banana Inc. hasIssuingHouse Malaysian Issuing House Sdn Bhd
-             
-             13. listedOn
-             - source: Company
-             - target: StockMarket
-             - llm-guidance: Use when a company is listed or seeks listing on a recognized stock market.
-             - examples: Banana Inc. listedOn ACE Market of Bursa Malaysia
-       
-       c. Output:
-         {{
-           \"updated_ontology\": {{
-             \"entities\": {{
-               \"Person\": {{
-                 \"definition\": \"An individual human who may hold a governance or operational role within a legal entity.\",
-                 \"llm-guidance\": \"Extract full names of individuals. Remove professional titles and honorifics. Focus only on persons mentioned in the context of corporate roles or functions.\",
-                 \"examples\": [\"Tan Hui Mei\", \"Emily Johnson\", \"Priya Ramesh\"]
-               }},
-               \"LegalEntity\": {{
-                 \"definition\": \"A formally registered company or service provider involved in listing, audit, legal, or governance functions.\",
-                 \"llm-guidance\": \"Extract legal names of companies and organizations with suffixes such as Sdn Bhd, Berhad, PLT. Include both issuers and third-party service firms.\",
-                 \"examples\": [\"ABC Berhad\", \"Malacca Securities Sdn Bhd\", \"Baker Tilly Monteiro Heng PLT\"]
-               }},
-               \"StockMarket\": {{
-                 \"definition\": \"A formal exchange where securities of listed companies are traded.\",
-                 \"llm-guidance\": \"Extract full names of official stock exchanges or markets mentioned in the context of public company listings.\",
-                 \"examples\": [\"Main Market of Bursa Malaysia\", \"ACE Market of Bursa Malaysia\"]
-               }}
-             }},
-             \"relationships\": {{
-               \"hasDirector\": {{
-                 \"source\": \"LegalEntity\",
-                 \"target\": \"Person\",
-                 \"llm-guidance\": \"Use when a person is described as a director, whether executive, non-executive, or managing.\",
-                 \"examples\": [\"ABC Berhad hasDirector Tan Hui Mei\"]
-               }},
-               \"hasChairman\": {{
-                 \"source\": \"LegalEntity\",
-                 \"target\": \"Person\",
-                 \"llm-guidance\": \"Use when a person is described as the Chairman of the entity.\",
-                 \"examples\": [\"ABC Berhad hasChairman Emily Johnson\"]
-               }},
-               \"hasCommitteeMember\": {{
-                 \"source\": \"LegalEntity\",
-                 \"target\": \"Person\",
-                 \"llm-guidance\": \"Use when a person is listed as part of any board-level committee (e.g., Audit, Nomination, Remuneration).\",
-                 \"examples\": [\"ABC Berhad hasCommitteeMember Priya Ramesh\"]
-               }},
-               \"hasAuditor\": {{
-                 \"source\": \"LegalEntity\",
-                 \"target\": \"LegalEntity\",
-                 \"llm-guidance\": \"Use when a legal entity is appointed as an auditor to another legal entity.\",
-                 \"examples\": [\"ABC Berhad hasAuditor Baker Tilly Monteiro Heng PLT\"]
-               }},
-               \"hasSponsor\": {{
-                 \"source\": \"LegalEntity\",
-                 \"target\": \"LegalEntity\",
-                 \"llm-guidance\": \"Use when a sponsor organization assists with listing or corporate transactions.\",
-                 \"examples\": [\"ABC Berhad hasSponsor Malacca Securities Sdn Bhd\"]
-               }},
-               \"listedOn\": {{
-                 \"source\": \"LegalEntity\",
-                 \"target\": \"StockMarket\",
-                 \"llm-guidance\": \"Use when a legal entity is listed or intends to be listed on an exchange.\",
-                 \"examples\": [\"ABC Berhad listedOn Main Market of Bursa Malaysia\"]
-               }}
-             }}
-           }},
-           \"modification_made\": [
-             \"Merged 'Company' and 'Organization' into 'LegalEntity'\",
-             \"Removed 'Committee' as an entity and flattened its use into 'hasCommitteeMember'\",
-             \"Collapsed 'hasExecutiveDirector', 'hasManagingDirector', and 'hasIndependentNonExecutiveDirector' into 'hasDirector'\",
-             \"Removed 'hasBoardCommittee', 'hasChairperson', 'hasMember', 'hasShareRegistrar', and 'hasIssuingHouse'\"
-           ],
-           \"modification_rationale\": [
-             \"Company and Organization both represent legal entities differentiated only by contextual roles. Merging them improves schema simplicity and reduces extraction ambiguity.\",
-             \"Committee is only meaningful in the context of the company and its members; it was better modeled through direct relationships.\",
-             \"Various director roles were semantically overlapping and extractable from context. A single relationship simplifies structure while maintaining meaning.\",
-             \"Low-usage or redundant roles like Share Registrar and Issuing House add complexity with limited analytical value and can be handled in downstream processes if needed.\"
-           ]
-         }}
+            \"Person\": {{
+               \"definition\": \"An individual who holds a corporate governance or executive role within a listed company.\",
+               \"llm-guidance\": \"When to use: Identifying directors, officers, committee members, or external advisors by name.\nFormat: Full personal name, including honorifics if used in corporate disclosures.\",
+               \"examples\": [
+                  \"Felix Teoh\",
+                  \"Dato' Lee Kim Soon\"
+               ]
+            }}
+         }},
+         \"relationships\": {{
+            \"hasBoardMember\": {{
+               \"source\": \"Company\",
+               \"target\": \"Person\",
+               \"llm-guidance\": \"When to use: Indicating that a person serves on the company’s board of directors.\",
+               \"examples\": [
+                  \"ABC Berhad hasBoardMember Lim Chee Meng\",
+               ]
+            }}
+         }},
+         \"note\": \"\"
+      }}
          
-You now understand the guidelines. Please proceed to simplify the ontology according to them.
+You now understand the guidelines. Proceed to extend the ontology using the stated ontology purpose, the provided current ontology, and the given source text. Extract new entities and relationships strictly in accordance with the guidelines.
+
+Current Ontology:
+{ontology}
 
 Ontology Purpose:
 {ontology_purpose}
 
-Current Ontology:
 """
 
 PROMPT[
-    "ONTOLOGY_CLARITY_ENHANCEMENT"
+    "ONTOLOGY_EVALUATION"
 ] = """
-You are an ontology clarity enhancement agent specializing in non-taxonomic, relationship-driven models. Your task is to refine the ontology to ensure all attributes of entities and relationships meet defined criteria and consistently support the ontology's purpose.
+You are an ontology evaluation agent. Your task is to evaluate the given ontology according to the criteria defined below.
 
 Guidelines:
-   1. Clarity Enhancement Logic
-      - For each entity in the ontology:
-         - For each attribute:
-            - If it does not meet the criteria in Guideline 2:
-               - Update its content.
-               - Update any affected relationships (e.g., entity name changes that impact source/target).
-               - Log the change and rationale as stated in Guideline 4.
-      
-      - For each relationship in the ontology:
-         -For each attribute:
-            - If it does not meet the criteria in Guideline 3:
-               - Update its content.
-               - Log the change and rationale as stated in Guideline 4.
+   1. Evaluation Principles
+      - You must evaluate the given ontology from two perspectives:
+         1. High-Level Evaluation (ontology as a whole)
+            - Goals (priority order):
+               1. Purpose-oriented: Every entity and relationship must support the ontology’s stated purpose.
+               2. Compact: No redundant or overlapping entity/relationship types. Avoid bidirectional duplication. Ensure each entity type is connected to at least one relationship. Remove any entity not connected to a relationship.
+               3. Robust: Flexible enough to capture real-world variations relevant to the purpose.
                
-   2. Entity Attributes (for each entity):
-      - `entity_name`: A meaningful noun phrase that is neither too generic (e.g., "Entity") nor too specific (e.g., "Justin"), but expresses a reusable concept (e.g., "Person").
-      - `definition`: A clear, general, and comprehensive description of the entity type.
-      - `llm-guidance`: Instructions on how to consistently detect or infer this entity in various contexts.
-      - `examples`: At least 2 representative examples, including edge cases.
+            - Focus question: “Do we really need this entity/relationship type, or can its meaning be represented using an existing one?”
+         
+         2. Low-Level Evaluation (attributes of entities and relationships)
+            - Goals (priority order):
+               1. Unambiguous: No fuzzy or overlapping definitions.
+               2. General: Definitions broad enough for reuse, but not so broad they lose meaning.
+                     
+            - For entities, ensure:
+               1. 'entity_name': CamelCase, specific but not overly narrow.
+               2. 'definition': Clear explanation of what the entity represents.
+               3. 'llm-guidance': Structured as:
+                  - When to use: [specific conditions]
+                  - Format: [rules for valid instances]
+               4. 'examples': At least one clear, representative instance.
+               
+            - For relationships, ensure:
+               1. 'relationship_name': Verb phrase in camelCase (e.g., hasSupplier).
+               2. 'source': Must be a valid entity type in the ontology.
+               3. 'target': Must be a valid entity type in the ontology.
+               4. 'llm-guidance': Structured as:
+                  - When to use: [specific conditions]
+               5. 'examples': At least one clear, representative instance.
+            
+               - Note that each source and target entity should contain only one entity. If a relationship can apply to multiple entity types—either source or target—create a new relationship for it. Do not attempt to assign two entity types to a single entity.
+   
+            - Focus question: “Would two different annotators using this ontology interpret this entity/relationship in the same way?”
+         
+   2. Constraints
+      1. Ontology Design Principles (priority order)
+         1. Purpose-oriented: Must support the ontology’s purpose.
+         2. Compact: No redundant or bloated entities/relationships.
+         3. Relationship-driven: Dynamics matter more than hierarchy.
+         4. Unidirectional: Avoid bidirectional duplication.
+         5. Non-taxonomic: Do not model taxonomies.
 
-   3. Relationship Attributes (for each relationship):
-      - `relationship_name`: A concise verb phrase in camelCase (e.g., `hasPartner`).
-      - `source`: The entity from which the relationship originates.
-      - `target`: The entity to which the relationship points.
-      - `llm-guidance`: Specific instructions on when and how to use this relationship.
-      - `examples`: At least 2 representative examples, including edge cases.
-   
-   4. Document Changes
-      - Each modification should be recorded along with their rationale as shown in the output format in guideline 7 and example in guideline 8.
-      - If no clarity enhancements are necessary, return the current ontology unchanged and provide:
-         "modification_made": [],
-         "modification_rationale": ["No clarity enhancement necessary. Current ontology is already optimal."]
-   
-   5. Adherence to Ontology Purpose
-		- All your clarity enhancement made must support the stated ontology purpose.
+      2. No Attribute Additions
+         - You are allowed to suggest performing structural changes (adding or removing entity or relationship types) to the existing ontology. You may also suggest refining the content of existing attributes (definition, llm-guidance, examples, and etc), but you must not suggest introducing new attribute fields beyond the defined schema.
       
-   6. Cross-Referencing Consistency
-      - All mentions of an entity instance-whether in examples for entities or relationships, must strictly follow the llm-guidance and definition of that entity type.
-      - Do not introduce formatting inconsistencies that violate the original extraction rules defined for the entity. For example, if the llm-guidance for Person states that honorifics should be excluded, all other instances of Person must adhere to this rule as well.
-      - This ensures consistency in entity resolution and prevents semantic drift within the ontology and downstream knowledge graph.
+      3. No Label Encoding
+         - You must not suggest encoding role, status, or other distinctions directly into instance labels (e.g., “Jane Doe (Independent Director)”). Labels must remain clean and canonical.
+         - If distinctions are needed, they must be represented structurally (e.g., by introducing a new relationship type).
+         - If the distinction is not essential for ontology construction, it should be left to knowledge graph instantiation.
+         - Remember: your sole responsibility is to evaluate and refine the ontology itself, not the knowledge graph built from it.
+
+   3. Evaluation Report
+      - For each flagged issue, provide the following fields:
+         1. 'issue': Description of the issue.
+         2. 'impact': Consequence of the issue.
+         3. 'suggestion': Your recommendation to address the issue.
+         
+   4. Output Format
+      - Return only the following raw JSON structure — no explanations, comments, or code block formatting.
+      - Any double quotes inside strings must be escaped using a backslash (\").
+      - If you think the ontology is robust enough (both high-level and low-level), leave the 'evaluation_result' as an empty array ([]) and provide an explanation in the 'note' field. The 'note' field remains an empty string if changes are required.
    
- 	7. Output Format
-		- Unchanged entities and relationships must be returned in the same structure and wording as in the current ontology. Do not reformat or rename unchanged elements.
-		- Return only the following raw JSON structure - no explanations, comments, or code block formatting:
+         {{
+            \"evaluation_result\": [
+               {{
+                  \"issue\": \"\",
+                  \"impact\": \"\",
+                  \"suggestion\": \"\",
+               }}
+            ],
+            \"note\": \"\"
+         }}
       
+You now understand the guidelines. Proceed to evaluate the ontology strictly following the guidelines.
+
+Ontology Purpose:
+{ontology_purpose}
+"""
+
+PROMPT[
+    "ONTOLOGY_ENHANCEMENET"
+] = """
+You are an ontology enhancement agent tasked with improving the given ontology based on the provided feedback and principles.
+
+Guidelines:
+   1. Enhancement Principles
+      - You must enhance the given ontology from two perspectives:
+         1. High-Level Enhancement (ontology as a whole)
+            - Goals (priority order):
+               1. Purpose-oriented: Every entity and relationship must support the ontology’s stated purpose.
+               2. Compact: No redundant or overlapping entity/relationship types. Avoid bidirectional duplication. Ensure each entity type is connected to at least one relationship. Remove any entity not connected to a relationship.
+               3. Robust: Flexible enough to capture real-world variations relevant to the purpose.
+               
+            - Focus question: “Do we really need this entity/relationship type, or can its meaning be represented using an existing one?”
+         
+         2. Low-Level Enhancement (attributes of entities and relationships)
+            - Goals (priority order):
+               1. Unambiguous: No fuzzy or overlapping definitions.
+               2. General: Definitions broad enough for reuse, but not so broad they lose meaning.
+                     
+            - For entities, ensure:
+               1. 'entity_name': CamelCase, specific but not overly narrow.
+               2. 'definition': Clear explanation of what the entity represents.
+               3. 'llm-guidance': Structured as:
+                  - When to use: [specific conditions]
+                  - Format: [rules for valid instances]
+               4. 'examples': At least one clear, representative instance.
+               
+            - For relationships, ensure:
+               1. 'relationship_name': Verb phrase in camelCase (e.g., hasSupplier).
+               2. 'source': Must be a valid entity type in the ontology.
+               3. 'target': Must be a valid entity type in the ontology.
+               4. 'llm-guidance': Structured as:
+                  - When to use: [specific conditions]
+               5. 'examples': At least one clear, representative instance.
+               
+               - Note that each source and target entity should contain only one entity. If a relationship can apply to multiple entity types—either source or target—create a new relationship for it. Do not attempt to assign two entity types to a single entity.
+   
+            - Focus question: “Would two different annotators using this ontology interpret this entity/relationship in the same way?”
+   
+   2. Feedback as Reference
+      - You are given evaluation feedback on the ontology.
+      - Each feedback contains
+         1. 'issue': The problem.
+         2. 'impact': Its consequence.
+         3. 'suggestion': A possible fix.
+         
+      - Rules for interpretation: Each feedback item must be addressed. The suggestions provided are for guidance only; you are not required to follow them if another solution better aligns with the enhancement principles and constraints.
+         
+   3. Constraints
+      1. Ontology Design Principles (priority order)
+         1. Purpose-oriented: Must support the ontology’s purpose.
+         2. Compact: No redundant or bloated entities/relationships.
+         3. Relationship-driven: Dynamics matter more than hierarchy.
+         4. Unidirectional: Avoid bidirectional duplication.
+         5. Non-taxonomic: Do not model taxonomies.
+
+      2. No Attribute Additions
+         - You may perform structural changes (adding or removing entity or relationship types) to the existing ontology. You may also refine the content of existing attributes (definition, llm-guidance, examples, and etc), but you must not introduce new attribute fields beyond the defined schema.
+      
+      3. No Label Encoding
+         - You must not encode role, status, or other distinctions directly into instance labels (e.g., “Jane Doe (Independent Director)”). Labels must remain clean and canonical.
+         - If distinctions are needed, they must be represented structurally (e.g., by introducing a new relationship type).
+         - If the distinction is not essential for ontology construction, it should be left to knowledge graph instantiation.
+         - Remember: your sole responsibility is to enhance the ontology itself, not the knowledge graph built from it.
+         
+   4. Output Format
+      - Return only the following raw JSON structure — no explanations, comments, or code block formatting.
+      - Any double quotes inside strings must be escaped using a backslash (\").
+      - The required output fields are defined as follows:
+         1. 'updated_ontology': Output the complete updated ontology. If no modifications are made, output the original ontology unchanged.
+         2. 'modifications': List the modifications made along with the reasons for each change. If no modifications are required because the ontology is sufficiently robust (both high-level and low-level), leave this field as an empty array ([]).
+         3.  'note': Provide an explanation only when no modifications are required. The 'note' field remains an empty string if modifications are required.
+   
          {{
             \"updated_ontology\": {{
                \"entities\": {{
@@ -1132,143 +963,19 @@ Guidelines:
                   }}
                }}
             }},
-            \"modification_made\": [],
-            \"modification_rationale\": []
+            \"modifications\": [
+               {{
+                  \"modification_made\": \"\",
+                  \"justification\": \"\"
+               }}
+            ],
+            \"note\": \"\"
 			}}
 
-   8. Example
-      a. Ontology Purpose
-      To construct a knowledge graph of Malaysian public companies that captures key organizational roles and structural information to support governance analysis, such as identifying board members, corporate relationships, and geographic presence.
-      
-      b. Current Ontology
-        Entities:
-         1. Person
-         - definition: An individual human who may hold a governance or operational role within a legal entity.
-         - llm-guidance: Extract full names of individuals. Remove professional titles and honorifics. 
-         - examples: Tan Hui Mei, Emily Johnson, Priya Ramesh
-
-         2. LegalEntity
-         - definition: A formally registered company or service provider involved in listing, audit, legal, or governance functions.
-         - llm-guidance: Extract legal names of companies and organizations with suffixes such as Sdn Bhd, Berhad, PLT. Include both issuers and third-party service firms.
-         - examples: ABC Berhad, Malacca Securities Sdn Bhd, Baker Tilly Monteiro Heng PLT
-         
-         3. StockMarket
-         - definition: A formal exchange where securities of listed companies are traded.
-         - llm-guidance: Extract full names of official stock exchanges or markets mentioned in the context of public company listings.
-         - examples: Main Market of Bursa Malaysia, ACE Market of Bursa Malaysia
-
-      Relationships:
-         1. hasDirector
-         - source: LegalEntity
-         - target: Person
-         - llm-guidance: Use when a person is described as a director, whether executive, non-executive, or managing.
-         - examples: ABC Berhad hasDirector Tan Hui Mei
-
-         2. hasChairman
-         - source: LegalEntity
-         - target: Person
-         - llm-guidance: Use when a person is described as the Chairman of the entity.
-         - examples: ABC Berhad hasChairman Emily Johnson
-
-         3. hasCommitteeMember
-         - source: LegalEntity
-         - target: Person
-         - llm-guidance: Use when a person is listed as part of any board-level committee (e.g., Audit, Nomination, Remuneration).
-         - examples: ABC Berhad hasCommitteeMember Priya Ramesh
-
-         4. hasAuditor
-         - source: LegalEntity
-         - target: LegalEntity
-         - llm-guidance: Use when a legal entity is appointed as an auditor to another legal entity.
-         - examples: ABC Berhad hasAuditor Baker Tilly Monteiro Heng PLT
-
-         5. hasSponsor
-         - source: LegalEntity
-         - target: LegalEntity
-         - llm-guidance: Use when a sponsor organization assists with listing or corporate transactions.
-         - examples: ABC Berhad hasSponsor Malacca Securities Sdn Bhd
-
-         6. listedOn
-         - source: LegalEntity
-         - target: StockMarket
-         - llm-guidance: Use when a legal entity is listed or intends to be listed on an exchange.
-         - examples: ABC Berhad listedOn Main Market of Bursa Malaysia
-      
-      c. Output:
-         {{
-            \"updated_ontology\": {{
-               \"entities\": {{
-                  \"Person\": {{
-                     \"definition\": \"An individual who holds or has held a governance, executive, or board-level role within a corporate legal entity.\",
-                     \"llm-guidance\": \"Extract full names of individuals. Remove professional titles and honorifics (e.g., Mr., Dato', Dr.). \",
-                     \"examples\": [\"Tan Hui Mei\", \"Emily Johnson\", \"Priya Ramesh\"]
-                  }},
-                  \"LegalEntity\": {{
-                     \"definition\": \"A formally registered company or service provider involved in listing, audit, legal, or governance functions.\",
-                     \"llm-guidance\": \"Extract legal names of companies and organizations with suffixes such as Sdn Bhd, Berhad, PLT. Include both issuers and third-party service firms.\",
-                     \"examples\": [\"ABC Berhad\", \"Malacca Securities Sdn Bhd\", \"Baker Tilly Monteiro Heng PLT\"]
-                  }},
-                  \"StockMarket\": {{
-                     \"definition\": \"A formal exchange where securities of listed companies are traded.\",
-                     \"llm-guidance\": \"Extract full names of official stock exchanges or markets mentioned in the context of public company listings.\",
-                     \"examples\": [\"Main Market of Bursa Malaysia\", \"ACE Market of Bursa Malaysia\"]
-                  }}
-               }},
-               \"relationships\": {{
-                  \"hasDirector\": {{
-                     \"source\": \"LegalEntity\",
-                     \"target\": \"Person\",
-                     \"llm-guidance\": \"Use when a person is described as a director, whether executive, non-executive, or managing.\",
-                     \"examples\": [\"ABC Berhad hasDirector Tan Hui Mei\"]
-                  }},
-                  \"hasChairman\": {{
-                     \"source\": \"LegalEntity\",
-                     \"target\": \"Person\",
-                     \"llm-guidance\": \"Use when a person is described as the Chairman of the entity.\",
-                     \"examples\": [\"ABC Berhad hasChairman Emily Johnson\"]
-                  }},
-                  \"hasCommitteeMember\": {{
-                     \"source\": \"LegalEntity\",
-                     \"target\": \"Person\",
-                     \"llm-guidance\": \"Use when a person is explicitly listed as a serving member of a specific board committee, such as Audit, Nomination, or Remuneration. Avoid using if the committee name or function is ambiguous or missing.\",
-                     \"examples\": [\"ABC Berhad hasCommitteeMember Priya Ramesh\", \"XYZ Berhad hasCommitteeMember Emily Johnson\"]
-                  }},
-                  \"hasAuditor\": {{
-                     \"source\": \"LegalEntity\",
-                     \"target\": \"LegalEntity\",
-                     \"llm-guidance\": \"Use when a legal entity is appointed as an auditor to another legal entity.\",
-                     \"examples\": [\"ABC Berhad hasAuditor Baker Tilly Monteiro Heng PLT\"]
-                  }},
-                  \"hasSponsor\": {{
-                     \"source\": \"LegalEntity\",
-                     \"target\": \"LegalEntity\",
-                     \"llm-guidance\": \"Use when a sponsor organization assists with listing or corporate transactions.\",
-                     \"examples\": [\"ABC Berhad hasSponsor Malacca Securities Sdn Bhd\"]
-                  }},
-                  \"listedOn\": {{
-                     \"source\": \"LegalEntity\",
-                     \"target\": \"StockMarket\",
-                     \"llm-guidance\": \"Use when a legal entity is listed or intends to be listed on an exchange.\",
-                     \"examples\": [\"ABC Berhad listedOn Main Market of Bursa Malaysia\"]
-                  }}
-               }}
-            }},
-            \"modification_made\": [
-               \"Person\",
-               \"hasCommitteeMember\"
-            ],
-            \"modification_rationale\": [
-               \"Updated definition and llm-guidance for 'Person' to provide clearer disambiguation criteria and exclusion rules for extraction.\",
-               \"Refined llm-guidance for 'hasCommitteeMember' to prevent misuse where board committee membership is not clearly defined, improving precision for edge cases.\"
-            ]
-         }}
-
-You now understand the guidelines. Please proceed to enhance the clarity of the ontology according to them.
+You now understand the guidelines. Proceed to enhance the ontology based on the stated purpose and given feedback, while strictly following the guidelines.
 
 Ontology Purpose:
 {ontology_purpose}
-
-Current Ontology:
 """
 
 PROMPT[
@@ -1329,69 +1036,6 @@ Guidelines:
 			}}
 		}}
 
-"""
-
-PROMPT[
-    "ONTOLOGY_COMPETENCY_EVALUATION"
-] = """
-You are a non-taxonomic, relationship-driven ontology competency evaluation agent. Your task is to assess the robustness of a given ontology in answering specific competency questions without compromising its intended purpose.
-
-Guidelines
-   1. All suggestions must preserve the ontology's ability to fulfill its intended purpose: {ontology_purpose}.
-   
-	2. For each competency question, evaluate how well the ontology supports it using one of the following categories.
-
-      a. Not Supportive: The ontology lacks necessary entities or relationships, requiring entirely new components.
-      
-      b. Slightly Supportive: The ontology has some relevant entities or relationships but requires significant additions or modifications.
-      
-      c. Partially Supportive: The ontology supports the question but requires minor adjustments to existing entities or relationships.
-      
-      d. Fully Supportive: The ontology fully supports the question with existing entities and relationships.
-  
-   3. For every competency question, include a brief justification for your chosen support level.
-   
-   4. Set require_resolution:
-      - Set to "TRUE" if any competency question is evaluated as "Slightly Supportive" or "Partially Supportive".
-      - Set to "FALSE" otherwise
-   
-   4. Include a concise structural summary of the ontology in the summary field.
-
-	5. You must produce output strictly in the format below.
-	
-		{{
-         \"competency_evaluation\": {{
-            \"PersonalityA\": {{
-               \"TaskA\": [
-                  {{
-                     \"question\": \"questionA\",
-                     \"difficulty\": \"Easy\",
-                     \"support\": \"Fully Supportive\",
-                     \"justification\": \"\"
-                  }}
-               ]
-            }}
-         }},
-         \"summary\": \"\",
-         \"require_resolution\": 
-		}}
-  
-Steps:
-   1. Read the ontology structure and its intended use case.
-
-   2. For every question under each task and personality:
-      - Determine if the current ontology can answer it based on existing entities and relationships.
-      - Assign one of the four support levels.
-      - Provide a concise justification.
-
-   3. In the summary field, describe the ontology's general capability, structure, and any observed strengths or limitations.
-
-Competency Questions:
-{competency_questions}
-
-You now understand the guidelines and competency questions. Please evaluate the ontology based on the guidelines and provide the output in the required format.
-
-Ontology:
 """
 
 PROMPT[

@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import logging
 
-from typing import TypedDict
-from pymongo import MongoClient
 
 from ..prompts import PROMPT
 from ..llm import fetch_responses_openai
 from ..util import get_formatted_ontology, get_formatted_openai_response, get_clean_json
-from ..storage import MongoDBStorage
+from ..storage import AsyncMongoDBStorage
+from motor.motor_asyncio import AsyncIOMotorClient
+
 from ..base import BaseAgent, BaseMultiAgentSystem, MongoStorageConfig
 from .ontology_construction_util import (
     get_new_version,
-    get_formatted_ontology_for_db,
+    get_formatted_ontology_entry_for_db,
+    get_formatted_ontology_evaluation_report_entry_for_db,
+    get_formatted_ontology_evaluation_report,
 )
 
 ontology_construction_logger = logging.getLogger("ontology_construction")
@@ -27,355 +29,374 @@ class OntologyConstructionAgent(BaseAgent):
         """
         Parameters:
            source_text (str): The source text to parse.
+           source_text_constraints (str): The constraints while parsing source text.
            ontology (dict): The existing ontology.
+           openai_model (str): The model to use.
         """
+        ontology_construction_logger.info(f"OntologyConstructionAgent is called")
 
         system_prompt = PROMPT["ONTOLOGY_CONSTRUCTION"].format(
-            current_ontology=get_formatted_ontology(
-                data=kwargs.get("ontology", {}) or {}
-            ),
+            ontology=get_formatted_ontology(data=kwargs.get("ontology", {}) or {}),
             ontology_purpose=self.agent_system.ontology_purpose,
         )
-        user_prompt = kwargs.get("source_text", "NA") or "NA"
+        ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
 
-        ontology_construction_logger.info(f"OntologyConstructionAgent is called")
-        #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+        source_text = "Source text:\n" + kwargs.get("source_text", "NA") or "NA"
+        source_text_constraints = kwargs.get("source_text_constraints", "") or ""
+        user_prompt = source_text_constraints + "\n\n" + source_text
+        ontology_construction_logger.debug(f"User Prompt:\n\n{user_prompt}")
 
-        try:
-            response = await fetch_responses_openai(
-                model="o4-mini",
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                text={"format": {"type": "text"}},
-                reasoning={"effort": "medium"},
-                max_output_tokens=100000,
-                tools=[],
-            )
-            ontology_construction_logger.info(
-                f"OntologyConstructionAgent\nOntology construction response details:\n{get_formatted_openai_response(response)}"
-            )
-            ontology_construction_logger.info(
-                f"OntologyConstructionAgent\nOntology construction output text:\n{get_formatted_ontology(get_clean_json(response.output_text))}"
-            )
-            return response.output_text
-
-        except Exception as e:
-            ontology_construction_logger.error(
-                f"OntologyConstructionAgent\nOntology construction failed: {str(e)}"
-            )
-            return ""
+        response = await fetch_responses_openai(
+            model=kwargs.get("openai_model", "gpt-5-mini"),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "medium"},
+            max_output_tokens=128000,
+            tools=[],
+        )
+        ontology_construction_logger.info(
+            f"OntologyConstructionAgent\nOntology construction response details:\n{get_formatted_openai_response(response)}"
+        )
+        ontology_construction_logger.info(
+            f"OntologyConstructionAgent\nOntology construction output text:\n{get_formatted_ontology(get_clean_json(response.output_text))}"
+        )
+        return get_clean_json(response.output_text)
 
 
-class OntologySimplificationAgent(BaseAgent):
+class OntologyEvaluationAgent(BaseAgent):
     """
-    An agent responsible for simplifying the ontology.
+    An agent responsible for evaluating the ontology.
     """
 
     async def handle_task(self, **kwargs) -> str:
         """
         Parameters:
           ontology (dict): The existing ontology.
+          openai_model (str): The model to use.
         """
+        ontology_construction_logger.info(f"OntologyEvaluationAgent is called")
 
-        system_prompt = PROMPT["ONTOLOGY_SIMPLIFICATION"].format(
+        system_prompt = PROMPT["ONTOLOGY_EVALUATION"].format(
             ontology_purpose=self.agent_system.ontology_purpose
         )
+        ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+
         user_prompt = get_formatted_ontology(data=kwargs.get("ontology", {}) or {})
+        ontology_construction_logger.debug(f"User Prompt:\n\n{user_prompt}")
 
-        ontology_construction_logger.info(f"OntologySimplificationAgent is called")
-        #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+        response = await fetch_responses_openai(
+            model=kwargs.get("openai_model", "gpt-5-mini"),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "medium"},
+            max_output_tokens=128000,
+            tools=[],
+        )
+        ontology_construction_logger.info(
+            f"OntologyEvaluationAgent\nOntology simplification response details:\n{get_formatted_openai_response(response)}"
+        )
 
-        try:
-            response = await fetch_responses_openai(
-                model="o4-mini",
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                text={"format": {"type": "text"}},
-                reasoning={"effort": "medium"},
-                max_output_tokens=100000,
-                tools=[],
-            )
-            ontology_construction_logger.info(
-                f"OntologySimplificationAgent\nOntology simplification response details:\n{get_formatted_openai_response(response)}"
-            )
-
-            return response.output_text
-        except Exception as e:
-            ontology_construction_logger.error(
-                f"OntologySimplificationAgent\nOntology simplification failed: {str(e)}"
-            )
-            return ""
+        return get_clean_json(response.output_text)
 
 
-class OntologyClarityEnhancementAgent(BaseAgent):
+class OntologyEnhancementAgent(BaseAgent):
     """
-    An agent responsible for enhancing the clarity of the ontology.
+    An agent responsible for enhancing the ontology.
     """
 
     async def handle_task(self, **kwargs) -> str:
         """
         Parameters:
           ontology (dict): The existing ontology.
+          evaluation_feedback (str): The evaluation feedback on the ontology
+          openai_model (str): The model to use.
         """
+        ontology_construction_logger.info(f"OntologyEnhancementAgent is called")
 
-        system_prompt = PROMPT["ONTOLOGY_CLARITY_ENHANCEMENT"].format(
+        system_prompt = PROMPT["ONTOLOGY_ENHANCEMENET"].format(
             ontology_purpose=self.agent_system.ontology_purpose
         )
-        user_prompt = get_formatted_ontology(data=kwargs.get("ontology", {}) or {})
+        ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
 
-        ontology_construction_logger.info(f"OntologyClarityEnhancementAgent is called")
-        #   ontology_construction_logger.debug(f"System Prompt:\n\n{system_prompt}")
+        evaluation_feedback = kwargs.get("evaluation_feedback", "")
+        formatted_ontology = "Current ontology:\n" + get_formatted_ontology(
+            data=kwargs.get("ontology", {}) or {}
+        )
+        user_prompt = evaluation_feedback + "\n" + formatted_ontology
+        ontology_construction_logger.debug(f"User Prompt:\n\n{user_prompt}")
 
-        try:
-            response = await fetch_responses_openai(
-                model="o4-mini",
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                text={"format": {"type": "text"}},
-                reasoning={"effort": "medium"},
-                max_output_tokens=100000,
-                tools=[],
-            )
+        response = await fetch_responses_openai(
+            model=kwargs.get("openai_model", "gpt-5-mini"),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "medium"},
+            max_output_tokens=128000,
+            tools=[],
+        )
 
-            ontology_construction_logger.info(
-                f"OntologyClarityEnhancementAgent\nOntology clarity enhancement response details:\n{get_formatted_openai_response(response)}"
-            )
+        ontology_construction_logger.info(
+            f"OntologyEnhancementAgent\nOntology enhancement response details:\n{get_formatted_openai_response(response)}"
+        )
 
-            return response.output_text
-        except Exception as e:
-            ontology_construction_logger.error(
-                f"OntologyClarityEnhancementAgent\nOntology clarity enhancement failed: {str(e)}"
-            )
-            return ""
+        return get_clean_json(response.output_text)
 
 
 class OntologyConstructionSystem(BaseMultiAgentSystem):
     def __init__(
         self,
-        mongo_client: MongoClient,
+        mongo_client: AsyncIOMotorClient,
         ontology_purpose: str,
         ontology_config: MongoStorageConfig,
+        ontology_evaluation_config: MongoStorageConfig,
     ):
         super().__init__(
             {
                 "OntologyConstructionAgent": OntologyConstructionAgent(
                     "OntologyConstructionAgent"
                 ),
-                "OntologySimplificationAgent": OntologySimplificationAgent(
-                    "OntologySimplificationAgent"
+                "OntologyEvaluationAgent": OntologyEvaluationAgent(
+                    "OntologyEvaluationAgent"
                 ),
-                "OntologyClarityEnhancementAgent": OntologyClarityEnhancementAgent(
-                    "OntologyClarityEnhancementAgent"
+                "OntologyEnhancementAgent": OntologyEnhancementAgent(
+                    "OntologyEnhancementAgent"
                 ),
             }
         )
-        try:            
-            self.ontology_config=ontology_config
-            self.mongo_storage = MongoDBStorage(mongo_client)
-
+        try:
+            self.ontology_config = ontology_config
+            self.ontology_evaluation_config = ontology_evaluation_config
+            self.mongo_storage = AsyncMongoDBStorage(mongo_client)
             self.ontology_purpose = ontology_purpose
         except Exception as e:
             ontology_construction_logger.error(f"OntologyConstructionSystem: {e}")
-            raise ValueError(f"Failed to initialize OntologyConstructionSystem: {e}")
+            raise
 
-    async def handle_request(self, **kwargs) -> None:
-        """
-        Parameters:
-          source_text (str): Source text to parse.
-        """
-        source_text = kwargs.get("source_text", "NA") or "NA"
+    async def extend_ontology(
+        self,
+        source_text: str,
+        source_text_constraints: str,
+        openai_model: str = "gpt-5-mini",
+    ):
+        # Step 1: Fetch the latest ontology and its version
+        current_onto = await self.get_current_onto()
+        current_onto_version = await self.get_current_onto_version()
 
-        await self.extend_ontology(source_text=source_text)
-        await self.simplify_ontology()
-        await self.enhance_ontology_clarity()
+        # Step 2: Call construction agent
+        construction_response = await self.agents[
+            "OntologyConstructionAgent"
+        ].handle_task(
+            source_text=source_text,
+            source_text_constraints=source_text_constraints,
+            ontology=current_onto,
+            openai_model=openai_model,
+        )
+        if not construction_response:
+            ontology_construction_logger.error(
+                "Ontology construction returned no output."
+            )
+            return
 
-    async def extend_ontology(self, source_text: str):
-        current_onto = self.get_current_onto()
-        current_onto_version = self.get_current_onto_version()
+        # Step 3: Upload changes to mongodb
+        async with self.mongo_storage.with_transaction() as session:
 
-        # Step 1: Call construction agent
-        try:
-            raw_response = await self.agents["OntologyConstructionAgent"].handle_task(
-                source_text=source_text,
+            # Step 3.1 Mark the 'is_latest' of current ontology to false
+            await self.mongo_storage.get_database(
+                self.ontology_config["database_name"]
+            ).get_collection(self.ontology_config["collection_name"]).update_document(
+                query={"is_latest": True},
+                update_data={"is_latest": False},
+                session=session,
+            )
+
+            # Step 3.2 Prepare the ontology entry to be uploaded
+            modifications = []
+
+            new_entities = construction_response.pop("entities", {})
+            new_relationships = construction_response.pop("relationships", {})
+
+            current_onto["entities"].update(new_entities)
+            current_onto["relationships"].update(new_relationships)
+
+            for entity_name in new_entities:
+                modifications.append(
+                    {
+                        "modification_made": f"Added {entity_name}",
+                    }
+                )
+            for rel_name in new_relationships:
+                modifications.append(
+                    {
+                        "modification_made": f"Added {rel_name}",
+                    }
+                )
+
+            new_version = get_new_version(
+                current_version=current_onto_version, update_type="PATCH"
+            )
+            new_ontology_entry = get_formatted_ontology_entry_for_db(
                 ontology=current_onto,
+                model=openai_model,
+                purpose=self.ontology_purpose,
+                version=new_version,
+                modification_type="EXTENSION",
+                modifications=modifications,
+                note=construction_response["note"],
             )
-            if not raw_response:
-                raise ValueError("Ontology construction returned no output.")
-        except Exception as e:
-            raise ValueError(f"Error while constructing ontology: {e}")
 
-        # Step 2: Format response into json
-        try:
-            response = get_clean_json(raw_response)
-            new_entities = response.pop("entities", {})
-            new_relationships = response.pop("relationships", {})
-
-        except Exception as e:
-            raise ValueError(f"Error while converting ontology to json: {e}")
-
-        # Step 3: Prepare the ontology to be uploaded
-        if "entities" not in current_onto:
-            current_onto["entities"] = {}
-
-        if "relationships" not in current_onto:
-            current_onto["relationships"] = {}
-
-        current_onto["entities"].update(new_entities)
-        current_onto["relationships"].update(new_relationships)
-
-        # Step 3.5: Track modifications made
-        modification_made = []
-
-        for entity_name in new_entities:
-            modification_made.append(f"Added {entity_name}")
-
-        for rel_name in new_relationships:
-            modification_made.append(f"Added {rel_name}")
-
-        # Step 4: Upload constructed ontology to db
-        try:
-            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).update_document({"is_latest": True}, {"is_latest": False})
-            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).create_document(
-                get_formatted_ontology_for_db(
-                    ontology=current_onto,
-                    model="o4-mini",
-                    purpose=self.ontology_purpose,
-                    version=get_new_version(
-                        current_version=current_onto_version, update_type="PATCH"
-                    ),
-                    modification_type="EXTENSION",
-                    modification_made=modification_made,
-                    modification_rationale=[],
-                )
+            # Step 3.3 Upload the newly constructed ontology entry
+            await self.mongo_storage.get_database(
+                self.ontology_config["database_name"]
+            ).get_collection(self.ontology_config["collection_name"]).create_document(
+                data=new_ontology_entry, session=session
             )
+
             ontology_construction_logger.info(
-                f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}"
+                f"OntologyConstructionSystem\nOntology is updated, current version: {new_version}"
             )
-        except Exception as e:
-            raise ValueError(f"Error while uploading ontology: {e}")
 
-    async def simplify_ontology(self):
-        current_onto = self.get_current_onto()
-        current_onto_version = self.get_current_onto_version()
+    async def get_ontology_evaluation_report(
+        self,
+        openai_model: str = "gpt-5-mini",
+    ):
+        """
+        Evaluates the latest ontology, stores the evaluation report in MongoDB, and returns the report.
+        """
+        # Step 1: Fetch the latest ontology and its version
+        current_onto = await self.get_current_onto()
+        current_onto_version = await self.get_current_onto_version()
 
-        # Step 1: Call simplification agent
-        try:
-            raw_response = await self.agents["OntologySimplificationAgent"].handle_task(
-                ontology=current_onto
-            )
-            if not raw_response:
-                raise ValueError("Ontology simplification returned no output.")
-        except Exception as e:
-            raise ValueError(f"Error while simplifying ontology: {e}")
-
-        # Step 2: Format response into json
-        try:
-            response = get_clean_json(raw_response)
-
-            updated_ontology = response.get("updated_ontology", {})
-            modification_made = response.pop("modification_made", [])
-            modification_rationale = response.pop("modification_rationale", [])
-            entities = updated_ontology.pop("entities", {})
-            relationships = updated_ontology.pop("relationships", {})
-
-        except Exception as e:
-            raise ValueError(f"Error while converting ontology to json: {e}")
-
-        # Step 3: Upload simplified ontology to db
-        try:
-            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).update_document({"is_latest": True}, {"is_latest": False})
-            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).create_document(
-                get_formatted_ontology_for_db(
-                    ontology={"entities": entities, "relationships": relationships},
-                    model="o4-mini",
-                    purpose=self.ontology_purpose,
-                    version=get_new_version(
-                        current_version=current_onto_version, update_type="PATCH"
-                    ),
-                    modification_type="SIMPLIFICATION",
-                    modification_made=modification_made,
-                    modification_rationale=modification_rationale,
-                )
-            )
-            ontology_construction_logger.info(
-                f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}"
-            )
-        except Exception as e:
-            raise ValueError(f"Error while uploading ontology: {e}")
-
-    async def enhance_ontology_clarity(self) -> None:
-        current_onto = self.get_current_onto()
-        current_onto_version = self.get_current_onto_version()
-
-        # Step 1: Call clarity enhancement agent
-        try:
-            raw_response = await self.agents[
-                "OntologyClarityEnhancementAgent"
-            ].handle_task(ontology=current_onto)
-            if not raw_response:
-                raise ValueError("Ontology clarity enhancement returned no output.")
-        except Exception as e:
-            raise ValueError(f"Error while enhancing ontology: {e}")
-
-        # Step 2: Format response into json
-        try:
-            response = get_clean_json(raw_response)
-
-            updated_ontology = response.get("updated_ontology", {})
-            modification_made = response.pop("modification_made", [])
-            modification_rationale = response.pop("modification_rationale", [])
-            entities = updated_ontology.pop("entities", {})
-            relationships = updated_ontology.pop("relationships", {})
-
-        except Exception as e:
-            raise ValueError(f"Error while converting ontology to json: {e}")
-
-        # Step 3: Upload enhanced ontology to db
-        try:
-            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).update_document({"is_latest": True}, {"is_latest": False})
-            self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).create_document(
-                get_formatted_ontology_for_db(
-                    ontology={"entities": entities, "relationships": relationships},
-                    model="o4-mini",
-                    purpose=self.ontology_purpose,
-                    version=get_new_version(
-                        current_version=current_onto_version, update_type="PATCH"
-                    ),
-                    modification_type="CLARITY_ENHANCEMENT",
-                    modification_made=modification_made,
-                    modification_rationale=modification_rationale,
-                )
-            )
-            ontology_construction_logger.info(
-                f"OntologyConstructionSystem\nOntology is updated, current version: {self.get_current_onto_version()}"
-            )
-        except Exception as e:
-            raise ValueError(f"Error while uploading ontology: {e}")
-
-    def get_current_onto(self) -> dict:
-        try:
-            current_latest_onto = self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).read_documents({"is_latest": True})
-            return (
-                current_latest_onto[0].get("ontology", "")
-                if current_latest_onto
-                else {}
-            )
-        except Exception as e:
+        # Step 2: Call construction agent
+        evaluation_response = await self.agents["OntologyEvaluationAgent"].handle_task(
+            ontology=current_onto,
+            openai_model=openai_model,
+        )
+        if not evaluation_response:
             ontology_construction_logger.error(
-                f"OntologyConstructionSystem\nError getting ontology: {e}"
+                "Ontology evaluation returned no output."
             )
-            return {}
+            return
 
-    def get_current_onto_version(self) -> str:
-        try:
-            current_latest_onto = self.mongo_storage.get_database(self.ontology_config["database_name"]).get_collection(self.ontology_config["collection_name"]).read_documents({"is_latest": True})
-            return (
-                current_latest_onto[0].get("version", "1.0.0")
-                if current_latest_onto
-                else "1.0.0"
+        # Step 3: Upload the evaluation report to mongodb
+        async with self.mongo_storage.with_transaction() as session:
+
+            # Step 3.1 Mark the 'is_latest' of current evaluation report entry to false
+            await self.mongo_storage.get_database(
+                self.ontology_evaluation_config["database_name"]
+            ).get_collection(
+                self.ontology_evaluation_config["collection_name"]
+            ).update_document(
+                query={"is_latest": True},
+                update_data={"is_latest": False},
+                session=session,
             )
-        except Exception as e:
+
+            # Step 3.2 Prepare the evaluation report entry to be uploaded
+            new_report_entry = get_formatted_ontology_evaluation_report_entry_for_db(
+                evaluation_result=evaluation_response["evaluation_result"],
+                model=openai_model,
+                version=current_onto_version,
+                purpose=self.ontology_purpose,
+                note=evaluation_response["note"],
+            )
+
+            # Step 3.3 Upload the new evaluation report entry
+            await self.mongo_storage.get_database(
+                self.ontology_evaluation_config["database_name"]
+            ).get_collection(
+                self.ontology_evaluation_config["collection_name"]
+            ).create_document(
+                data=new_report_entry, session=session
+            )
+
+            ontology_construction_logger.info(
+                f"OntologyConstructionSystem\nOntology evaluation report entry is uploaded"
+            )
+
+        return evaluation_response
+
+    async def enhance_ontology(
+        self, evaluation_feedback: dict, openai_model: str = "gpt-5-mini"
+    ):
+        # Step 1: Fetch the latest ontology and its version
+        current_onto = await self.get_current_onto()
+        current_onto_version = await self.get_current_onto_version()
+
+        # Step 2: Call construction agent
+        enhancement_response = await self.agents[
+            "OntologyEnhancementAgent"
+        ].handle_task(
+            evaluation_feedback=get_formatted_ontology_evaluation_report(
+                evaluation_feedback
+            ),
+            ontology=current_onto,
+            openai_model=openai_model,
+        )
+        if not enhancement_response:
             ontology_construction_logger.error(
-                f"OntologyConstructionSystem\nError getting ontology version: {e}"
+                "Ontology evaluation returned no output."
             )
-            return "1.0.0"
+            return
+
+        # Step 3: Upload changes to mongodb
+        async with self.mongo_storage.with_transaction() as session:
+
+            # Step 3.1 Mark the 'is_latest' of current ontology to false
+            await self.mongo_storage.get_database(
+                self.ontology_config["database_name"]
+            ).get_collection(self.ontology_config["collection_name"]).update_document(
+                query={"is_latest": True},
+                update_data={"is_latest": False},
+                session=session,
+            )
+
+            # Step 3.2 Prepare the ontology entry to be uploaded
+            new_version = get_new_version(
+                current_version=current_onto_version, update_type="PATCH"
+            )
+            new_ontology_entry = get_formatted_ontology_entry_for_db(
+                ontology=enhancement_response["updated_ontology"],
+                model=openai_model,
+                purpose=self.ontology_purpose,
+                version=new_version,
+                modification_type="ENHANCEMENT",
+                modifications=enhancement_response["modifications"],
+                note=enhancement_response["note"],
+            )
+
+            # Step 3.3 Upload the newly constructed ontology entry
+            await self.mongo_storage.get_database(
+                self.ontology_config["database_name"]
+            ).get_collection(self.ontology_config["collection_name"]).create_document(
+                data=new_ontology_entry, session=session
+            )
+
+            ontology_construction_logger.info(
+                f"OntologyConstructionSystem\nOntology is updated, current version: {new_version}"
+            )
+
+    async def get_current_onto(self) -> dict:
+        current_latest_onto = await (
+            self.mongo_storage.get_database(self.ontology_config["database_name"])
+            .get_collection(self.ontology_config["collection_name"])
+            .read_documents({"is_latest": True})
+        )
+        return (
+            current_latest_onto[0].get("ontology", "")
+            if current_latest_onto
+            else {"entities": {}, "relationships": {}}
+        )
+
+    async def get_current_onto_version(self) -> str:
+        current_latest_onto = await (
+            self.mongo_storage.get_database(self.ontology_config["database_name"])
+            .get_collection(self.ontology_config["collection_name"])
+            .read_documents({"is_latest": True})
+        )
+        return (
+            current_latest_onto[0].get("version", "1.0.0")
+            if current_latest_onto
+            else "1.0.0"
+        )

@@ -1,5 +1,5 @@
 from typing import Any
-from ..util import get_formatted_current_datetime
+from ..util import get_current_datetime
 
 
 def get_new_version(current_version: str, update_type: str) -> str:
@@ -20,50 +20,6 @@ def get_new_version(current_version: str, update_type: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
-def get_formatted_cq_for_display(data: dict):
-    output_lines = []
-
-    for personality, tasks in data.items():
-        output_lines.append(f"Personality: {personality}")
-        for idx, (task, difficulties) in enumerate(tasks.items(), start=1):
-            output_lines.append(f"  Task {idx}: {task}")
-            for questions in difficulties.values():
-                if isinstance(questions, list):
-                    for question in questions:
-                        output_lines.append(f"    - {question}")
-                else:
-                    output_lines.append(f"    - {questions}")
-        output_lines.append("")
-
-    return "\n".join(output_lines) if output_lines else ""
-
-
-def get_formatted_feedback_for_display(data: dict):
-    output_lines = ["Feedback 1 - Ontology competency evaluation result"]
-
-    competency_eval = data.get("competency_evaluation", {})
-    for personality, tasks in competency_eval.items():
-        output_lines.append(f"  Personality: {personality}")
-        for task, questions in tasks.items():
-            output_lines.append(f"    Task: {task}")
-            for idx, q in enumerate(questions, 1):
-                question = q.get("question", "")
-                difficulty = q.get("difficulty", "")
-                support = q.get("support", "")
-                justification = q.get("justification", "")
-                output_lines.append(f"      {idx}. {question}")
-                output_lines.append(f'      - Difficulty: "{difficulty}"')
-                output_lines.append(f'      - Ontology support: "{support}"')
-                output_lines.append(f'      - Justification: "{justification}"')
-        output_lines.append("")
-
-    summary = data.get("summary", "")
-    output_lines.append(f"Feedback 2 - Ontology structure summary")
-    output_lines.append(f"  {summary}")
-
-    return "\n".join(output_lines)
-
-
 def get_formatted_cq_for_db(
     cq: dict,
     model: str,
@@ -73,7 +29,7 @@ def get_formatted_cq_for_db(
 ) -> dict[str, Any]:
     return {
         "competency_questions": cq,
-        "created_at": get_formatted_current_datetime(timezone),
+        "created_at": get_current_datetime(timezone),
         "model_used": model,
         "onto_purpose": purpose,
         "is_latest": True,
@@ -81,44 +37,63 @@ def get_formatted_cq_for_db(
     }
 
 
-def get_formatted_ontology_for_db(
+def get_formatted_ontology_entry_for_db(
     ontology: dict,
     model: str,
     purpose: str,
     version: str,
     modification_type: str,
-    modification_made: list[str] = [],
-    modification_rationale: list[str] = [],
+    note: str,
+    modifications: list[dict] = [],
     timezone: str = "Asia/Kuala_Lumpur",
 ) -> dict[str, Any]:
     return {
         "ontology": ontology,
-        "created_at": get_formatted_current_datetime(timezone),
-        "model_used": model,
         "onto_purpose": purpose,
-        "modification_type": modification_type,
-        "modification_made": modification_made,
-        "modification_rationale": modification_rationale,
+        "modifications": {
+            "type": modification_type,
+            "changes": modifications,
+            "note": note,
+        },
+        "model_used": model,
+        "created_at": get_current_datetime(timezone),
         "is_latest": True,
         "version": version,
     }
 
 
-def get_formatted_feedback_for_db(
-    feedback: dict,
+def get_formatted_ontology_evaluation_report_entry_for_db(
+    evaluation_result: list[dict],
     model: str,
     purpose: str,
-    is_handled: bool,
-    cq_version: str,
-    onto_version: str,
+    version: str,
+    note: str,
     timezone: str = "Asia/Kuala_Lumpur",
 ) -> dict[str, Any]:
     return {
-        "feedback": feedback,
-        "created_at": get_formatted_current_datetime(timezone),
-        "model_used": model,
+        "evaluation_result": evaluation_result,
+        "note": note,
         "onto_purpose": purpose,
-        "is_handled": is_handled,
-        "evaluated_with_cq_version": cq_version,
-        "feedback_for_onto_version": onto_version,
+        "onto_version": version,
+        "model_used": model,
+        "created_at": get_current_datetime(timezone),
+        "is_latest": True,
     }
+
+
+def get_formatted_ontology_evaluation_report(data: dict):
+    output = []
+    output.append("Evaluation Result:")
+    output.append("\n")
+    if data["evaluation_result"]:
+        for i, result in enumerate(data["evaluation_result"], start=1):
+            output.append(f"Feedback {i}:")
+            output.append(f"  Issue: {result['issue']}")
+            output.append(f"  Impact: {result['impact']}")
+            output.append(f"  Suggestion: {result['suggestion']}")
+            output.append("\n")
+    else:
+        output.append("NA")
+    output.append("\n")
+    output.append(f"Note: {data['note']}")
+    return "\n".join(output)

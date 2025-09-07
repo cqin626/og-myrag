@@ -165,7 +165,7 @@ class RelationshipDeduplicationAgent(BaseAgent):
         # graph_construction_logger.debug(
         #     f"RelationshipDeduplicationAgent\nSystem prompt used:\n{system_prompt}"
         # )
-        
+
         user_prompt_list = kwargs.get("relationship_description") or []
         user_prompt = "\n".join(user_prompt_list)
         # graph_construction_logger.debug(
