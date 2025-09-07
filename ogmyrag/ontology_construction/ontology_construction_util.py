@@ -84,7 +84,6 @@ def get_formatted_ontology_evaluation_report_entry_for_db(
 def get_formatted_ontology_evaluation_report(data: dict):
     output = []
     output.append("Evaluation Result:")
-    output.append("\n")
     if data["evaluation_result"]:
         for i, result in enumerate(data["evaluation_result"], start=1):
             output.append(f"Feedback {i}:")
@@ -94,6 +93,5 @@ def get_formatted_ontology_evaluation_report(data: dict):
             output.append("\n")
     else:
         output.append("NA")
-    output.append("\n")
     output.append(f"Note: {data['note']}")
     return "\n".join(output)

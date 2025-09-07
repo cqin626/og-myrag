@@ -257,6 +257,40 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
                 f"OntologyConstructionSystem\nOntology is updated, current version: {new_version}"
             )
 
+    async def enhance_ontology_via_loop(self, openai_model: str):
+        """
+        Iteration loop that runs up to 5 times.
+        - Iteration 1: always run (if problems exist).
+        - Iteration 2: run only if at least 2 problems remain.
+        - Iteration 3: run only if at least 3 problems remain.
+        - Iteration 4: run only if at least 4 problems remain (last iteration).
+        """
+        iteration = 0
+        while True:
+            ontology_construction_logger.info(
+                f"OntologyConstructionSystem:\nEnhancing ontology via loop. Current iteration {iteration + 1}"
+            )
+            evaluation_report = await self.get_ontology_evaluation_report(
+                openai_model=openai_model
+            )
+            num_of_issues = len(evaluation_report["evaluation_result"])
+
+            if (
+                (iteration == 0 and num_of_issues >= 0)
+                or (iteration == 1 and num_of_issues >= 2)
+                or (iteration == 2 and num_of_issues >= 3)
+                or (iteration == 3 and num_of_issues >= 4)
+            ):
+                await self.enhance_ontology(
+                    evaluation_feedback=evaluation_report, openai_model=openai_model
+                )
+                iteration += 1
+            else:
+                ontology_construction_logger.info(
+                    f"OntologyConstructionSystem:\nStop enhanching ontology via loop. Current iteration {iteration + 1}"
+                )
+                break
+
     async def get_ontology_evaluation_report(
         self,
         openai_model: str = "gpt-5-mini",
