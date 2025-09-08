@@ -89,7 +89,18 @@ class EntityRelationshipExtractionAgent(BaseAgent):
             f"EntityRelatonshipExtractionAgent\System prompt used:\n{system_prompt}"
         )
 
-        constraints = "The following key-value pairs aid in interpreting the source text. Apply these mappings when extracting and storing entities and relationships to maintain consistency and accuracy. This means that if your extraction involves translating a key into its representative value—for example, if the key is `CYT` and the value is `Choo Yan Tiee, the Promoter, Specified Shareholder, major shareholder, Executive Director and Managing Director of our Company`—then instead of extracting `CYT` as the entity name, you should extract `Choo Yan Tiee` as the entity name.\n" + kwargs.get("source_text_constraints") or ""
+        constraints_prefix = (
+            "The following key-value pairs aid in interpreting the source text. "
+            "Apply these mappings when extracting and storing entities and relationships "
+            "to maintain consistency and accuracy. This means that if your extraction "
+            "involves translating a key into its representative value—for example, if the "
+            "key is `CYT` and the value is `Choo Yan Tiee, the Promoter, Specified "
+            "Shareholder, major shareholder, Executive Director and Managing Director of "
+            "our Company`—then instead of extracting `CYT` as the entity name, you should "
+            "extract `Choo Yan Tiee` as the entity name.\n"
+        )
+        constraints_body = kwargs.get("source_text_constraints") or "Constraints not available."
+        constraints = constraints_prefix + constraints_body
         source_text = kwargs.get("source_text") or "NA"
         user_prompt = constraints + source_text
         graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
