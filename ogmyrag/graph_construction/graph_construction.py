@@ -132,7 +132,7 @@ class EntityDeduplicationAgent(BaseAgent):
         graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
 
         response = await fetch_responses_openai(
-            model="o4-mini",
+            model="gpt-5-mini",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             text={"format": {"type": "text"}},
@@ -173,7 +173,7 @@ class RelationshipDeduplicationAgent(BaseAgent):
         )
 
         response = await fetch_responses_openai(
-            model="o4-mini",
+            model="gpt-5-mini",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             text={"format": {"type": "text"}},
