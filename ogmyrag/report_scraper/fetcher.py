@@ -76,7 +76,7 @@ class AnnouncementFetcher(BaseScraper):
                     href = urljoin("https://www.bursamalaysia.com", href)
                 links.append(href)
 
-            if len(data) == per_page: # change to (<) to scrape all (testing purpose: set to 20 (==))
+            if len(data) < per_page: # change to (<) to scrape all (testing purpose: set to 20 (==))
                 break
 
             params["page"] += 1
