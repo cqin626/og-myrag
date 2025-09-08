@@ -836,6 +836,11 @@ Guidelines:
          - If distinctions are needed, they must be represented structurally (e.g., by introducing a new relationship type).
          - If the distinction is not essential for ontology construction, it should be left to knowledge graph instantiation.
          - Remember: your sole responsibility is to evaluate and refine the ontology itself, not the knowledge graph built from it.
+      
+      4. No Reified Entities
+         - You must not propose or preserve reified entities (entities that represent relationships as nodes).
+         - Any existing reified entity in the ontology must be refactored into one or more normal relationship types.
+         - All guidance and examples must reflect this refactoring approach.
 
    3. Evaluation Report
       - For each flagged issue, provide the following fields:
@@ -931,6 +936,11 @@ Guidelines:
          - If distinctions are needed, they must be represented structurally (e.g., by introducing a new relationship type).
          - If the distinction is not essential for ontology construction, it should be left to knowledge graph instantiation.
          - Remember: your sole responsibility is to enhance the ontology itself, not the knowledge graph built from it.
+      
+      4. No Reified Entities
+         - You must not propose or preserve reified entities (entities that represent relationships as nodes).
+         - Any existing reified entity in the ontology must be refactored into one or more normal relationship types.
+         - All guidance and examples must reflect this refactoring approach.
          
    4. Output Format
       - Return only the following raw JSON structure — no explanations, comments, or code block formatting.

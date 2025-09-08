@@ -261,9 +261,12 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         """
         Iteration loop that runs up to 5 times.
         - Iteration 1: always run (if problems exist).
-        - Iteration 2: run only if at least 2 problems remain.
-        - Iteration 3: run only if at least 3 problems remain.
-        - Iteration 4: run only if at least 4 problems remain (last iteration).
+        - Iteration 2: always run (if problems exist).
+        - Iteration 3: run only if at least 2 problems remain.
+        - Iteration 4: run only if at least 3 problems remain.
+        - Iteration 5: run only if at least 4 problems remain.
+        - Iteration 6: run only if at least 5 problems remain (last iteration).
+        - Iteration 7: run only if at least 6 problems remain (last iteration).
         """
         iteration = 0
         while True:
@@ -277,9 +280,12 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
             if (
                 (iteration == 0 and num_of_issues >= 0)
-                or (iteration == 1 and num_of_issues >= 2)
-                or (iteration == 2 and num_of_issues >= 3)
-                or (iteration == 3 and num_of_issues >= 4)
+                or (iteration == 1 and num_of_issues >= 0)
+                or (iteration == 2 and num_of_issues >= 2)
+                or (iteration == 3 and num_of_issues >= 3)
+                or (iteration == 4 and num_of_issues >= 4)
+                or (iteration == 5 and num_of_issues >= 5)
+                or (iteration == 6 and num_of_issues >= 6)
             ):
                 await self.enhance_ontology(
                     evaluation_feedback=evaluation_report, openai_model=openai_model
