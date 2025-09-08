@@ -12,6 +12,6 @@ tqdm
 curl_cffi
 beautifulsoup4
 tiktoken
-google-genai
+google-generativeai
 lxml
 markdown

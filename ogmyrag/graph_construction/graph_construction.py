@@ -85,11 +85,11 @@ class EntityRelationshipExtractionAgent(BaseAgent):
             ontology=formatted_ontology,
             publish_date=kwargs.get("source_text_publish_date", "NA") or "NA",
         )
-        # graph_construction_logger.info(
-        #     f"EntityRelatonshipExtractionAgent\System prompt used:\n{system_prompt}"
-        # )
+        graph_construction_logger.info(
+            f"EntityRelatonshipExtractionAgent\System prompt used:\n{system_prompt}"
+        )
 
-        constraints = kwargs.get("source_text_constraints") or ""
+        constraints = "The following key-value pairs aid in interpreting the source text. Apply these mappings when extracting and storing entities and relationships to maintain consistency and accuracy. This means that if your extraction involves translating a key into its representative value—for example, if the key is `CYT` and the value is `Choo Yan Tiee, the Promoter, Specified Shareholder, major shareholder, Executive Director and Managing Director of our Company`—then instead of extracting `CYT` as the entity name, you should extract `Choo Yan Tiee` as the entity name.\n" + kwargs.get("source_text_constraints") or ""
         source_text = kwargs.get("source_text") or "NA"
         user_prompt = constraints + source_text
         graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
@@ -124,9 +124,9 @@ class EntityDeduplicationAgent(BaseAgent):
         graph_construction_logger.info(f"EntityDeduplicationAgent is called")
 
         system_prompt = PROMPT["ENTITY_DEDUPLICATION"]
-        # graph_construction_logger.debug(
-        #     f"EntityDeduplicationAgent\System prompt used:\n{system_prompt}"
-        # )
+        graph_construction_logger.debug(
+            f"EntityDeduplicationAgent\System prompt used:\n{system_prompt}"
+        )
 
         user_prompt = kwargs.get("entities_to_compare") or ""
         graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
@@ -162,15 +162,15 @@ class RelationshipDeduplicationAgent(BaseAgent):
         graph_construction_logger.info(f"RelationshipDeduplicationAgent is called")
 
         system_prompt = PROMPT["RELATIONSHIP_DEDUPLICATION"]
-        # graph_construction_logger.debug(
-        #     f"RelationshipDeduplicationAgent\nSystem prompt used:\n{system_prompt}"
-        # )
+        graph_construction_logger.debug(
+            f"RelationshipDeduplicationAgent\nSystem prompt used:\n{system_prompt}"
+        )
 
         user_prompt_list = kwargs.get("relationship_description") or []
         user_prompt = "\n".join(user_prompt_list)
-        # graph_construction_logger.debug(
-        #     f"RelationshipDeduplicationAgent\nUser prompt used:\n{user_prompt}"
-        # )
+        graph_construction_logger.debug(
+            f"RelationshipDeduplicationAgent\nUser prompt used:\n{user_prompt}"
+        )
 
         response = await fetch_responses_openai(
             model="o4-mini",
@@ -193,8 +193,10 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
     def __init__(
         self,
         async_mongo_client: AsyncIOMotorClient,
+        async_mongo_client_reports: AsyncIOMotorClient,
         ontology_config: MongoStorageConfig,
         disclosure_config: MongoStorageConfig,
+        constraints_config: MongoStorageConfig,
         entity_config: MongoStorageConfig,
         relationship_config: MongoStorageConfig,
         entity_cache_config: MongoStorageConfig,
@@ -221,6 +223,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         try:
             self.ontology_config = ontology_config
             self.disclosure_config = disclosure_config
+            self.constraints_config = constraints_config
             self.entity_config = entity_config
             self.relationship_config = relationship_config
             self.entity_cache_config = entity_cache_config
@@ -231,6 +234,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 entities_deduplication_pending_tasks_config
             )
             self.async_mongo_storage = AsyncMongoDBStorage(async_mongo_client)
+            self.async_mongo_storage_reports = AsyncMongoDBStorage(async_mongo_client_reports)
 
             # Both indices use the same OpenAI API Key and PineconeAPI Key at the current momment
             self.pinecone_storage = PineconeStorage(
@@ -375,10 +379,10 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
     async def _get_parsing_constraints(self, from_company: str, published_at: str):
         try:
             raw_constraints = (
-                await self.async_mongo_storage.get_database(
-                    self.disclosure_config["database_name"]
+                await self.async_mongo_storage_reports.get_database(
+                    self.constraints_config["database_name"]
                 )
-                .get_collection(self.disclosure_config["collection_name"])
+                .get_collection(self.constraints_config["collection_name"])
                 .read_documents(
                     {
                         "from_company": from_company,
@@ -400,7 +404,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
     ) -> list[dict]:
         try:
             raw_documents = (
-                await self.async_mongo_storage.get_database(
+                await self.async_mongo_storage_reports.get_database(
                     self.disclosure_config["database_name"]
                 )
                 .get_collection(self.disclosure_config["collection_name"])
@@ -518,24 +522,25 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     .get_collection(self.relationship_config["collection_name"])
                     .create_documents(data=formatted_relationships, session=session)
                 )
-
-                # Step 3: Update the company disclosure as processed
-                await self.async_mongo_storage.get_database(
-                    self.disclosure_config["database_name"]
-                ).get_collection(
-                    self.disclosure_config["collection_name"]
-                ).update_document(
-                    query={"_id": data["document_id"]},
-                    update_data={"is_parsed": True},
-                    session=session,
-                )
-
+                
                 graph_construction_logger.info(
                     f"GraphConstructionSystem\nSuccessfully inserted {len(inserted_entity_ids)} entity(ies) and {len(inserted_relationship_ids)} relationship(s) into MongoDB."
                 )
-                graph_construction_logger.info(
-                    f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
-                )
+
+            # Step 3: Update the company disclosure as processed
+            # Since the reports are currently stored in different locations. This operation cannot be placed into a single transaction
+            await self.async_mongo_storage_reports.get_database(
+                self.disclosure_config["database_name"]
+            ).get_collection(
+                self.disclosure_config["collection_name"]
+            ).update_document(
+                query={"_id": data["document_id"]},
+                update_data={"is_parsed": True},
+            )
+                
+            graph_construction_logger.info(
+                f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
+            )
 
     async def deduplicate_entities(
         self,

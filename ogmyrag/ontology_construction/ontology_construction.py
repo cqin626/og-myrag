@@ -95,7 +95,7 @@ class OntologyEvaluationAgent(BaseAgent):
             tools=[],
         )
         ontology_construction_logger.info(
-            f"OntologyEvaluationAgent\nOntology simplification response details:\n{get_formatted_openai_response(response)}"
+            f"OntologyEvaluationAgent\nOntology evaluation response details:\n{get_formatted_openai_response(response)}"
         )
 
         return get_clean_json(response.output_text)

@@ -99,3 +99,53 @@ async def fetch_reports_along_with_constraints(
         to_process["published_at"] = files[0]["published_at"]
 
     return to_process
+
+
+async def update_is_parsed_status_of_reports(
+    async_mongo_storage_reports: AsyncMongoDBStorage,
+    company_disclosures_config: MongoStorageConfig,
+    file_names: list[str],
+    updated_is_parsed: bool,
+):
+    """
+    Created to cater the current storage structure of reports
+    """
+    return (
+        await async_mongo_storage_reports.get_database(
+            company_disclosures_config["database_name"]
+        )
+        .get_collection(company_disclosures_config["collection_name"])
+        .update_documents(
+            query={"name": {"$in": file_names}},
+            update={"$set": {"is_parsed": updated_is_parsed}},
+        )
+    )
+
+
+async def get_company_reports(
+    async_mongo_storage_reports: AsyncMongoDBStorage,
+    company_disclosures_config: MongoStorageConfig,
+    from_company: str,
+    type: str,
+    is_parsed: bool,
+):
+    """
+    Created to cater the current storage structure of reports
+    """
+    files = (
+        await async_mongo_storage_reports.get_database(
+            company_disclosures_config["database_name"]
+        )
+        .get_collection(company_disclosures_config["collection_name"])
+        .read_documents(
+            query={"from_company": from_company, "type": type, "is_parsed": is_parsed},
+        )
+    )
+    return [
+        {
+            "file_name": file["name"],
+            "is_parsed": file["is_parsed"],
+            "published_at": file["published_at"],
+        }
+        for file in files
+    ]
