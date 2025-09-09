@@ -99,7 +99,9 @@ class EntityRelationshipExtractionAgent(BaseAgent):
             "our Company`—then instead of extracting `CYT` as the entity name, you should "
             "extract `Choo Yan Tiee` as the entity name.\n"
         )
-        constraints_body = kwargs.get("source_text_constraints") or "Constraints not available."
+        constraints_body = (
+            kwargs.get("source_text_constraints") or "Constraints not available."
+        )
         constraints = constraints_prefix + constraints_body
         source_text = kwargs.get("source_text") or "NA"
         user_prompt = constraints + source_text
@@ -245,7 +247,9 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 entities_deduplication_pending_tasks_config
             )
             self.async_mongo_storage = AsyncMongoDBStorage(async_mongo_client)
-            self.async_mongo_storage_reports = AsyncMongoDBStorage(async_mongo_client_reports)
+            self.async_mongo_storage_reports = AsyncMongoDBStorage(
+                async_mongo_client_reports
+            )
 
             # Both indices use the same OpenAI API Key and PineconeAPI Key at the current momment
             self.pinecone_storage = PineconeStorage(
@@ -533,7 +537,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     .get_collection(self.relationship_config["collection_name"])
                     .create_documents(data=formatted_relationships, session=session)
                 )
-                
+
                 graph_construction_logger.info(
                     f"GraphConstructionSystem\nSuccessfully inserted {len(inserted_entity_ids)} entity(ies) and {len(inserted_relationship_ids)} relationship(s) into MongoDB."
                 )
@@ -542,13 +546,11 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             # Since the reports are currently stored in different locations. This operation cannot be placed into a single transaction
             await self.async_mongo_storage_reports.get_database(
                 self.disclosure_config["database_name"]
-            ).get_collection(
-                self.disclosure_config["collection_name"]
-            ).update_document(
+            ).get_collection(self.disclosure_config["collection_name"]).update_document(
                 query={"_id": data["document_id"]},
                 update_data={"is_parsed": True},
             )
-                
+
             graph_construction_logger.info(
                 f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
             )
@@ -1546,16 +1548,16 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             return
 
         try:
-            collection = self.async_mongo_storage.get_database(
-                config["database_name"]
-            ).get_collection(config["collection_name"])
-
-            result = await collection.update_documents(
-                query={
-                    "status": from_status,
-                    "originated_from": {"$in": [from_company]},
-                },
-                update={"$set": {"status": to_status}},
+            result = (
+                await self.async_mongo_storage.get_database(config["database_name"])
+                .get_collection(config["collection_name"])
+                .update_documents(
+                    query={
+                        "status": from_status,
+                        "originated_from": {"$in": [from_company]},
+                    },
+                    update={"$set": {"status": to_status}},
+                )
             )
 
             graph_construction_logger.info(
@@ -1756,6 +1758,23 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 raise
         graph_construction_logger.info(
             f"GraphConstructionSystem\nFinished upserting relationships into Neo4j. Total relationships processed: {total_processed}."
+        )
+
+
+    async def get_entity_count(self, query: dict):
+        return await (
+            self.async_mongo_storage.get_database(self.entity_config["database_name"])
+            .get_collection(self.entity_config["collection_name"])
+            .get_doc_counts(query=query)
+        )
+
+    async def get_relationship_count(self, query: dict):
+        return await (
+            self.async_mongo_storage.get_database(
+                self.relationship_config["database_name"]
+            )
+            .get_collection(self.relationship_config["collection_name"])
+            .get_doc_counts(query=query)
         )
 
     async def get_formatted_similar_entities_from_pinecone(
