@@ -83,12 +83,13 @@ class ChatAgent(BaseAgent):
         formatted_response["id"] = response.id
 
         return formatted_response
-    
+
 
 class RAGAgent(BaseAgent):
     """
     An agent that runs Pinecone-based RAG and returns a structured payload.
     """
+
     def __init__(self, agent_name: str, pinecone_config: dict):
         super().__init__(agent_name)
         # pinecone storage for RAG
@@ -184,7 +185,9 @@ class RAGAgent(BaseAgent):
                 )
                 graph_retrieval_logger.info("RAGAgent: completed RAG for query=%r", q)
             except Exception as e:
-                graph_retrieval_logger.error("RAGAgent error during RAG call for %r: %s", q, e)
+                graph_retrieval_logger.error(
+                    "RAGAgent error during RAG call for %r: %s", q, e
+                )
                 res = {
                     "answer": "Failed to generate an answer.",
                     "hits": [],
@@ -243,7 +246,6 @@ class RAGAgent(BaseAgent):
                 "results": by_query  # mapping: query -> formatted per-query response
             },
         }
-
 
 
 class RequestDecompositionAgent(BaseAgent):
@@ -405,7 +407,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         ontology_config: MongoStorageConfig,
         entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
-        rag_vector_config: PineconeStorageConfig
+        rag_vector_config: PineconeStorageConfig,
     ):
         super().__init__(
             {
@@ -450,97 +452,125 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         top_k_for_similarity: int,
         similarity_threshold: float = 0.5,
     ):
-        # Step 1 : Pass the user request to the ChatAgent
         yield "## Calling ChatAgent..."
         chat_agent_response = await self.agents["ChatAgent"].handle_task(
             chat_input=user_request,
             similarity_threshold=similarity_threshold,
             previous_chat_id=self.current_chat_id,
         )
-        self._update_current_chat_id(chat_agent_response["id"])
 
-        # Step 3 : Check if ChatAgent returns any response to display
-        if chat_agent_response["type"] == "RESPONSE_GENERATION":
-            yield chat_agent_response["payload"]["response"]
-
-        # Step 4 : Check if ChatAgent tries to call EntityValidationTool
-        elif chat_agent_response["type"] == "CALLING_ENTITIES_VALIDATION_TOOL":
-            # Step 4.1 : Validate the entities
-            yield "Validating entities in the query..."
-            similar_entities = await self.pinecone_storage.get_index(
-                self.entity_vector_config["index_name"]
-            ).get_similar_results(
-                query_texts=chat_agent_response["payload"]["entities_to_validate"],
-                top_k=top_k_for_similarity,
-                score_threshold=similarity_threshold,
-            )
-            formatted_similar_entities = get_formatted_similar_entities(
-                query_texts=chat_agent_response["payload"]["entities_to_validate"],
-                results=similar_entities,
-            )
-            yield formatted_similar_entities
-
-            # Step 4.2 : Feed the entities to ChatAgent for further processing
-            yield "Processing validated entities..."
-            chat_agent_response = await self.agents["ChatAgent"].handle_task(
-                chat_input=formatted_similar_entities,
-                similarity_threshold=similarity_threshold,
-                previous_chat_id=self.current_chat_id,
-            )
+        tool_call = 0
+        while True:
             self._update_current_chat_id(chat_agent_response["id"])
 
-            if chat_agent_response["type"] != "RESPONSE_GENERATION":
-                yield "Unexpected error occur. Please contact the developer."
-            yield chat_agent_response["payload"]["response"]
-
-        # Step 5 : Check if tries to call GraphRAGAgent
-        elif chat_agent_response["type"] == "CALLING_GRAPH_RAG_AGENT":
-            # Step 5.1 : Decompose and rephrase the user request
-            yield "## Calling RequestDecompositionAgent"
-            request_decomposition_agent_response = await self.agents[
-                "RequestDecompositionAgent"
-            ].handle_task(
-                user_request=chat_agent_response["payload"]["user_request"],
-                validated_entities=chat_agent_response["payload"]["validated_entities"],
-            )
-            yield get_formatted_decomposed_request(request_decomposition_agent_response)
-
-            # Step 5.2 : Process the sub-request(s) concurrenctly
-            subrequests = request_decomposition_agent_response["requests"]
-            latest_ontology = await self._get_latest_ontology()
-            gens = []
-
-            for i, subrequest in enumerate(subrequests, start=1):
-                agent_name = f"Query Agent {i}"
-                gens.append(
-                    self._process_subrequest(
-                        agent_name=agent_name,
-                        sub_request=subrequest["sub_request"],
-                        validated_entities=subrequest["validated_entities"],
-                        ontology=latest_ontology,
-                    )
+            if tool_call == 3:
+                chat_agent_response = await self.agents["ChatAgent"].handle_task(
+                    chat_input="You have reached the maximum number of tool calls. You must generate the result based on the retrieved data regardless of its quality.",
+                    similarity_threshold=similarity_threshold,
+                    previous_chat_id=self.current_chat_id,
                 )
+                continue
 
-            # Fan-in results from all subrequests
-            final_response=None
-            async for result in self._fan_in_generators(gens):
-                yield result
-                if isinstance(result, str) and result.startswith("Combined Final Response from QueryAgents"):
-                    final_response = result
-
-            # Step 5.3 : Generating final result
-            yield "## Calling ChatAgent..."
-            chat_agent_response = await self.agents["ChatAgent"].handle_task(
-                chat_input=final_response,
-                similarity_threshold=similarity_threshold,
-                previous_chat_id=self.current_chat_id,
-            )
-            self._update_current_chat_id(chat_agent_response["id"])
             if chat_agent_response["type"] == "RESPONSE_GENERATION":
                 yield chat_agent_response["payload"]["response"]
-        else:
-            yield "Unexpected error occur. Please contact the developer."
-            
+                break
+
+            elif chat_agent_response["type"] == "CALLING_ENTITY_VALIDATION_TOOL":
+                yield "Validating entities in the query..."
+                similar_entities = await self.pinecone_storage.get_index(
+                    self.entity_vector_config["index_name"]
+                ).get_similar_results(
+                    query_texts=chat_agent_response["payload"]["entities_to_validate"],
+                    top_k=top_k_for_similarity,
+                    score_threshold=similarity_threshold,
+                )
+                formatted_similar_entities = get_formatted_similar_entities(
+                    query_texts=chat_agent_response["payload"]["entities_to_validate"],
+                    results=similar_entities,
+                )
+                yield formatted_similar_entities
+
+                yield "Processing validated entities..."
+                chat_agent_response = await self.agents["ChatAgent"].handle_task(
+                    chat_input=formatted_similar_entities,
+                    similarity_threshold=similarity_threshold,
+                    previous_chat_id=self.current_chat_id,
+                )
+
+            elif chat_agent_response["type"] == "CALLING_GRAPH_RAG_AGENT":
+                yield "## Calling RequestDecompositionAgent..."
+                request_decomposition_agent_response = await self.agents[
+                    "RequestDecompositionAgent"
+                ].handle_task(
+                    user_request=chat_agent_response["payload"]["request"],
+                    validated_entities=chat_agent_response["payload"][
+                        "validated_entities"
+                    ],
+                )
+                yield get_formatted_decomposed_request(
+                    request_decomposition_agent_response
+                )
+
+                # Process the decomposed subrequests concurrently
+                subrequests = request_decomposition_agent_response["requests"]
+                latest_ontology = await self._get_latest_ontology()
+                gens = []
+
+                for i, subrequest in enumerate(subrequests, start=1):
+                    agent_name = f"Query Agent {i}"
+                    gens.append(
+                        self._process_subrequest(
+                            agent_name=agent_name,
+                            sub_request=subrequest["sub_request"],
+                            validated_entities=subrequest["validated_entities"],
+                            ontology=latest_ontology,
+                        )
+                    )
+
+                # Fan-in results from all subrequests
+                final_response = None
+                async for result in self._fan_in_generators(gens):
+                    yield result
+                    if isinstance(result, str) and result.startswith(
+                        "Combined Final Response from QueryAgents"
+                    ):
+                        final_response = result
+
+                # Generate final result
+                yield "Processing combined final response..."
+                chat_agent_response = await self.agents["ChatAgent"].handle_task(
+                    chat_input=final_response,
+                    similarity_threshold=similarity_threshold,
+                    previous_chat_id=self.current_chat_id,
+                )
+                tool_call += 1
+
+            elif chat_agent_response["type"] == "CALLING_VECTOR_RAG_AGENT":
+                yield "## Calling VectorRAGAgent..."
+                request = chat_agent_response["payload"]["request"]
+
+                rag_agent_response = await self.agents["RAGAgent"].handle_task(
+                    user_query=request,
+                    top_k=top_k_for_similarity,
+                )
+
+                results = rag_agent_response["payload"]["results"]
+                entry = results[request]
+                answer = entry["payload"]["answer"]
+
+                yield f"Retrieved result by the VectorRAGAgent:\n{answer}"
+                yield "Processing retrieved result from the VectorRAGAgent..."
+                chat_agent_response = await self.agents["ChatAgent"].handle_task(
+                    chat_input=answer,
+                    similarity_threshold=similarity_threshold,
+                    previous_chat_id=self.current_chat_id,
+                )
+                tool_call += 1
+
+            else:
+                yield "Unexpected error occur. Please contact the developer."
+                break
+
     async def rag_query(
         self,
         user_request: str | list[str],
@@ -550,18 +580,18 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         """
         for RAG testing purposes
         """
-         # normalize to list and strip empties
+        # normalize to list and strip empties
         queries = user_request if isinstance(user_request, list) else [user_request]
         queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
 
         # RAG: Pass the a list of user query to RAG Agent
         yield "## Calling RAGAgent..."
         rag_agent_response = await self.agents["RAGAgent"].handle_task(
-            user_query = queries,
-            top_k = top_k_for_similarity,
+            user_query=queries,
+            top_k=top_k_for_similarity,
         )
 
-        results = ((rag_agent_response.get("payload") or {}).get("results") or {})
+        results = (rag_agent_response.get("payload") or {}).get("results") or {}
         multi = len(queries) > 1
 
         for q in queries:
@@ -570,9 +600,12 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
             if entry is None:
                 norm = q.strip().casefold()
                 entry = next(
-                    (v for k, v in results.items()
-                    if isinstance(k, str) and k.strip().casefold() == norm),
-                    None
+                    (
+                        v
+                        for k, v in results.items()
+                        if isinstance(k, str) and k.strip().casefold() == norm
+                    ),
+                    None,
                 )
 
             answer = (((entry or {}).get("payload")) or {}).get("answer", "") or ""
@@ -628,9 +661,11 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
 
         # Ensure cleanup
         await asyncio.gather(*tasks)
-        
+
         final_response_str = "\n".join(final_responses)
-        graph_retrieval_logger.debug(f"Checking the final response: \n{final_response_str}")
+        graph_retrieval_logger.debug(
+            f"Checking the final response: \n{final_response_str}"
+        )
 
         if final_responses:
             combined = "\n\n".join(final_responses)
@@ -684,14 +719,20 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
             while current_iteration < max_iteration:
                 # Step 2.1: Convert natural query → Cypher
                 yield f"## Calling Text2Cypher Agent for {agent_name}..."
-                text2cypher_agent_response = await self.agents["Text2CypherAgent"].handle_task(
+                text2cypher_agent_response = await self.agents[
+                    "Text2CypherAgent"
+                ].handle_task(
                     user_query=query_agent_response["payload"]["query"],
-                    validated_entities=query_agent_response["payload"]["validated_entities"],
+                    validated_entities=query_agent_response["payload"][
+                        "validated_entities"
+                    ],
                     ontology=ontology,
                     note=query_agent_response["payload"]["note"],
                     previous_response_id=previous_text2_cypher_agent_response_id,
                 )
-                previous_text2_cypher_agent_response_id = text2cypher_agent_response["id"]
+                previous_text2_cypher_agent_response_id = text2cypher_agent_response[
+                    "id"
+                ]
 
                 # Step 2.2: Run Cypher query
                 cypher_retrieval_result = await self.graph_storage.run_query(
@@ -715,7 +756,9 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                         user_request=get_formatted_input_for_query_agent(
                             type="REPORT_GENERATION",
                             payload={
-                                "retrieval_result": get_formatted_cypher_retrieval_result(cypher_retrieval_result),
+                                "retrieval_result": get_formatted_cypher_retrieval_result(
+                                    cypher_retrieval_result
+                                ),
                                 "cypher_query": get_formatted_cypher(
                                     query=text2cypher_agent_response["cypher_query"],
                                     params=text2cypher_agent_response["parameters"],
@@ -741,7 +784,9 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                         user_request=get_formatted_input_for_query_agent(
                             type="RETRIEVAL_RESULT_EVALUATION",
                             payload={
-                                "retrieval_result": get_formatted_cypher_retrieval_result(cypher_retrieval_result),
+                                "retrieval_result": get_formatted_cypher_retrieval_result(
+                                    cypher_retrieval_result
+                                ),
                                 "cypher_query": get_formatted_cypher(
                                     query=text2cypher_agent_response["cypher_query"],
                                     params=text2cypher_agent_response["parameters"],
@@ -772,4 +817,3 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 current_iteration += 1
         else:
             yield f"**{agent_name}:** Unexpected error occurred. Please contact the developer."
-
