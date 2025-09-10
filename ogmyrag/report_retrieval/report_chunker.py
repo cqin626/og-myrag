@@ -225,7 +225,7 @@ async def rag_answer_with_company_detection(
     pine: PineconeStorage,
     pinecone_config: PineconeStorageConfig,
     *,
-    query: str,
+    query: Optional[str] = None,
     top_k: int = 10,
     data_namespace: str = "",                 # your chunk namespace (default "")
     catalog_namespace: str = "company-catalog",
@@ -239,28 +239,49 @@ async def rag_answer_with_company_detection(
     max_company_candidates: int = 500,        # cap company list to keep prompt small
     max_context_chars: int = 6000,            # cap context passed to the answer model
     score_threshold: Optional[float] = None,  # drop low scores if desired
+    max_concurrency: int = 4,
+    # NEW: debug knobs
+    return_hits: bool = False,
+    hits_per_subquery: int = 5,
+    hits_preview_chars: int = 240,
 ) -> Dict[str, Any]:
     """
-    End-to-end RAG:
-      1) Read company names from Pinecone catalog namespace (1 vector per company).
-      2) Use a small LLM to detect/normalize a company mention in the query.
-      3) Retrieve top-k chunks from data namespace with exact metadata filter (if detected).
-      4) Call a bigger LLM to produce a grounded answer using only retrieved chunks.
+        End-to-end multi-step RAG (minimal-changes version):
+        0) Receives a single query string (from user_query | query).
+        1) Read company names from Pinecone catalog namespace (1 vector per company).
+        2) Use a small LLM to (a) decompose the user query into sub-queries (if needed),
+            and (b) for each sub-query, detect/normalize a company mention.
+        3) For each sub-query, retrieve top-k chunks from data namespace with exact metadata filter (if detected).
+        4) For each sub-query, call a bigger LLM to produce a grounded answer using only retrieved chunks.
+        5) Synthesize a single final answer from all per-sub-query answers.
+        6) Return {"RAG_RESPONSE": <final answer string>}.
 
-    Returns:
-      {
-        "answer": str,
-        "hits": [ {id, score, text, section, company, year, ...}, ... ],
-        "company_used": Optional[str],
-        "known_companies": List[str],
-        "filter_used": Dict[str, Any]
-      }
+        Returns:
+        { "RAG_RESPONSE": str }
     """
     def _clip(txt: str, n: int = 300) -> str:
         txt = (txt or "").replace("\n", " ").strip()
         return txt if len(txt) <= n else txt[:n] + "…"
     
-    query_logger.info("RAG start | query=%r | top_k=%d", query, top_k)
+    def _fmt_score(s) -> str:
+        try:
+            return f"{float(s):.3f}"
+        except Exception:
+            return "n/a"
+        
+    # helper for compact hit projection (used only if return_hits=True)
+    def _project_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        keep = ("id", "score", "company", "section", "chunk_no", "year", "type")
+        out = []
+        for h in hits:
+            item = {k: h.get(k) for k in keep}
+            item["snippet"] = h.get("text") or ""
+            out.append(item)
+        return out
+    
+    # NEW: unify single input query
+    user_query = (query or "").strip()
+    query_logger.info("RAG start | query=%r | top_k=%d", user_query, top_k)
     
 
 
@@ -334,262 +355,324 @@ async def rag_answer_with_company_detection(
         companies = []
 
     query_logger.info("Catalog companies (%d): %s", len(companies), companies)
-
-
-    # ---------------- (2) Detect/normalize company with a small LLM ----------------
-    company_used: Optional[str] = None
-    detect_usage = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
-    search_query = query
-
-    if companies:
-        detect_system = (
-            """You will be given a user query and a list of CANONICAL company names.
-            Return strict JSON with two keys:
-            1) "companies": array of exact canonical names referenced by the query;
-            2) "normalized_query": the query rewritten for semantic search with ALL company mentions removed
-                while remaining grammatical and self-contained.
-
-            Company-matching rules (case-insensitive):
-            • Match full canonical name OR a meaningful substring/abbreviation.
-            • Before matching, normalize both sides by removing punctuation, extra spaces, and common corporate suffixes
-            (Holdings, Berhad, Bhd, Sdn Bhd, Ltd, Limited, PLC, Inc, Co, Corp, Corporation, Company).
-            • Substring must be ≥ 4 alphanumeric characters. Do NOT invent names.
-
-            Normalized-query rules:
-            • Replace any detected company mentions (and their possessives) with “the company” (or “the company’s” for possessive)
-            if removing them would make the sentence ungrammatical or unclear.
-            • If removing a trailing prepositional fragment (“of <company>”, “for <company>”, etc.) causes a dangling phrase,
-            adjust the wording to keep the sentence fluent (e.g., drop the preposition or reattach it to “the company”).
-            • Preserve the rest of the user intent; NEVER add facts. Keep years, section labels (e.g., “Practice 1.1”), numbers, and constraints.
-            • Collapse extra whitespace; retain helpful punctuation.
-            • If no company is detected, return the original query.
-
-            Examples:
-            - "What is the mission of Farm Fresh?" → "What is the mission of the company?"
-            - "Who chairs the audit committee for Edelteq?" → "Who chairs the audit committee for the company?"
-            - "What effective tax rate did AutoCount report and why?" → "What effective tax rate did the company report, and why?"
-            - "Farm Fresh CG Practice 1.1" → "CG Practice 1.1"
-            - "Board remuneration in FY2023 for VETECE" → "Board remuneration in FY2023"
-
-            Output EXACT JSON, e.g.:
-            {"companies":["ACME_BERHAD"], "normalized_query":"What is the mission of the company?"}"""
-
-        )
-        detect_msgs = [
-            {"role": "system", "content": detect_system},
-            {"role": "user", "content": f"COMPANIES: {companies}\n\nQUERY: {query}"},
-        ]
-        try:
-            det = await pine.openai.chat.completions.create(
-                model=small_model,
-                messages=detect_msgs,
-                response_format={"type": "json_object"},
-                #temperature=0,
-            )
-            # capture usage safely
-            u = getattr(det, "usage", None)
-            if u:
-                detect_usage["prompt_tokens"] = getattr(u, "prompt_tokens", None)
-                detect_usage["completion_tokens"] = getattr(u, "completion_tokens", None)
-                detect_usage["total_tokens"] = getattr(u, "total_tokens", None)
-
-            
-            raw = det.choices[0].message.content or "{}"
-            obj = json.loads(raw)
-
-            found = (obj.get("companies") or [])
-            if found:
-                company_used = str(found[0]).strip()
-
-            llm_norm = (obj.get("normalized_query") or "").strip()
-            if llm_norm:
-                search_query = llm_norm
-            else:
-                search_query = query
-
-        except Exception:
-            company_used = None  # fall back to no company filter
-            search_query = query
-
-    query_logger.info("Detected company: %r", company_used)
-    if search_query != query:
-        query_logger.info("Search query normalized: %r → %r", query, search_query)
-    else:
-        query_logger.info("Search query unchanged.")
-
-
-    # ---------------- (3) Retrieve top-k chunks from data namespace ----------------
-    # Build exact-match metadata filter (must match your write-path fields).
-    flt: Dict[str, Any] = {}
-    if company_used:
-        flt["from_company"] = company_used
-    if doc_type:
-        flt["type"] = doc_type
-    if report_type_name:
-        flt["report_type_name"] = report_type_name
-    if year:
-        flt["year"] = year
-
-    query_logger.info("Query filter: %s", flt or "{}")
-
-
+    
+    # ---------------- (2a) Decompose the user query into sub-queries ----------------
+    # NEW: ask a small model to break the single query into atomic sub-queries
+    
+    subqueries: List[str] = [user_query]  # default to single if decomposition fails
     try:
-        q_emb = await pine._embed_text(search_query)
-        result = pine.pinecone.Index(pinecone_config["index_name"]).query(
-            vector=q_emb,
-            top_k=top_k,
-            include_metadata=True,
-            namespace=data_namespace,
-            filter=flt or None,
+        decompose_system = (
+            """You will be given a single user query. Decide if it should be decomposed into multiple
+            atomic, answerable sub-queries. Output STRICT JSON with a single key:
+            {"subqueries": ["...", "...", "..."]}
+
+            Rules:
+            - If the query clearly asks multiple distinct things, split them.
+            - Keep each sub-query self-contained and grammatical.
+            - Preserve constraints (years, names, sections) inside each sub-query.
+            - If no decomposition is needed, return the original query as a one-element list.
+            - Do not add facts. Do not mention companies unless the user does.
+            """
         )
-        matches = (result.get("matches") if isinstance(result, dict)
-                   else getattr(result, "matches", [])) or []
+        dec = await pine.openai.chat.completions.create(
+            model=small_model,
+            messages=[
+                {"role": "system", "content": decompose_system},
+                {"role": "user", "content": user_query},
+            ],
+            response_format={"type": "json_object"},
+        )
+        raw = dec.choices[0].message.content or "{}"
+        obj = json.loads(raw)
+        sq = [s.strip() for s in (obj.get("subqueries") or []) if isinstance(s, str) and s.strip()]
+        if sq:
+            subqueries = sq
     except Exception as e:
-        msg = str(e).lower()
-        query_logger.warning("Vector query failed: %s", e)
+        query_logger.warning("Query decomposition failed: %s; proceeding with single query.", e)
 
-        if "namespace not found" in msg or ("404" in msg and "namespace" in msg):
-            matches = []
+    query_logger.info("Sub-queries (%d): %s", len(subqueries), subqueries)
+    
+    # ---------------- helper: per-subquery RAG ----------------
+    async def _run_rag_for_one_subquery(one_query: str) -> Dict[str, Any]:
+        company_used: Optional[str] = None
+        detect_usage = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+        search_query = one_query
+
+        # ---- (2b) Detect/normalize company with a small LLM (per sub-query) ----
+        if companies:
+            detect_system = (
+                """You will be given a user query and a list of CANONICAL company names.
+                Return strict JSON with two keys:
+                1) "companies": array of exact canonical names referenced by the query;
+                2) "normalized_query": the query rewritten for semantic search with ALL company mentions removed
+                   while remaining grammatical and self-contained.
+
+                Company-matching rules (case-insensitive):
+                • Match full canonical name OR a meaningful substring/abbreviation.
+                • Before matching, normalize both sides by removing punctuation, extra spaces, and common corporate suffixes
+                  (Holdings, Berhad, Bhd, Sdn Bhd, Ltd, Limited, PLC, Inc, Co, Corp, Corporation, Company).
+                • Substring must be ≥ 4 alphanumeric characters. Do NOT invent names.
+
+                Normalized-query rules:
+                • Replace any detected company mentions (and their possessives) with “the company” if needed for grammar.
+                • Preserve user intent; never add facts. Keep years, labels, numbers, constraints.
+                • If no company is detected, return the original query.
+
+                Output EXACT JSON, e.g.:
+                {"companies":["ACME_BERHAD"], "normalized_query":"What is the mission of the company?"}"""
+            )
+            detect_msgs = [
+                {"role": "system", "content": detect_system},
+                {"role": "user", "content": f"COMPANIES: {companies}\n\nQUERY: {one_query}"},
+            ]
+            try:
+                det = await pine.openai.chat.completions.create(
+                    model=small_model,
+                    messages=detect_msgs,
+                    response_format={"type": "json_object"},
+                )
+                u = getattr(det, "usage", None)
+                if u:
+                    detect_usage["prompt_tokens"] = getattr(u, "prompt_tokens", None)
+                    detect_usage["completion_tokens"] = getattr(u, "completion_tokens", None)
+                    detect_usage["total_tokens"] = getattr(u, "total_tokens", None)
+
+                raw = det.choices[0].message.content or "{}"
+                obj = json.loads(raw)
+
+                found = (obj.get("companies") or [])
+                if found:
+                    company_used = str(found[0]).strip()
+
+                llm_norm = (obj.get("normalized_query") or "").strip()
+                search_query = llm_norm or one_query
+            except Exception as e:
+                query_logger.warning("Company detection failed for sub-query %r: %s", one_query, e)
+                company_used = None
+                search_query = one_query
+
+        query_logger.info("Detected company for sub-query %r: %r", one_query, company_used)
+        if search_query != one_query:
+            query_logger.info("Search query normalized: %r → %r", one_query, search_query)
         else:
-            # be permissive: empty results on unexpected errors
+            query_logger.info("Search query unchanged for this sub-query.")
+
+        # ---- (3) Retrieve top-k chunks from data namespace ----
+        flt: Dict[str, Any] = {}
+        if company_used:
+            flt["from_company"] = company_used
+        if doc_type:
+            flt["type"] = doc_type
+        if report_type_name:
+            flt["report_type_name"] = report_type_name
+        if year:
+            flt["year"] = year
+
+        query_logger.info("Query filter (sub-query): %s", flt or "{}")
+
+        try:
+            q_emb = await pine._embed_text(search_query)
+            result = pine.pinecone.Index(pinecone_config["index_name"]).query(
+                vector=q_emb,
+                top_k=top_k,
+                include_metadata=True,
+                namespace=data_namespace,
+                filter=flt or None,
+            )
+            matches = (result.get("matches") if isinstance(result, dict)
+                       else getattr(result, "matches", [])) or []
+        except Exception as e:
+            query_logger.warning("Vector query failed: %s", e)
             matches = []
 
-    # normalize hits and optionally filter by score
-    hits: List[Dict[str, Any]] = []
-    for m in matches:
-        meta = m.get("metadata") or {}
-        hit = {
-            "id": m.get("id"),
-            "score": m.get("score"),
-            "text": meta.get("text") or meta.get("chunk_text") or "",
-            "section": meta.get("section"),
-            "company": meta.get("from_company"),
-            "type": meta.get("type"),
-            "chunk_no": meta.get("chunk_no"),
-            "year": meta.get("year"),
-            "metadata": meta,
-        }
-        if score_threshold is None or (hit["score"] is not None and hit["score"] >= score_threshold):
-            hits.append(hit)
-    hits.sort(key=lambda h: (h["score"] is not None, h["score"]), reverse=True)
-    hits = hits[:top_k]
+        hits: List[Dict[str, Any]] = []
+        for m in matches:
+            meta = m.get("metadata") or {}
+            hit = {
+                "id": m.get("id"),
+                "score": m.get("score"),
+                "text": meta.get("text") or meta.get("chunk_text") or "",
+                "section": meta.get("section"),
+                "company": meta.get("from_company"),
+                "type": meta.get("type"),
+                "chunk_no": meta.get("chunk_no"),
+                "year": meta.get("year"),
+                "metadata": meta,
+            }
+            if score_threshold is None or (hit["score"] is not None and hit["score"] >= score_threshold):
+                hits.append(hit)
+        hits.sort(key=lambda h: (h["score"] is not None, h["score"]), reverse=True)
+        hits = hits[:top_k]
 
-
-    # build (unbounded) context string
-    context = "\n\n".join(
-        f"[{i}] id={h.get('id')} · score={h.get('score'):.3f} · section={h.get('section') or ''} · company={h.get('company')}\n{(h.get('text') or '').strip()}"
-        for i, h in enumerate(hits, start=1)
-    )
-    #query_logger.info("Context: %s", context)
-
-    # ---------------- (4) Grounded answer using ONLY the retrieved chunks ----------------
-    sys_prompt = (
-        """You are a precise assistant. Use ONLY the provided context chunks. Be comprehensive and richly detailed, but strictly grounded in the sources.
-
-        Rules:
-        1) Group all context by company (use each chunk's 'company' metadata in the context header).
-        2) NEVER mix facts across companies. If the user names a specific company, answer ONLY for that company and ignore others.
-        3) If multiple companies appear AND the question is generic (no single company specified), evaluate each company separately:
-        - If you have enough evidence for a company, produce an answer for that company.
-        - If not enough evidence for that company, write exactly: "Not found in provided documents."
-        4) No invention of facts. Every material claim (numbers, dates, names, products, events) must be supported by the provided chunks. If no company has sufficient evidence, the entire reply must be exactly: "Not found in provided documents."
-        5) Be thorough yet economical: short paragraphs and tight bullets. Elaborate where the documents allow; never speculate.
-
-        Sourcing & Evidence Policy:
-        - Do NOT place citations inline in Overview, Details, or Metrics. Citations appear ONLY in the final **Evidence** section.
-        - Ensure every material claim in your answer is traceable to at least one item in **Evidence**.
-        - In **Evidence**, use brief verbatim quotes (≤35 words) or precise paraphrases with the exact figure/phrase, each followed by a citation like: [src: <chunk-id or title>, p. X] (omit page if unknown).
-        - If sources conflict, note the conflict in the answer (without inline citations) and include both conflicting quotes in **Evidence** with their citations.
-
-        Calculations & Derivations:
-        - You may compute simple, explicit derivations (e.g., growth rates, sums) ONLY from numbers present in the chunks.
-        - Show the formula and inputs in **Metrics & Dates** (no inline citations there). In **Evidence**, include the quoted inputs with citations.
-
-        Handling Gaps:
-        - If a needed detail is not stated, write: "Not stated in provided documents." (no speculation).
-        - Do not generalize beyond what is explicitly supported.
-
-        Output Format:
-        - If answering for one company:
-        ## Overview
-        <2–4 sentences summarizing the supported answer. No inline citations.>
-
-        ## Details
-        - <concise fact or point. No inline citations.>
-        - <concise fact or point. No inline citations.>
-
-        ## Metrics & Dates
-        - <key figure/date verbatim or near-verbatim. No inline citations.>
-        - <derived metric with formula, e.g., "YoY = (2024 – 2023) / 2023 = 12.4%"> 
-
-        ## Evidence
-        - "<short quote or exact figure/phrase>" [src: …, p. X]
-        - "<short quote or exact figure/phrase>" [src: …, p. X]
-
-        ## Limitations / Unknowns
-        - Not stated in provided documents. (as applicable)
-
-        - If answering for multiple companies:
-        ### <Company Name>
-        (Repeat the same subsections as above for each company, or write exactly "Not found in provided documents." if insufficient evidence.)
-
-        Additional Constraints:
-        - Neutral, analytical tone.
-        - Do not include external knowledge or assumptions.
-        - Preserve original numeric formatting (commas, decimals, signs, currencies).
-        - Only include cross-company comparisons if the user EXPLICITLY asks; otherwise, keep companies separate.
-
-        Remember: If nothing can be answered for any company, output exactly: "Not found in provided documents."""
-    )
-    user_msg = f"Question:\n{search_query}\n\nContext (top-{top_k}):\n{context}"
-
-    answer_usage = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
-
-    try:
-        ans = await pine.openai.chat.completions.create(
-            model=answer_model,
-            messages=[{"role": "system", "content": sys_prompt},
-                      {"role": "user", "content": user_msg}],
-            #temperature=0.2,
+        # build (bounded) context string
+        context = "\n\n".join(
+            f"[{i}] id={h.get('id')} · score={_fmt_score(h.get('score'))} · section={h.get('section') or ''} · company={h.get('company')}\n{(h.get('text') or '').strip()}"
+            for i, h in enumerate(hits, start=1)
         )
-        # capture answer usage safely
-        u = getattr(ans, "usage", None)
-        if u:
-            answer_usage["prompt_tokens"] = getattr(u, "prompt_tokens", None)
-            answer_usage["completion_tokens"] = getattr(u, "completion_tokens", None)
-            answer_usage["total_tokens"] = getattr(u, "total_tokens", None)
 
-        answer = (ans.choices[0].message.content or "").strip()
-    except Exception:
-        query_logger.warning("Answer generation failed: %s", e)
-        answer = "Failed to generate an answer."
+        # ---- (4) Grounded answer using ONLY the retrieved chunks ----
+        sys_prompt = (
+            """You are a precise assistant. Use ONLY the provided context chunks. Be comprehensive and richly detailed, but strictly grounded in the sources.
 
-    # compute grand total if both present
-    total_tokens_all = (detect_usage["total_tokens"] or 0) + (answer_usage["total_tokens"] or 0)
+            Rules:
+            1) Group all context by company (use each chunk's 'company' metadata in the context header).
+            2) NEVER mix facts across companies. If the user names a specific company, answer ONLY for that company and ignore others.
+            3) If multiple companies appear AND the question is generic (no single company specified), evaluate each company separately:
+            - If you have enough evidence for a company, produce an answer for that company.
+            - If not enough evidence for that company, write exactly: "Not found in provided documents."
+            4) No invention of facts. Every material claim (numbers, dates, names, products, events) must be supported by the provided chunks. If no company has sufficient evidence, the entire reply must be exactly: "Not found in provided documents."
+            5) Be thorough yet economical: short paragraphs and tight bullets. Elaborate where the documents allow; never speculate.
 
+            Sourcing & Evidence Policy:
+            - Do NOT include citations or quotes in the output.
+            - Ensure every material claim you state is supported by the provided chunks.
+            - If sources conflict, briefly note the conflict in the Details section without citations.
 
-    query_logger.info("Final answer: \n\n%s\n\n", answer)
-    query_logger.info("Token usage | total = %d", total_tokens_all)
+            Handling Gaps:
+            - If a needed detail is not stated, write: "Not stated in provided documents." (no speculation).
+            - Do not generalize beyond what is explicitly supported.
 
-    # print out top-k chunks on console
-    """query_logger.info("\n\nTop-%d chunks retrieved: %d", top_k, len(hits))
-    for i, h in enumerate(hits, start=1):
-        query_logger.info(
-            "Hit #%d | id=%s | score=%.3f | company=%s | section=%s | text=%s",
-            i, h.get("id"), (h.get("score") or 0.0),
-            h.get("company"), h.get("section"),
-            h.get("text")
-        )"""
+            Output Format:
+            - If answering for one company:
+            ## Overview
+            <2–4 sentences summarizing the supported answer. No citations.>
 
+            ## Details
+            - <concise fact or point. No citations.>
+            - <concise fact or point. No citations.>
+
+            - If answering for multiple companies:
+            ### <Company Name>
+            ## Overview
+            <2–4 sentences. No citations.>
+
+            ## Details
+            - <concise fact or point. No citations.>
+            - <concise fact or point. No citations.>
+
+            Additional Constraints:
+            - Neutral, analytical tone.
+            - Do not include external knowledge or assumptions.
+            - Preserve original numeric formatting (commas, decimals, signs, currencies).
+            - Only include cross-company comparisons if the user EXPLICITLY asks; otherwise, keep companies separate.
+
+            Remember: If nothing can be answered for any company, output exactly: "Not found in provided documents."
+            """
+        )
+        user_msg = f"Question:\n{search_query}\n\nContext (top-{top_k}):\n{context}"
+
+        answer_usage = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+
+        try:
+            ans = await pine.openai.chat.completions.create(
+                model=answer_model,
+                messages=[{"role": "system", "content": sys_prompt},
+                          {"role": "user", "content": user_msg}],
+            )
+            u = getattr(ans, "usage", None)
+            if u:
+                answer_usage["prompt_tokens"] = getattr(u, "prompt_tokens", None)
+                answer_usage["completion_tokens"] = getattr(u, "completion_tokens", None)
+                answer_usage["total_tokens"] = getattr(u, "total_tokens", None)
+
+            answer = (ans.choices[0].message.content or "").strip()
+        except Exception as e:
+            query_logger.warning("Answer generation failed: %s", e)
+            answer = "Failed to generate an answer."
+
+        return {
+            "subquery": one_query,
+            "normalized_search_query": search_query,
+            "company_used": company_used,
+            "hits": hits,
+            "answer": answer,
+            "usage": {"detect": detect_usage, "answer": answer_usage},
+        }
+
+    # ---------------- (3.5) Run per-subquery RAG concurrently (bounded) ----------------
+    sem = asyncio.Semaphore(max_concurrency)
+
+    async def _guarded(idx: int, sq: str):
+        async with sem:
+            try:
+                res = await _run_rag_for_one_subquery(sq)
+            except Exception as e:
+                query_logger.exception("RAG error for sub-query %r: %s", sq, e)
+                res = {"subquery": sq, "answer": "Failed to generate an answer.", "error": str(e)}
+            return idx, res
+
+    tasks = [asyncio.create_task(_guarded(i, sq)) for i, sq in enumerate(subqueries)]
+    gathered = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # normalize results, preserve original subquery order
+    ordered: Dict[int, Dict[str, Any]] = {}
+    for item in gathered:
+        if isinstance(item, Exception):
+            query_logger.exception("Unhandled task exception: %s", item)
+            continue
+        idx, res = item
+        ordered[idx] = res
+
+    per_sub_results: List[Dict[str, Any]] = [ordered[i] for i in range(len(subqueries)) if i in ordered]
+
+    # ---------------- (5) Synthesize a single final answer ----------------
+    try:
+        synthesis_system = (
+            """You are a careful synthesizer. You will be given a list of sub-queries and their grounded answers.
+            Produce ONE final answer for the original user query.
+
+            Rules:
+            - Do NOT invent facts; rely only on the sub-answers provided.
+            - Merge overlapping insights; remove redundancies.
+            - Keep a clear structure with short paragraphs and bullets when helpful.
+            - If some sub-answers report 'Not found in provided documents.' state clearly which aspects are unknown.
+            - Do not add citations; they were already handled upstream.
+            """
+        )
+        synthesis_input = {
+            "original_query": user_query,
+            "sub_answers": [
+                {
+                    "subquery": r.get("subquery"),
+                    "answer": r.get("answer"),
+                    "company_used": r.get("company_used"),
+                }
+                for r in per_sub_results
+            ],
+        }
+        syn = await pine.openai.chat.completions.create(
+            model=answer_model,
+            messages=[
+                {"role": "system", "content": synthesis_system},
+                {"role": "user", "content": json.dumps(synthesis_input, ensure_ascii=False)},
+            ],
+        )
+        final_answer = (syn.choices[0].message.content or "").strip()
+    except Exception as e:
+        query_logger.warning("Synthesis failed: %s; concatenating sub-answers.", e)
+        final_answer = "\n\n".join(
+            f"### {r.get('subquery')}\n{r.get('answer')}" for r in per_sub_results
+        )
+        
+    query_logger.info("Final synthesized answer:\n%s", final_answer)
+
+    if not return_hits:
+        return {"RAG_RESPONSE": final_answer}
+
+    # Build compact debug payload with per-sub hits
+    debug_payload = {
+        "subqueries": subqueries,
+        "per_sub": [
+            {
+                "subquery": r.get("subquery"),
+                "company_used": r.get("company_used"),
+                "normalized_search_query": r.get("normalized_search_query"),
+                "hits": _project_hits(r.get("hits", [])),
+            }
+            for r in per_sub_results
+        ],
+    }
     return {
-        "answer": answer,
-        "hits": hits,
-        "company_used": company_used,
-        "known_companies": companies,
-        "filter_used": flt,
-        "usage": {
-            "detect": detect_usage,
-            "answer": answer_usage,
-            "total_tokens": total_tokens_all,   # <-- overall total
-        },
+        "RAG_RESPONSE": final_answer,
+        "RAG_DEBUG": debug_payload,
     }
