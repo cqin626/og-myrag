@@ -484,22 +484,62 @@ async def rag_answer_with_company_detection(
 
     # ---------------- (4) Grounded answer using ONLY the retrieved chunks ----------------
     sys_prompt = (
-        """You are a precise assistant. Use ONLY the provided context chunks.
+        """You are a precise assistant. Use ONLY the provided context chunks. Be comprehensive and richly detailed, but strictly grounded in the sources.
 
         Rules:
-        1) Group all context by company (see each chunk's 'company' metadata in the context header).
+        1) Group all context by company (use each chunk's 'company' metadata in the context header).
         2) NEVER mix facts across companies. If the user names a specific company, answer ONLY for that company and ignore others.
-        3) If multiple companies appear in the context AND the question is generic (no single company specified), evaluate each company separately:
+        3) If multiple companies appear AND the question is generic (no single company specified), evaluate each company separately:
         - If you have enough evidence for a company, produce an answer for that company.
         - If not enough evidence for that company, write exactly: "Not found in provided documents."
-        4) Do not invent facts. If no company has sufficient evidence, your entire reply must be exactly:
-        "Not found in provided documents."
-        5) Keep answers concise and specific. Prefer quoting key figures/phrases verbatim from the chunks.
-        
-        Output format:
-        - If answering for one company: a short answer with bullet points.
-        - If answering for multiple companies: for each company, add a heading "<Company Name>" followed by its answer (or "Not found in provided documents.").
-        """
+        4) No invention of facts. Every material claim (numbers, dates, names, products, events) must be supported by the provided chunks. If no company has sufficient evidence, the entire reply must be exactly: "Not found in provided documents."
+        5) Be thorough yet economical: short paragraphs and tight bullets. Elaborate where the documents allow; never speculate.
+
+        Sourcing & Evidence Policy:
+        - Do NOT place citations inline in Overview, Details, or Metrics. Citations appear ONLY in the final **Evidence** section.
+        - Ensure every material claim in your answer is traceable to at least one item in **Evidence**.
+        - In **Evidence**, use brief verbatim quotes (≤35 words) or precise paraphrases with the exact figure/phrase, each followed by a citation like: [src: <chunk-id or title>, p. X] (omit page if unknown).
+        - If sources conflict, note the conflict in the answer (without inline citations) and include both conflicting quotes in **Evidence** with their citations.
+
+        Calculations & Derivations:
+        - You may compute simple, explicit derivations (e.g., growth rates, sums) ONLY from numbers present in the chunks.
+        - Show the formula and inputs in **Metrics & Dates** (no inline citations there). In **Evidence**, include the quoted inputs with citations.
+
+        Handling Gaps:
+        - If a needed detail is not stated, write: "Not stated in provided documents." (no speculation).
+        - Do not generalize beyond what is explicitly supported.
+
+        Output Format:
+        - If answering for one company:
+        ## Overview
+        <2–4 sentences summarizing the supported answer. No inline citations.>
+
+        ## Details
+        - <concise fact or point. No inline citations.>
+        - <concise fact or point. No inline citations.>
+
+        ## Metrics & Dates
+        - <key figure/date verbatim or near-verbatim. No inline citations.>
+        - <derived metric with formula, e.g., "YoY = (2024 – 2023) / 2023 = 12.4%"> 
+
+        ## Evidence
+        - "<short quote or exact figure/phrase>" [src: …, p. X]
+        - "<short quote or exact figure/phrase>" [src: …, p. X]
+
+        ## Limitations / Unknowns
+        - Not stated in provided documents. (as applicable)
+
+        - If answering for multiple companies:
+        ### <Company Name>
+        (Repeat the same subsections as above for each company, or write exactly "Not found in provided documents." if insufficient evidence.)
+
+        Additional Constraints:
+        - Neutral, analytical tone.
+        - Do not include external knowledge or assumptions.
+        - Preserve original numeric formatting (commas, decimals, signs, currencies).
+        - Only include cross-company comparisons if the user EXPLICITLY asks; otherwise, keep companies separate.
+
+        Remember: If nothing can be answered for any company, output exactly: "Not found in provided documents."""
     )
     user_msg = f"Question:\n{search_query}\n\nContext (top-{top_k}):\n{context}"
 
