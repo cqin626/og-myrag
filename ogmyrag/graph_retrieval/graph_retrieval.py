@@ -32,7 +32,7 @@ from ..base import (
 )
 
 from .graph_retrieval_util import (
-    get_formatted_cypher_retrieval_result,
+    get_stringified_cypher_retrieval_result,
     get_formatted_input_for_query_agent,
     get_formatted_cypher,
     get_formatted_validated_entities,
@@ -65,7 +65,7 @@ class ChatAgent(BaseAgent):
         graph_retrieval_logger.debug(f"ChatAgent\nUser prompt used:\n{user_prompt}")
 
         response = await fetch_responses_openai(
-            model="o4-mini",
+            model="o3",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             text={"format": {"type": "text"}},
@@ -399,6 +399,7 @@ class Text2CypherAgent(BaseAgent):
 
         return formatted_response
 
+
 class RetrievalResultCompilationAgent(BaseAgent):
     """
     An agent responsible for compiling Cypher retrieval result.
@@ -417,8 +418,12 @@ class RetrievalResultCompilationAgent(BaseAgent):
             f"RetrievalResultCompilationAgent\nSystem prompt used:\n{system_prompt}"
         )
 
-        formatted_user_query = "Cypher query: " + kwargs.get("formatted_cypher_query", "")
-        formatted_retrieval_result = "Retrieval result: " + kwargs.get("formatted_retrieval_result", "")
+        formatted_user_query = "Cypher query: " + kwargs.get(
+            "formatted_cypher_query", ""
+        )
+        formatted_retrieval_result = "Retrieval result: " + kwargs.get(
+            "formatted_retrieval_result", ""
+        )
         user_prompt = formatted_user_query + "\n" + formatted_retrieval_result
         graph_retrieval_logger.debug(
             f"RetrievalResultCompilationAgent\nUser prompt used:\n{user_prompt}"
@@ -437,7 +442,8 @@ class RetrievalResultCompilationAgent(BaseAgent):
             f"RetrievalResultCompilationAgent\nText2CypherAgent response details:\n{get_formatted_openai_response(response)}"
         )
 
-        return  get_clean_json(response.output_text)
+        return get_clean_json(response.output_text)
+
 
 class GraphRetrievalSystem(BaseMultiAgentSystem):
     def __init__(
@@ -457,6 +463,9 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 "QueryAgent": QueryAgent("QueryAgent"),
                 "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent"),
                 "RAGAgent": RAGAgent("RAGAgent", rag_vector_config),
+                "RetrievalResultCompilationAgent": RetrievalResultCompilationAgent(
+                    "RetrievalResultCompilationAgent"
+                ),
             }
         )
 
@@ -604,7 +613,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 entry = results[request]
                 answer = entry["payload"]["answer"]
 
-                yield f"Retrieved result by the VectorRAGAgent:\n{answer}"
+                yield f"**Retrieved result by the VectorRAGAgent:**\n{answer}"
                 yield "**Compiling the retrieved result by the VectorRAGAgent...**"
                 chat_agent_response = await self.agents["ChatAgent"].handle_task(
                     chat_input=answer,
@@ -715,7 +724,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
 
         if final_responses:
             combined = "\n\n".join(final_responses)
-            yield "## Combined Final Response from QueryAgents" + "\n"+ combined
+            yield "## Combined Final Response from QueryAgents" + "\n" + combined
 
     async def _process_subrequest(
         self,
@@ -779,26 +788,35 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 previous_response_id=previous_text2_cypher_agent_response_id,
             )
             previous_text2_cypher_agent_response_id = text2cypher_agent_response["id"]
-
+            
             # Step 2.2: Execute the Cypher query
-            cypher_retrieval_result = await self.graph_storage.run_query(
-                query=text2cypher_agent_response["cypher_query"],
-                parameters=text2cypher_agent_response["parameters"],
-            )
-
-            # Step 2.3: Prepare the formatted result and the formatted Cypher query
             formatted_cypher = get_formatted_cypher(
                 query=text2cypher_agent_response["cypher_query"],
                 params=text2cypher_agent_response["parameters"],
             )
-            formatted_result = get_formatted_cypher_retrieval_result(
-                cypher_retrieval_result
+            yield f"**Executing the generated Cypher query:**\n{formatted_cypher}"
+            cypher_retrieval_result = await self.graph_storage.run_query(
+                query=text2cypher_agent_response["cypher_query"],
+                parameters=text2cypher_agent_response["parameters"],
             )
+            stringified_cypher_retrieval_result = (
+                get_stringified_cypher_retrieval_result(cypher_retrieval_result)
+            )
+            graph_retrieval_logger.debug(stringified_cypher_retrieval_result)
+
+            # Step 2.3: Compile the Cypher retrieval result
+            yield "**Compiling the Cypher retrieval result...**"
+            result = await self.agents["RetrievalResultCompilationAgent"].handle_task(
+                formatted_cypher_query=formatted_cypher,
+                formatted_retrieval_result=stringified_cypher_retrieval_result,
+            )
+            formatted_retrieval_result = result["compiled_result"]
+            
             yield (
                 f"**Response by Text2CypherAgent to {agent_name}:**\n"
                 f"**Cypher Query:** {formatted_cypher}\n"
                 f"**Note:** {text2cypher_agent_response['note']}\n"
-                f"**Retrieval Result:**\n{formatted_result}"
+                f"**Retrieval Result:**\n{formatted_retrieval_result}"
             )
 
             # Step 2.4: Evaluate the retrieval result
@@ -817,7 +835,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                         else "RETRIEVAL_RESULT_EVALUATION"
                     ),
                     payload={
-                        "retrieval_result": formatted_result,
+                        "retrieval_result": formatted_retrieval_result,
                         "cypher_query": formatted_cypher,
                         "note": text2cypher_agent_response["note"],
                     },
