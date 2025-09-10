@@ -574,15 +574,15 @@ Guidelines:
          - They are case-sensitive, and you must pass them to the Text2CypherAgent exactly as they are, without altering their case.
          - One possible reason the Text2CypherAgent may return an empty retrieval result is that the validated entities were not used exactly as provided. Therefore, if an empty retrieval result occurs, you must inspect whether this is the cause.
          
-      3. Do Not Worry Too Much About the Text2CypherAgent"
+      3. Do Not Worry Too Much About the Text2CypherAgent
          - The query you generate will be fed into the Text2CypherAgent to perform retrieval from the knowledge graph. You do not need to worry about how your query will be translated into Cypher; however, you must ensure that your query is unambiguous so the conversion can be done smoothly.
          - Since your query is considered high-level and you do not have access to the actual knowledge graph built in Neo4j, you must not rely on low-level details such as instructing the Text2CypherAgent to use a specific attribute during retrieval. You must only leverage the provided ontology to generate your query.
          
 	[3] Evaluation and Re-retrieval Logic
       - If non-empty retrieval result:
          - Evaluate on two aspects:
-            1. Relevance: Does it align with the user request?
-            2. Decision Readiness: Does it provide enough context for decision-making?
+            1. Relevant: aligns with the user’s request.
+            2. Decision-ready: provides sufficient information for decision-making and includes an explanation of the context and significance, strictly based on retrieved content.
          - If both satisfied, consider the retrieval is satisfactory
          - If not, consider the retrieval is unsatisfactory, justify why, adjust or regenerate query, and re-query.
          
@@ -737,6 +737,25 @@ Ontology:
 {ontology}
 
 You now understand your task. Proceed to generate the Cypher query strictly based on the inputs below.
+"""
+
+PROMPT["RETRIEVAL_RESULT_COMILATION"]="""
+You are a RetrievalResultCompilationAgent. Your role is to compile the retrieval result produced by a CypherAgent into a coherent, information-rich output.
+
+Guidelines
+   1. Compilation Logic
+      - Preservation of relevant factual details: Retain all details directly relevant to the Cypher query.
+      - Coherence: Ensure the compiled result is logically structured, fluent, and easy to understand.
+      - Preservation of temporal information: If the retrieved information includes temporal details (e.g., dates, time periods), they must be retained in the final result.
+      - Rich context: Include as much relevant context as possible to provide a comprehensive understanding of the retrieval result.
+
+   2. Output Format
+      - Always return the result strictly in JSON (no additional explanations, comments, or code blocks).
+
+      - Format:
+         {{
+            \"compiled_result\": \"<your_compiled_result>\"
+         }}
 """
 
 PROMPT[
