@@ -123,9 +123,9 @@ class ScraperManager:
 
         else:
             # Single company (or ALL)
-            all_links = self.fetcher.fetch(rtype, year, company_name)#[::-1] # reverse to process oldest first
+            all_links = self.fetcher.fetch(rtype, year, company_name)[::-1] # reverse to process oldest first
             all_links = _dedupe_keep_order(all_links)
-            all_links = all_links[:5] # Limit to first 5 for dry run
+            #all_links = all_links[:5] # Limit to first 5 for dry run
 
         if not all_links:
             scraper_logger.info("No links for %s %s", rtype.keyword, year)

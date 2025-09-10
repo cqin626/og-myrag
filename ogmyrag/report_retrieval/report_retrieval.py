@@ -57,7 +57,7 @@ class ReportRetrievalManager:
         self.client = genai.Client(api_key=self.genai_api_key)
         self.openai_key    = openai_api_key
         self.dry_run       = dry_run
-        self.rpm_limit = 5
+        self.rpm_limit = 10  # requests per minute limit
         self.win_start = time.time()
         self.reqs_in_window = 0
 
@@ -607,9 +607,69 @@ class ReportRetrievalManager:
                                 response = await asyncio.to_thread(
                                     self.client.models.generate_content,
                                     model=self.genai_model,
-                                    contents=[*uploaded, prompt_text]
+                                    contents=[*uploaded, prompt_text],
+                                    config=types.GenerateContentConfig(
+                                        system_instruction=PROMPT["REPORTS PARSING SYSTEM INSTRUCTION"],
+                                    ),
                                 )
-                                content = clean_markdown_response(response.text.strip())
+
+                                # --- minimal-safe extraction (prevents `'NoneType'.strip()`) ---
+                                resp_text = getattr(response, "text", None)
+                                if not resp_text:
+                                    # fallback: collect text from candidates→content.parts
+                                    parts = []
+                                    for cand in (getattr(response, "candidates", None) or []):
+                                        content_obj = getattr(cand, "content", None)
+                                        for part in (getattr(content_obj, "parts", None) or []):
+                                            t = getattr(part, "text", None)
+                                            if t:
+                                                parts.append(t)
+                                    resp_text = "\n".join(parts).strip() if parts else ""
+
+                                # --- handle empty due to RECITATION ---
+                                if not resp_text:
+                                    reasons = [getattr(c, "finish_reason", None) for c in (getattr(response, "candidates", None) or [])]
+                                    feedback = getattr(response, "prompt_feedback", None)
+                                    is_recitation = any("RECITATION" in str(r) for r in reasons)
+
+                                    if is_recitation:
+                                        # CHANGED: use 5 attempts; on 5th, save sentinel & mark failed; no embedding later
+                                        retrieval_logger.warning(
+                                            "RECITATION block for section '%s' (attempt %d/3). finish_reason=%s, feedback=%s",
+                                            section, attempts, reasons, feedback
+                                        )
+                                        if attempts >= 3:
+                                            retrieval_logger.error("Section '%s' recitation-blocked after 3 attempts; saving sentinel.", section)
+                                            resp_text = section + " ---> RECITATION ISSUE"
+                                            content = clean_markdown_response(resp_text)
+
+                                            update_query = {
+                                                "created_at": datetime.utcnow(),
+                                                "is_parsed": False,  # not fully parsed
+                                                "content": content,
+                                                "published_at": docs[0]["announced_date"],
+                                                "section": section
+                                            }
+                                            if year and year != "N/A":
+                                                update_query["year"] = year
+
+                                            await self.storage.upsert_many(filter_query, update_query, "company_disclosures")
+                                            failed_sections.append((section, "recitation after 3 attempts"))
+                                            break  # exit retry loop; embed step will skip due to sentinel
+                                        # backoff and retry
+                                        await asyncio.sleep(1.5 * attempts)
+                                        continue
+
+                                    # empty for non-recitation reasons → retry path
+                                    retrieval_logger.warning(
+                                        "Empty model response for section %s | finish_reason=%s | prompt_feedback=%s",
+                                        section, reasons, feedback
+                                    )
+                                    raise RuntimeError("Empty model response")
+                                    
+                                # --- got content; proceed normally ---
+                                content = clean_markdown_response(resp_text)
+                                #content = clean_markdown_response(response.text.strip())
 
                                 usage = getattr(response, "usage_metadata", None)
                                 if usage:
@@ -622,7 +682,7 @@ class ReportRetrievalManager:
 
                                 update_query = {
                                     "created_at": datetime.utcnow(),
-                                    "is_parsed": True,
+                                    "is_parsed": False,
                                     "content": content,
                                     "published_at": docs[0]["announced_date"],
                                     "section": section
@@ -666,19 +726,23 @@ class ReportRetrievalManager:
                 # ---------- NEW: chunk → embed → upsert (NO namespace) ----------
                 async with embed_sem:
                     try:
-                        retrieval_logger.info("Chunking, Embedding, Upserting: %s", section)
-                        total = await index_markdown_with_pinecone(
-                            self.pine,
-                            self.pine_config,
-                            content, 
-                            company=company, 
-                            report_type=report_type, 
-                            year_tag=year_tag, 
-                            doc_type=doc_type, 
-                            index=index, 
-                            section=section
-                        )
-                        retrieval_logger.info("Embedded & upserted %d chunks for section: %s", total, section)
+                        bad_marker = "[Extraction failed after retries]"
+                        if content is None or content.strip().endswith("RECITATION ISSUE") or bad_marker in content:
+                            retrieval_logger.info("Skip embed for section '%s' due to extraction failure/recitation.", section)
+                        else:
+                            retrieval_logger.info("Chunking, Embedding, Upserting: %s", section)
+                            total = await index_markdown_with_pinecone(
+                                self.pine,
+                                self.pine_config,
+                                content, 
+                                company=company, 
+                                report_type=report_type, 
+                                year_tag=year_tag, 
+                                doc_type=doc_type, 
+                                index=index, 
+                                section=section
+                            )
+                            retrieval_logger.info("Embedded & upserted %d chunks for section: %s", total, section)
                     except Exception as e:
                         retrieval_logger.warning("Chunk/embed/upsert failed for section '%s': %s", section, e)
                         
@@ -691,7 +755,8 @@ class ReportRetrievalManager:
 
         # NEW: fire off tasks instead of serial loop
         tasks = [asyncio.create_task(process_one(i, s)) for i, s in enumerate(sections, start=1)]
-        #tasks = [asyncio.create_task(process_one(1, sections[15]))] if sections else []
+        #tasks = [asyncio.create_task(process_one(i+1, sections[i])) for i in [4, 8, 10]] if sections else []
+        #tasks = [asyncio.create_task(process_one(15, sections[14]))] if sections else []
         await asyncio.gather(*tasks)
 
         # --- Summary logging ---
