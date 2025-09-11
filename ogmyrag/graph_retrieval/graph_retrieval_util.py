@@ -2,10 +2,10 @@ import json
 
 
 def get_formatted_decomposed_request(data: dict) -> str:
-    output = ["Decomposed Request:"]
+    output = ["**Decomposed Request:**"]
     for i, req in enumerate(data.get("requests", []), start=1):
-        output.append(f"  Sub-request {i}: {req['sub_request']}")
-        output.append(f"  Validated entities:")
+        output.append(f"  **Sub-request {i}:** {req['sub_request']}")
+        output.append(f"  **Validated entities:**")
         for j, entity in enumerate(req.get("validated_entities", []), start=1):
             output.append(f"    {j}. {entity}")
         output.append("")
@@ -30,10 +30,11 @@ def get_formatted_cypher(query: str, params: dict) -> str:
     return formatted
 
 
-def get_formatted_cypher_retrieval_result(data: list[dict]):
-
+def get_stringified_cypher_retrieval_result(data: list[dict]) -> str:
+    if not data:  # handles empty list
+        return "NA"
     return "\n".join(
-        (json.dumps(item, ensure_ascii=False) if isinstance(item, dict) else str(item))
+        json.dumps(item, ensure_ascii=False) if isinstance(item, dict) else str(item)
         for item in data
     )
 

@@ -11,7 +11,7 @@ import logging
 from typing import Dict, List, Optional, Mapping, Any, Tuple
 from threading import Thread
 
-from google import genai
+import google.generativeai as genai # May be deleted, not sure the usage
 from google.generativeai import types
 from openai import OpenAI
 
