@@ -504,9 +504,15 @@ async def rag_answer_with_company_detection(
         hits.sort(key=lambda h: (h["score"] is not None, h["score"]), reverse=True)
         hits = hits[:top_k]
 
-        # build (bounded) context string
+
+        # build (bounded) context string WITH year/date
         context = "\n\n".join(
-            f"[{i}] id={h.get('id')} · score={_fmt_score(h.get('score'))} · section={h.get('section') or ''} · company={h.get('company')}\n{(h.get('text') or '').strip()}"
+            (
+                f"[{i}] id={h.get('id')} · score={_fmt_score(h.get('score'))} · "
+                f"company={h.get('company')} · section={h.get('section') or ''} · "
+                f"as_of_year={h.get('year')} · as_of_date={h.get('as_of_date') or ''}\n"
+                f"{(h.get('text') or '').strip()}"
+            )
             for i, h in enumerate(hits, start=1)
         )
 
@@ -523,10 +529,19 @@ async def rag_answer_with_company_detection(
             4) No invention of facts. Every material claim (numbers, dates, names, products, events) must be supported by the provided chunks. If no company has sufficient evidence, the entire reply must be exactly: "Not found in provided documents."
             5) Be thorough yet economical: short paragraphs and tight bullets. Elaborate where the documents allow; never speculate.
 
+            Temporal Disambiguation (Ages & Dates):
+            - Treat every reported age as TIME-ANCHORED to the chunk’s date. Use date fields from the context header in this order: as_of_date, as_of_year, year. If none is provided in the header, derive the year from explicit dates in the chunk text only if unambiguous; otherwise mark as unknown year.
+            - Build an age timeline mapping Year → Age from all chunks for the same person/company.
+            - If the user asks for the CURRENT age (or no year is specified), select the age from the most recent available year ≤ the current calendar year. If multiple ages exist for the same latest year, prefer the one with the latest as_of_date; if still conflicting, state both values for that year.
+            - If the user asks for a SPECIFIC year, return the age reported for that year. Do NOT infer ages for missing years unless a full date of birth (DOB) is explicitly present in the chunks.
+            - If DOB is present, you may compute age for a requested year using only that DOB and the requested/as_of date (subtract 1 if the birthday has not occurred by the as_of date). Otherwise, do not compute or interpolate.
+            - When ages differ across years (e.g., 53 in 2023; 54 in 2024; 55 in 2025), report the timeline and label the latest year’s value as the current age if appropriate.
+            - If no single latest value can be determined, output all age values with their specific years.
+
             Sourcing & Evidence Policy:
             - Do NOT include citations or quotes in the output.
             - Ensure every material claim you state is supported by the provided chunks.
-            - If sources conflict, briefly note the conflict in the Details section without citations.
+            - If sources conflict for the SAME year, note the conflict in Details (e.g., “Conflicting 2025 age reports: 54, 55.”). Do not attempt to reconcile using outside knowledge.
 
             Handling Gaps:
             - If a needed detail is not stated, write: "Not stated in provided documents." (no speculation).
@@ -618,16 +633,16 @@ async def rag_answer_with_company_detection(
     # ---------------- (5) Synthesize a single final answer ----------------
     try:
         synthesis_system = (
-            """You are a careful synthesizer. You will be given a list of sub-queries and their grounded answers.
-            Produce ONE final answer for the original user query.
+            """You are a strict combiner. You will be given a list of sub-queries and their grounded answers.
+            Produce ONE final answer by merging their content for the original user query.
 
             Rules:
-            - Do NOT invent facts; rely only on the sub-answers provided.
-            - Merge overlapping insights; remove redundancies.
-            - Keep a clear structure with short paragraphs and bullets when helpful.
-            - If some sub-answers report 'Not found in provided documents.' state clearly which aspects are unknown.
-            - Do not add citations; they were already handled upstream.
-            """
+            - Use ONLY the text of the sub-answers. Do NOT invent, infer, calculate, explain, or add commentary.
+            - Remove redundancies and duplicates; keep the most specific wording when texts overlap.
+            - Preserve original facts, wording (where possible), numbers, and dates without rephrasing meaning.
+            - If sub-answers conflict, include both statements without resolving the conflict.
+            - Keep any “Not found in provided documents.” lines present in the sub-answers; deduplicate identical lines.
+            - Output plain text only: the single combined final answer."""
         )
         synthesis_input = {
             "original_query": user_query,
