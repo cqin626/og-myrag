@@ -85,7 +85,7 @@ class ChatAgent(BaseAgent):
         return formatted_response
 
 
-class RAGAgent(BaseAgent):
+class VectorRAGAgent(BaseAgent):
     """
     An agent that runs Pinecone-based RAG and returns a structured payload.
     """
@@ -127,8 +127,8 @@ class RAGAgent(BaseAgent):
             # Concurrency:
             max_concurrency (int)                     [default: 4]
         """
-        graph_retrieval_logger.info("RAGAgent is called")
-        
+        graph_retrieval_logger.info("VectorRAGAgent is called")
+
         def _clip(s: str, n: int = 300) -> str:
             s = (s or "").replace("\n", " ").strip()
             return s if len(s) <= n else s[:n] + "…"
@@ -138,14 +138,16 @@ class RAGAgent(BaseAgent):
                 return f"{float(x):.3f}"
             except Exception:
                 return str(x)
-        
+
         # ---- normalize to a single query ----
         q = (kwargs.get("user_query") or kwargs.get("query") or "").strip()
         if not q:
-            graph_retrieval_logger.warning("Empty query received; returning empty answer.")
+            graph_retrieval_logger.warning(
+                "Empty query received; returning empty answer."
+            )
             return {"type": "RAG_RESPONSE", "payload": {"answer": ""}}
-            
-        graph_retrieval_logger.debug("RAGAgent\nQuery used: %s", q)
+
+        graph_retrieval_logger.debug("VectorRAGAgent\nQuery used: %s", q)
 
         # ---- options ----
         top_k = int(kwargs.get("top_k", 10))
@@ -159,15 +161,12 @@ class RAGAgent(BaseAgent):
         small_model = kwargs.get("small_model", "gpt-5-nano")
         answer_model = kwargs.get("answer_model", "gpt-5-nano")
         max_concurrency = int(kwargs.get("max_concurrency", 4))  # forwarded to RAG
-        
+
         # ---- minimal-change debug knobs (logging only) ----
         log_hits = bool(kwargs.get("log_hits", True))
         hits_per_subquery = int(kwargs.get("hits_per_subquery", 5))
         hits_preview_chars = int(kwargs.get("hits_preview_chars", 240))
-        
-        
-        
-        
+
         # ---- call the new RAG (which returns {"RAG_RESPONSE": <final answer>}) ----
         try:
             res = await rag_answer_with_company_detection(
@@ -189,25 +188,29 @@ class RAGAgent(BaseAgent):
                 hits_per_subquery=hits_per_subquery,
                 hits_preview_chars=hits_preview_chars,
             )
-            graph_retrieval_logger.info("RAGAgent: completed RAG for query=%r", q)
+            graph_retrieval_logger.info("VectorRAGAgent: completed RAG for query=%r", q)
             final_answer = res.get("RAG_RESPONSE", "")
             graph_retrieval_logger.debug(
                 "RAG_RESPONSE length=%d preview=%s",
-                len(final_answer or ""), final_answer
+                len(final_answer or ""),
+                final_answer,
             )
-            
+
             # ---- minimal-change: debug-log retrieved hits (not added to payload) ----
             if log_hits:
                 dbg = (res or {}).get("RAG_DEBUG")
                 if not dbg:
-                    graph_retrieval_logger.warning("log_hits=True but no RAG_DEBUG returned.")
+                    graph_retrieval_logger.warning(
+                        "log_hits=True but no RAG_DEBUG returned."
+                    )
                 else:
                     subs = dbg.get("subqueries") or []
                     graph_retrieval_logger.debug("Subqueries (%d): %s", len(subs), subs)
                     for i, ps in enumerate(dbg.get("per_sub", []), 1):
                         graph_retrieval_logger.debug(
                             "Subquery #%d: %s | company=%r | normalized=%s",
-                            i, _clip(ps.get("subquery") or "", 300),
+                            i,
+                            _clip(ps.get("subquery") or "", 300),
                             ps.get("company_used"),
                             _clip(ps.get("normalized_search_query") or "", 300),
                         )
@@ -226,17 +229,20 @@ class RAGAgent(BaseAgent):
                                 "type": h.get("type"),
                                 "snippet": h.get("snippet") or "",
                             }
-                            graph_retrieval_logger.debug("    hit:\n%s", json.dumps(hit_payload, ensure_ascii=False, indent=2))
+                            graph_retrieval_logger.debug(
+                                "    hit:\n%s",
+                                json.dumps(hit_payload, ensure_ascii=False, indent=2),
+                            )
         except Exception as e:
-            graph_retrieval_logger.error("RAGAgent error during RAG call for %r: %s", q, e)
+            graph_retrieval_logger.error(
+                "VectorRAGAgent error during RAG call for %r: %s", q, e
+            )
             final_answer = "Failed to generate an answer."
 
         # ---- single response ----
         return {
             "type": "RAG_RESPONSE",
-            "payload": {
-                "answer": final_answer
-            },
+            "payload": {"answer": final_answer},
         }
 
 
@@ -454,7 +460,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 ),
                 "QueryAgent": QueryAgent("QueryAgent"),
                 "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent"),
-                "RAGAgent": RAGAgent("RAGAgent", rag_vector_config),
+                "VectorRAGAgent": VectorRAGAgent("VectorRAGAgent", rag_vector_config),
                 "RetrievalResultCompilationAgent": RetrievalResultCompilationAgent(
                     "RetrievalResultCompilationAgent"
                 ),
@@ -596,19 +602,17 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
             elif chat_agent_response["type"] == "CALLING_VECTOR_RAG_AGENT":
                 yield "## Calling VectorRAGAgent..."
                 request = chat_agent_response["payload"]["request"]
-                rag_agent_response = await self.agents["RAGAgent"].handle_task(
+                rag_agent_response = await self.agents["VectorRAGAgent"].handle_task(
                     user_query=request,
                     top_k=top_k_for_similarity,
                 )
 
-                results = rag_agent_response["payload"]["results"]
-                entry = results[request]
-                answer = entry["payload"]["answer"]
+                retrieved_result = rag_agent_response["payload"]["answer"]
 
-                yield f"**Retrieved result by the VectorRAGAgent:**\n{answer}"
-                yield "**Compiling the retrieved result by the VectorRAGAgent...**"
+                yield f"**Retrieved result by the VectorRAGAgent:**\n{retrieved_result}"
+                yield "## Calling ChatAgent to process combined final response..."
                 chat_agent_response = await self.agents["ChatAgent"].handle_task(
-                    chat_input=answer,
+                    chat_input=retrieved_result,
                     similarity_threshold=similarity_threshold,
                     previous_chat_id=self.current_chat_id,
                 )
@@ -631,19 +635,19 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         queries = user_request if isinstance(user_request, list) else [user_request]
         queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
 
-        # Call RAGAgent (now single-query mode)
-        yield "## Calling RAGAgent..."
+        # Call VectorRAGAgent (now single-query mode)
+        yield "## Calling VectorRAGAgent..."
 
         multi = len(queries) > 1
 
         # run sequentially with minimal changes
         for q in queries:
             try:
-                rag_agent_response = await self.agents["RAGAgent"].handle_task(
+                rag_agent_response = await self.agents["VectorRAGAgent"].handle_task(
                     user_query=q,
                     top_k=top_k_for_similarity,
                 )
-                answer = ((rag_agent_response.get("payload") or {}).get("answer") or "")
+                answer = (rag_agent_response.get("payload") or {}).get("answer") or ""
             except Exception as e:
                 answer = f"Failed to generate an answer. Error: {e}"
 
@@ -771,7 +775,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 previous_response_id=previous_text2_cypher_agent_response_id,
             )
             previous_text2_cypher_agent_response_id = text2cypher_agent_response["id"]
-            
+
             # Step 2.2: Execute the Cypher query
             formatted_cypher = get_formatted_cypher(
                 query=text2cypher_agent_response["cypher_query"],
@@ -794,7 +798,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 formatted_retrieval_result=stringified_cypher_retrieval_result,
             )
             formatted_retrieval_result = result["compiled_result"]
-            
+
             yield (
                 f"**Response by Text2CypherAgent to {agent_name}:**\n"
                 f"**Cypher Query:** {formatted_cypher}\n"
