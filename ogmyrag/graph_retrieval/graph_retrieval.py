@@ -65,7 +65,7 @@ class ChatAgent(BaseAgent):
         graph_retrieval_logger.debug(f"ChatAgent\nUser prompt used:\n{user_prompt}")
 
         response = await fetch_responses_openai(
-            model="o3",
+            model="o4-mini",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             text={"format": {"type": "text"}},
