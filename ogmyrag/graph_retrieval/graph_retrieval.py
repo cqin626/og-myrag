@@ -32,7 +32,7 @@ from ..base import (
 )
 
 from .graph_retrieval_util import (
-    get_formatted_cypher_retrieval_result,
+    get_stringified_cypher_retrieval_result,
     get_formatted_input_for_query_agent,
     get_formatted_cypher,
     get_formatted_validated_entities,
@@ -85,7 +85,7 @@ class ChatAgent(BaseAgent):
         return formatted_response
 
 
-class RAGAgent(BaseAgent):
+class VectorRAGAgent(BaseAgent):
     """
     An agent that runs Pinecone-based RAG and returns a structured payload.
     """
@@ -127,8 +127,8 @@ class RAGAgent(BaseAgent):
             # Concurrency:
             max_concurrency (int)                     [default: 4]
         """
-        graph_retrieval_logger.info("RAGAgent is called")
-        
+        graph_retrieval_logger.info("VectorRAGAgent is called")
+
         def _clip(s: str, n: int = 300) -> str:
             s = (s or "").replace("\n", " ").strip()
             return s if len(s) <= n else s[:n] + "…"
@@ -138,14 +138,16 @@ class RAGAgent(BaseAgent):
                 return f"{float(x):.3f}"
             except Exception:
                 return str(x)
-        
+
         # ---- normalize to a single query ----
         q = (kwargs.get("user_query") or kwargs.get("query") or "").strip()
         if not q:
-            graph_retrieval_logger.warning("Empty query received; returning empty answer.")
+            graph_retrieval_logger.warning(
+                "Empty query received; returning empty answer."
+            )
             return {"type": "RAG_RESPONSE", "payload": {"answer": ""}}
-            
-        graph_retrieval_logger.debug("RAGAgent\nQuery used: %s", q)
+
+        graph_retrieval_logger.debug("VectorRAGAgent\nQuery used: %s", q)
 
         # ---- options ----
         top_k = int(kwargs.get("top_k", 10))
@@ -159,15 +161,12 @@ class RAGAgent(BaseAgent):
         small_model = kwargs.get("small_model", "gpt-5-nano")
         answer_model = kwargs.get("answer_model", "gpt-5-nano")
         max_concurrency = int(kwargs.get("max_concurrency", 4))  # forwarded to RAG
-        
+
         # ---- minimal-change debug knobs (logging only) ----
         log_hits = bool(kwargs.get("log_hits", True))
         hits_per_subquery = int(kwargs.get("hits_per_subquery", 5))
         hits_preview_chars = int(kwargs.get("hits_preview_chars", 240))
-        
-        
-        
-        
+
         # ---- call the new RAG (which returns {"RAG_RESPONSE": <final answer>}) ----
         try:
             res = await rag_answer_with_company_detection(
@@ -189,25 +188,29 @@ class RAGAgent(BaseAgent):
                 hits_per_subquery=hits_per_subquery,
                 hits_preview_chars=hits_preview_chars,
             )
-            graph_retrieval_logger.info("RAGAgent: completed RAG for query=%r", q)
+            graph_retrieval_logger.info("VectorRAGAgent: completed RAG for query=%r", q)
             final_answer = res.get("RAG_RESPONSE", "")
             graph_retrieval_logger.debug(
                 "RAG_RESPONSE length=%d preview=%s",
-                len(final_answer or ""), final_answer
+                len(final_answer or ""),
+                final_answer,
             )
-            
+
             # ---- minimal-change: debug-log retrieved hits (not added to payload) ----
             if log_hits:
                 dbg = (res or {}).get("RAG_DEBUG")
                 if not dbg:
-                    graph_retrieval_logger.warning("log_hits=True but no RAG_DEBUG returned.")
+                    graph_retrieval_logger.warning(
+                        "log_hits=True but no RAG_DEBUG returned."
+                    )
                 else:
                     subs = dbg.get("subqueries") or []
                     graph_retrieval_logger.debug("Subqueries (%d): %s", len(subs), subs)
                     for i, ps in enumerate(dbg.get("per_sub", []), 1):
                         graph_retrieval_logger.debug(
                             "Subquery #%d: %s | company=%r | normalized=%s",
-                            i, _clip(ps.get("subquery") or "", 300),
+                            i,
+                            _clip(ps.get("subquery") or "", 300),
                             ps.get("company_used"),
                             _clip(ps.get("normalized_search_query") or "", 300),
                         )
@@ -226,17 +229,20 @@ class RAGAgent(BaseAgent):
                                 "type": h.get("type"),
                                 "snippet": h.get("snippet") or "",
                             }
-                            graph_retrieval_logger.debug("    hit:\n%s", json.dumps(hit_payload, ensure_ascii=False, indent=2))
+                            graph_retrieval_logger.debug(
+                                "    hit:\n%s",
+                                json.dumps(hit_payload, ensure_ascii=False, indent=2),
+                            )
         except Exception as e:
-            graph_retrieval_logger.error("RAGAgent error during RAG call for %r: %s", q, e)
+            graph_retrieval_logger.error(
+                "VectorRAGAgent error during RAG call for %r: %s", q, e
+            )
             final_answer = "Failed to generate an answer."
 
         # ---- single response ----
         return {
             "type": "RAG_RESPONSE",
-            "payload": {
-                "answer": final_answer
-            },
+            "payload": {"answer": final_answer},
         }
 
 
@@ -268,7 +274,7 @@ class RequestDecompositionAgent(BaseAgent):
         )
 
         response = await fetch_responses_openai(
-            model="o4-mini",
+            model="gpt-5-mini",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             text={"format": {"type": "text"}},
@@ -392,6 +398,51 @@ class Text2CypherAgent(BaseAgent):
         return formatted_response
 
 
+class RetrievalResultCompilationAgent(BaseAgent):
+    """
+    An agent responsible for compiling Cypher retrieval result.
+    """
+
+    async def handle_task(self, **kwargs):
+        """
+        Parameters:
+            formatted_cypher_query (str),
+            formatted_retrieval_result (str),
+        """
+        graph_retrieval_logger.info(f"RetrievalResultCompilationAgent is called")
+
+        system_prompt = PROMPT["RETRIEVAL_RESULT_COMILATION"]
+        graph_retrieval_logger.debug(
+            f"RetrievalResultCompilationAgent\nSystem prompt used:\n{system_prompt}"
+        )
+
+        formatted_user_query = "Cypher query: " + kwargs.get(
+            "formatted_cypher_query", ""
+        )
+        formatted_retrieval_result = "Retrieval result: " + kwargs.get(
+            "formatted_retrieval_result", ""
+        )
+        user_prompt = formatted_user_query + "\n" + formatted_retrieval_result
+        graph_retrieval_logger.debug(
+            f"RetrievalResultCompilationAgent\nUser prompt used:\n{user_prompt}"
+        )
+
+        response = await fetch_responses_openai(
+            model="gpt-4.1-mini",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            max_output_tokens=32768,
+            tools=[],
+        )
+
+        graph_retrieval_logger.info(
+            f"RetrievalResultCompilationAgent\nText2CypherAgent response details:\n{get_formatted_openai_response(response)}"
+        )
+
+        return get_clean_json(response.output_text)
+
+
 class GraphRetrievalSystem(BaseMultiAgentSystem):
     def __init__(
         self,
@@ -409,7 +460,10 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 ),
                 "QueryAgent": QueryAgent("QueryAgent"),
                 "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent"),
-                "RAGAgent": RAGAgent("RAGAgent", rag_vector_config),
+                "VectorRAGAgent": VectorRAGAgent("VectorRAGAgent", rag_vector_config),
+                "RetrievalResultCompilationAgent": RetrievalResultCompilationAgent(
+                    "RetrievalResultCompilationAgent"
+                ),
             }
         )
 
@@ -443,6 +497,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         user_request: str,
         top_k_for_similarity: int,
         similarity_threshold: float = 0.5,
+        max_tool_call: int = 3,
     ):
         yield "## Calling ChatAgent..."
         chat_agent_response = await self.agents["ChatAgent"].handle_task(
@@ -455,20 +510,26 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         while True:
             self._update_current_chat_id(chat_agent_response["id"])
 
-            if tool_call == 3:
-                chat_agent_response = await self.agents["ChatAgent"].handle_task(
-                    chat_input="You have reached the maximum number of tool calls. You must generate the result based on the retrieved data regardless of its quality.",
-                    similarity_threshold=similarity_threshold,
-                    previous_chat_id=self.current_chat_id,
-                )
-                continue
-
             if chat_agent_response["type"] == "RESPONSE_GENERATION":
                 yield chat_agent_response["payload"]["response"]
                 break
 
-            elif chat_agent_response["type"] == "CALLING_ENTITY_VALIDATION_TOOL":
-                yield "Validating entities in the query..."
+            if tool_call >= max_tool_call:
+                yield f"**Maximum number of tool calls ({max_tool_call}) reached. Forcing final response generation...**"
+                final_response_generation = await self.agents["ChatAgent"].handle_task(
+                    chat_input="You have reached the maximum number of tool calls. You must now generate the final result based on the information and context you have gathered so far, regardless of its quality. Do not call any more tools.",
+                    similarity_threshold=similarity_threshold,
+                    previous_chat_id=self.current_chat_id,
+                )
+                if final_response_generation["type"] == "RESPONSE_GENERATION":
+                    yield final_response_generation["payload"]["response"]
+                else:
+                    yield "**Agent failed to generate a final response after reaching the tool call limit.**"
+                break
+
+            if chat_agent_response["type"] == "CALLING_ENTITY_VALIDATION_TOOL":
+                yield "## Calling EntityValidationTool"
+                yield "**Validating entities in the query...**"
                 similar_entities = await self.pinecone_storage.get_index(
                     self.entity_vector_config["index_name"]
                 ).get_similar_results(
@@ -482,7 +543,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 )
                 yield formatted_similar_entities
 
-                yield "Processing validated entities..."
+                yield "**Processing validated entities...**"
                 chat_agent_response = await self.agents["ChatAgent"].handle_task(
                     chat_input=formatted_similar_entities,
                     similarity_threshold=similarity_threshold,
@@ -490,6 +551,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 )
 
             elif chat_agent_response["type"] == "CALLING_GRAPH_RAG_AGENT":
+                yield "## Calling GraphRAGAgent..."
                 yield "## Calling RequestDecompositionAgent..."
                 request_decomposition_agent_response = await self.agents[
                     "RequestDecompositionAgent"
@@ -524,12 +586,12 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 async for result in self._fan_in_generators(gens):
                     yield result
                     if isinstance(result, str) and result.startswith(
-                        "Combined Final Response from QueryAgents"
+                        "## Combined Final Response from QueryAgents"
                     ):
                         final_response = result
 
                 # Generate final result
-                yield "Processing combined final response..."
+                yield "## Calling ChatAgent to process combined final response..."
                 chat_agent_response = await self.agents["ChatAgent"].handle_task(
                     chat_input=final_response,
                     similarity_threshold=similarity_threshold,
@@ -540,27 +602,24 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
             elif chat_agent_response["type"] == "CALLING_VECTOR_RAG_AGENT":
                 yield "## Calling VectorRAGAgent..."
                 request = chat_agent_response["payload"]["request"]
-
-                rag_agent_response = await self.agents["RAGAgent"].handle_task(
+                rag_agent_response = await self.agents["VectorRAGAgent"].handle_task(
                     user_query=request,
                     top_k=top_k_for_similarity,
                 )
 
-                results = rag_agent_response["payload"]["results"]
-                entry = results[request]
-                answer = entry["payload"]["answer"]
+                retrieved_result = rag_agent_response["payload"]["answer"]
 
-                yield f"Retrieved result by the VectorRAGAgent:\n{answer}"
-                yield "Processing retrieved result from the VectorRAGAgent..."
+                yield f"**Retrieved result by the VectorRAGAgent:**\n{retrieved_result}"
+                yield "## Calling ChatAgent to process combined final response..."
                 chat_agent_response = await self.agents["ChatAgent"].handle_task(
-                    chat_input=answer,
+                    chat_input=retrieved_result,
                     similarity_threshold=similarity_threshold,
                     previous_chat_id=self.current_chat_id,
                 )
                 tool_call += 1
 
             else:
-                yield "Unexpected error occur. Please contact the developer."
+                yield "**Unexpected error occured. Please contact the developer.**"
                 break
 
     async def rag_query(
@@ -576,19 +635,19 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         queries = user_request if isinstance(user_request, list) else [user_request]
         queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
 
-        # Call RAGAgent (now single-query mode)
-        yield "## Calling RAGAgent..."
+        # Call VectorRAGAgent (now single-query mode)
+        yield "## Calling VectorRAGAgent..."
 
         multi = len(queries) > 1
 
         # run sequentially with minimal changes
         for q in queries:
             try:
-                rag_agent_response = await self.agents["RAGAgent"].handle_task(
+                rag_agent_response = await self.agents["VectorRAGAgent"].handle_task(
                     user_query=q,
                     top_k=top_k_for_similarity,
                 )
-                answer = ((rag_agent_response.get("payload") or {}).get("answer") or "")
+                answer = (rag_agent_response.get("payload") or {}).get("answer") or ""
             except Exception as e:
                 answer = f"Failed to generate an answer. Error: {e}"
 
@@ -652,7 +711,7 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
 
         if final_responses:
             combined = "\n\n".join(final_responses)
-            yield "Combined Final Response from QueryAgents\n" + combined
+            yield "## Combined Final Response from QueryAgents" + "\n" + combined
 
     async def _process_subrequest(
         self,
@@ -660,24 +719,21 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         sub_request: str,
         validated_entities: list[str],
         ontology: dict,
-        max_iteration: int = 2,
+        max_iteration: int = 3,
     ) -> AsyncGenerator[str, None]:
         """
         Handles a sub-request by coordinating between QueryAgent and Text2CypherAgent.
         Iteratively generates queries, translates them to Cypher, executes them,
         and refines results until a final response is produced or the iteration limit is reached.
         """
-
         # Track response IDs for iterative refinement
+        query_agent_response = None
+        text2cypher_agent_response = None
         previous_query_agent_response_id = None
         previous_text2_cypher_agent_response_id = None
 
-        query_agent_response = None
-        text2cypher_agent_response = None
-        current_iteration = 0
-
-        # Step 1 : Initial query generation
-        yield f"## Calling Query Agent ({agent_name}) for sub-request '{sub_request}'..."
+        # Step 1: Initial query generation
+        yield f"## Calling Query Agent ({agent_name}) for sub-request'{sub_request}'..."
         query_agent_response = await self.agents["QueryAgent"].handle_task(
             user_request=get_formatted_input_for_query_agent(
                 type="QUERY_GENERATION",
@@ -690,113 +746,109 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         )
         previous_query_agent_response_id = query_agent_response["id"]
 
+        # Check if the initial call failed to produce a query
+        if query_agent_response["type"] != "QUERY":
+            yield f"**{agent_name}:** Failed to generate initial query. Aborting."
+            return
+
         yield (
             f"**{agent_name}**:\n"
-            f"Query: {query_agent_response['payload']['query']}\n"
+            f"**Query:** {query_agent_response['payload']['query']}\n"
             f"**Validated Entities:** {query_agent_response['payload']['validated_entities']}\n"
             f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
         )
 
-        # Step 2 : Iterative refinement process
-        if query_agent_response["type"] == "QUERY":
-            while current_iteration < max_iteration:
-                # Step 2.1: Convert natural query → Cypher
-                yield f"## Calling Text2Cypher Agent for {agent_name}..."
-                text2cypher_agent_response = await self.agents[
-                    "Text2CypherAgent"
-                ].handle_task(
-                    user_query=query_agent_response["payload"]["query"],
-                    validated_entities=query_agent_response["payload"][
-                        "validated_entities"
-                    ],
-                    ontology=ontology,
-                    note=query_agent_response["payload"]["note"],
-                    previous_response_id=previous_text2_cypher_agent_response_id,
-                )
-                previous_text2_cypher_agent_response_id = text2cypher_agent_response[
-                    "id"
-                ]
+        # Step 2: Iterative Refinement Loop
+        for current_iteration in range(max_iteration):
 
-                # Step 2.2: Run Cypher query
-                cypher_retrieval_result = await self.graph_storage.run_query(
-                    query=text2cypher_agent_response["cypher_query"],
-                    parameters=text2cypher_agent_response["parameters"],
-                )
+            # Step 2.1: Convert Natural Language Query to Cypher
+            yield f"## Calling Text2Cypher Agent for {agent_name} (Iteration {current_iteration + 1}/{max_iteration})..."
+            text2cypher_agent_response = await self.agents[
+                "Text2CypherAgent"
+            ].handle_task(
+                user_query=query_agent_response["payload"]["query"],
+                validated_entities=query_agent_response["payload"][
+                    "validated_entities"
+                ],
+                ontology=ontology,
+                note=query_agent_response["payload"]["note"],
+                previous_response_id=previous_text2_cypher_agent_response_id,
+            )
+            previous_text2_cypher_agent_response_id = text2cypher_agent_response["id"]
 
-                # Step 2.3: Report Cypher + results
-                yield (
-                    f"**Response by Text2CypherAgent to {agent_name}:**\n"
-                    f"**Cypher Query:** {get_formatted_cypher(query=text2cypher_agent_response['cypher_query'], params=text2cypher_agent_response['parameters'])}\n"
-                    f"**Note:** {text2cypher_agent_response['note']}\n"
-                    f"**Retrieval Result:**\n{get_formatted_cypher_retrieval_result(cypher_retrieval_result)}"
-                )
+            # Step 2.2: Execute the Cypher query
+            formatted_cypher = get_formatted_cypher(
+                query=text2cypher_agent_response["cypher_query"],
+                params=text2cypher_agent_response["parameters"],
+            )
+            yield f"**Executing the generated Cypher query:**\n{formatted_cypher}"
+            cypher_retrieval_result = await self.graph_storage.run_query(
+                query=text2cypher_agent_response["cypher_query"],
+                parameters=text2cypher_agent_response["parameters"],
+            )
+            stringified_cypher_retrieval_result = (
+                get_stringified_cypher_retrieval_result(cypher_retrieval_result)
+            )
+            graph_retrieval_logger.debug(stringified_cypher_retrieval_result)
+
+            # Step 2.3: Compile the Cypher retrieval result
+            yield "**Compiling the Cypher retrieval result...**"
+            result = await self.agents["RetrievalResultCompilationAgent"].handle_task(
+                formatted_cypher_query=formatted_cypher,
+                formatted_retrieval_result=stringified_cypher_retrieval_result,
+            )
+            formatted_retrieval_result = result["compiled_result"]
+
+            yield (
+                f"**Response by Text2CypherAgent to {agent_name}:**\n"
+                f"**Cypher Query:** {formatted_cypher}\n"
+                f"**Note:** {text2cypher_agent_response['note']}\n"
+                f"**Retrieval Result:**\n{formatted_retrieval_result}"
+            )
+
+            # Step 2.4: Evaluate the retrieval result
+            is_last_iteration = current_iteration == max_iteration - 1
+
+            if is_last_iteration:
+                yield f"**Max iteration reached for {agent_name}, forcing final report generation...**"
+            else:
                 yield f"## Calling Query Agent ({agent_name}) to evaluate retrieval result..."
 
-                # Step 2.4: If final iteration → force final report
-                if current_iteration == max_iteration - 1:
-                    yield f"## Max iteration reached for Query Agent ({agent_name}), generating final response..."
-                    query_agent_response = await self.agents["QueryAgent"].handle_task(
-                        user_request=get_formatted_input_for_query_agent(
-                            type="REPORT_GENERATION",
-                            payload={
-                                "retrieval_result": get_formatted_cypher_retrieval_result(
-                                    cypher_retrieval_result
-                                ),
-                                "cypher_query": get_formatted_cypher(
-                                    query=text2cypher_agent_response["cypher_query"],
-                                    params=text2cypher_agent_response["parameters"],
-                                ),
-                                "note": text2cypher_agent_response["note"],
-                            },
-                        ),
-                        ontology=ontology,
-                        previous_response_id=previous_query_agent_response_id,
-                    )
-                    previous_query_agent_response_id = query_agent_response["id"]
+            query_agent_response = await self.agents["QueryAgent"].handle_task(
+                user_request=get_formatted_input_for_query_agent(
+                    type=(
+                        "REPORT_GENERATION"
+                        if is_last_iteration
+                        else "RETRIEVAL_RESULT_EVALUATION"
+                    ),
+                    payload={
+                        "retrieval_result": formatted_retrieval_result,
+                        "cypher_query": formatted_cypher,
+                        "note": text2cypher_agent_response["note"],
+                    },
+                ),
+                ontology=ontology,
+                previous_response_id=previous_query_agent_response_id,
+            )
+            previous_query_agent_response_id = query_agent_response["id"]
 
-                    yield (
-                        f"**{agent_name}**:\n"
-                        f"**Final Response from {agent_name}:**  {query_agent_response['payload']['response']}\n"
-                        f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
-                    )
-                    break
+            # Step 2.5: Decide continue or break
+            if query_agent_response["type"] == "QUERY":
+                yield (
+                    f"**{agent_name} (Refining Query)**:\n"
+                    f"**New Query:** {query_agent_response['payload']['query']}\n"
+                    f"**Validated Entities:** {query_agent_response['payload']['validated_entities']}\n"
+                    f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
+                )
 
-                else:
-                    # Step 2.5: Intermediate evaluation by QueryAgent
-                    query_agent_response = await self.agents["QueryAgent"].handle_task(
-                        user_request=get_formatted_input_for_query_agent(
-                            type="RETRIEVAL_RESULT_EVALUATION",
-                            payload={
-                                "retrieval_result": get_formatted_cypher_retrieval_result(
-                                    cypher_retrieval_result
-                                ),
-                                "cypher_query": get_formatted_cypher(
-                                    query=text2cypher_agent_response["cypher_query"],
-                                    params=text2cypher_agent_response["parameters"],
-                                ),
-                                "note": text2cypher_agent_response["note"],
-                            },
-                        ),
-                        ontology=ontology,
-                        previous_response_id=previous_query_agent_response_id,
-                    )
-                    previous_query_agent_response_id = query_agent_response["id"]
+            elif query_agent_response["type"] == "FINAL_RESPONSE":
+                yield (
+                    f"**{agent_name}**:\n"
+                    f"**Final Response:** {query_agent_response['payload']['response']}\n"
+                    f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
+                )
+                return
 
-                    # Step 2.6: Decide whether to re-query or finalize
-                    if query_agent_response["type"] == "QUERY":
-                        yield (
-                            f"**{agent_name}**:\n"
-                            f"Query: {query_agent_response['payload']['query']}\n"
-                            f"**Validated Entities:** {query_agent_response['payload']['validated_entities']}\n"
-                            f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
-                        )
-                    elif query_agent_response["type"] == "FINAL_RESPONSE":
-                        yield (
-                            f"**{agent_name}**:\n"
-                            f"**Final Response from {agent_name}:** {query_agent_response['payload']['response']}\n"
-                            f"**Note:** {query_agent_response['payload']['note'] or 'NA'}"
-                        )
-                        break
-                current_iteration += 1
-        else:
-            yield f"**{agent_name}:** Unexpected error occurred. Please contact the developer."
+            else:
+                yield f"**{agent_name}:** Unexpected occurred from QueryAgent. Aborting."
+                return
