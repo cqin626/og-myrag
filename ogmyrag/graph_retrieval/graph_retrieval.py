@@ -128,32 +128,26 @@ class RAGAgent(BaseAgent):
             max_concurrency (int)                     [default: 4]
         """
         graph_retrieval_logger.info("RAGAgent is called")
+        
+        def _clip(s: str, n: int = 300) -> str:
+            s = (s or "").replace("\n", " ").strip()
+            return s if len(s) <= n else s[:n] + "…"
 
-        # ---- normalize input to a list of queries ----
-        batch_input = (
-            kwargs.get("user_queries")
-            or kwargs.get("queries")
-            or kwargs.get("user_query")
-            or kwargs.get("query")
-            or []
-        )
-        if isinstance(batch_input, str):
-            queries = [batch_input]
-        else:
-            queries = list(batch_input)
+        def _fmt_score(x) -> str:
+            try:
+                return f"{float(x):.3f}"
+            except Exception:
+                return str(x)
+        
+        # ---- normalize to a single query ----
+        q = (kwargs.get("user_query") or kwargs.get("query") or "").strip()
+        if not q:
+            graph_retrieval_logger.warning("Empty query received; returning empty answer.")
+            return {"type": "RAG_RESPONSE", "payload": {"answer": ""}}
+            
+        graph_retrieval_logger.debug("RAGAgent\nQuery used: %s", q)
 
-        # Trim & drop empties (but keep order)
-        queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
-
-        if not queries:
-            return {
-                "type": "RAG_BATCH_RESPONSE",
-                "payload": {"results": {}},  # empty mapping
-            }
-
-        graph_retrieval_logger.debug("RAGAgent\nQueries used:\n%s", queries)
-
-        # ---- shared options for all queries ----
+        # ---- options ----
         top_k = int(kwargs.get("top_k", 10))
         data_namespace = kwargs.get("data_namespace", "")
         catalog_namespace = kwargs.get("catalog_namespace", "company-catalog")
@@ -164,86 +158,84 @@ class RAGAgent(BaseAgent):
         score_threshold = kwargs.get("score_threshold")
         small_model = kwargs.get("small_model", "gpt-5-nano")
         answer_model = kwargs.get("answer_model", "gpt-5-nano")
-        max_concurrency = int(kwargs.get("max_concurrency", 4))
+        max_concurrency = int(kwargs.get("max_concurrency", 4))  # forwarded to RAG
+        
+        # ---- minimal-change debug knobs (logging only) ----
+        log_hits = bool(kwargs.get("log_hits", True))
+        hits_per_subquery = int(kwargs.get("hits_per_subquery", 5))
+        hits_preview_chars = int(kwargs.get("hits_preview_chars", 240))
+        
+        
+        
+        
+        # ---- call the new RAG (which returns {"RAG_RESPONSE": <final answer>}) ----
+        try:
+            res = await rag_answer_with_company_detection(
+                pine=self.pine,
+                pinecone_config=self.pinecone_config,
+                query=q,
+                top_k=top_k,
+                data_namespace=data_namespace,
+                catalog_namespace=catalog_namespace,
+                small_model=small_model,
+                answer_model=answer_model,
+                doc_type=doc_type,
+                report_type_name=report_type_name,
+                year=year,
+                score_threshold=score_threshold,
+                max_concurrency=max_concurrency,
+                # request compact hits only if we intend to log them
+                return_hits=log_hits,
+                hits_per_subquery=hits_per_subquery,
+                hits_preview_chars=hits_preview_chars,
+            )
+            graph_retrieval_logger.info("RAGAgent: completed RAG for query=%r", q)
+            final_answer = res.get("RAG_RESPONSE", "")
+            graph_retrieval_logger.debug(
+                "RAG_RESPONSE length=%d preview=%s",
+                len(final_answer or ""), final_answer
+            )
+            
+            # ---- minimal-change: debug-log retrieved hits (not added to payload) ----
+            if log_hits:
+                dbg = (res or {}).get("RAG_DEBUG")
+                if not dbg:
+                    graph_retrieval_logger.warning("log_hits=True but no RAG_DEBUG returned.")
+                else:
+                    subs = dbg.get("subqueries") or []
+                    graph_retrieval_logger.debug("Subqueries (%d): %s", len(subs), subs)
+                    for i, ps in enumerate(dbg.get("per_sub", []), 1):
+                        graph_retrieval_logger.debug(
+                            "Subquery #%d: %s | company=%r | normalized=%s",
+                            i, _clip(ps.get("subquery") or "", 300),
+                            ps.get("company_used"),
+                            _clip(ps.get("normalized_search_query") or "", 300),
+                        )
+                        hits = ps.get("hits") or []
+                        graph_retrieval_logger.debug("  Hits returned: %d", len(hits))
+                        for idx, h in enumerate(hits, 1):
+                            hit_payload = {
+                                "idx": idx,
+                                "id": h.get("id"),
+                                "score": h.get("score"),
+                                "score_fmt": _fmt_score(h.get("score")),
+                                "company": h.get("company"),
+                                "section": h.get("section"),
+                                "chunk_no": h.get("chunk_no"),
+                                "year": h.get("year"),
+                                "type": h.get("type"),
+                                "snippet": h.get("snippet") or "",
+                            }
+                            graph_retrieval_logger.debug("    hit:\n%s", json.dumps(hit_payload, ensure_ascii=False, indent=2))
+        except Exception as e:
+            graph_retrieval_logger.error("RAGAgent error during RAG call for %r: %s", q, e)
+            final_answer = "Failed to generate an answer."
 
-        # ---- per-query runner ----
-        async def _run_one(q: str):
-            try:
-                res = await rag_answer_with_company_detection(
-                    pine=self.pine,
-                    pinecone_config=self.pinecone_config,
-                    query=q,
-                    top_k=top_k,
-                    data_namespace=data_namespace,
-                    catalog_namespace=catalog_namespace,
-                    small_model=small_model,
-                    answer_model=answer_model,
-                    doc_type=doc_type,
-                    report_type_name=report_type_name,
-                    year=year,
-                    score_threshold=score_threshold,
-                )
-                graph_retrieval_logger.info("RAGAgent: completed RAG for query=%r", q)
-            except Exception as e:
-                graph_retrieval_logger.error(
-                    "RAGAgent error during RAG call for %r: %s", q, e
-                )
-                res = {
-                    "answer": "Failed to generate an answer.",
-                    "hits": [],
-                    "company_used": None,
-                    "known_companies": [],
-                    "filter_used": {},
-                    "usage": {},
-                }
-
-            # per-query formatted response (same shape as before)
-            return {
-                "type": "RAG_RESPONSE",
-                "payload": {
-                    "answer": res.get("answer", ""),
-                    "hits": res.get("hits", []),
-                    "company_used": res.get("company_used"),
-                    "known_companies": res.get("known_companies", []),
-                    "filter_used": res.get("filter_used", {}),
-                    "usage": res.get("usage", {}),
-                },
-            }
-
-        # ---- concurrency control ----
-        sem = asyncio.Semaphore(max_concurrency)
-
-        async def _guarded(q: str):
-            async with sem:
-                return await _run_one(q)
-
-        tasks = [asyncio.create_task(_guarded(q)) for q in queries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # ---- build mapping: query -> formatted_response ----
-        by_query: dict[str, dict] = {}
-        for q, r in zip(queries, results):
-            if isinstance(r, Exception):
-                graph_retrieval_logger.error("RAGAgent task failed for %r: %s", q, r)
-                by_query[q] = {
-                    "type": "RAG_RESPONSE",
-                    "payload": {
-                        "answer": "Failed to generate an answer.",
-                        "hits": [],
-                        "company_used": None,
-                        "known_companies": [],
-                        "filter_used": {},
-                        "usage": {},
-                    },
-                    "error": str(r),
-                }
-            else:
-                by_query[q] = r
-
+        # ---- single response ----
         return {
-            "type": "RAG_BATCH_RESPONSE",
+            "type": "RAG_RESPONSE",
             "payload": {
-                "results": by_query  # mapping: query -> formatted per-query response
+                "answer": final_answer
             },
         }
 
@@ -639,31 +631,22 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         queries = user_request if isinstance(user_request, list) else [user_request]
         queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
 
-        # RAG: Pass the a list of user query to RAG Agent
+        # Call RAGAgent (now single-query mode)
         yield "## Calling RAGAgent..."
-        rag_agent_response = await self.agents["RAGAgent"].handle_task(
-            user_query=queries,
-            top_k=top_k_for_similarity,
-        )
 
-        results = (rag_agent_response.get("payload") or {}).get("results") or {}
         multi = len(queries) > 1
 
+        # run sequentially with minimal changes
         for q in queries:
-            # try exact, trimmed, then case-insensitive match; otherwise empty
-            entry = results.get(q) or results.get(q.strip())
-            if entry is None:
-                norm = q.strip().casefold()
-                entry = next(
-                    (
-                        v
-                        for k, v in results.items()
-                        if isinstance(k, str) and k.strip().casefold() == norm
-                    ),
-                    None,
+            try:
+                rag_agent_response = await self.agents["RAGAgent"].handle_task(
+                    user_query=q,
+                    top_k=top_k_for_similarity,
                 )
+                answer = ((rag_agent_response.get("payload") or {}).get("answer") or "")
+            except Exception as e:
+                answer = f"Failed to generate an answer. Error: {e}"
 
-            answer = (((entry or {}).get("payload")) or {}).get("answer", "") or ""
             yield f"### {q}\n{answer}" if multi else answer
 
     def _update_current_chat_id(self, new_chat_id: str):
