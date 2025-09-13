@@ -387,7 +387,7 @@ class Text2CypherAgent(BaseAgent):
         )
 
         graph_retrieval_logger.debug(
-            f"Text2CypherAgent\nModel configuration used:\n{str(self.agent_config)}"
+            f"Text2CypherAgent\nAgent configuration used:\n{str(self.agent_config)}"
         )
 
         response = await self.agent_system.llm_client.fetch_response(
@@ -440,7 +440,7 @@ class RetrievalResultCompilationAgent(BaseAgent):
         )
 
         graph_retrieval_logger.debug(
-            f"RetrievalResultCompilationAgent\nModel configuration used:\n{str(self.agent_config)}"
+            f"RetrievalResultCompilationAgent\nAgent configuration used:\n{str(self.agent_config)}"
         )
 
         response = await self.agent_system.llm_client.fetch_response(

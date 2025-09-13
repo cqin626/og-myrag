@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import logging
-
-
 from ..prompts import PROMPT
-from ..llm import fetch_responses_openai
+from ..llm import OpenAIAsyncClient
 from ..util import get_formatted_ontology, get_formatted_openai_response, get_clean_json
 from ..storage import AsyncMongoDBStorage
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from ..base import BaseAgent, BaseMultiAgentSystem, MongoStorageConfig
+from ..base import BaseAgent, BaseMultiAgentSystem, MongoStorageConfig, BaseLLMClient
 from .ontology_construction_util import (
     get_new_version,
     get_formatted_ontology_entry_for_db,
@@ -25,13 +23,15 @@ class OntologyConstructionAgent(BaseAgent):
     An agent responsible for constructing ontology based on source text.
     """
 
+    def __init__(self, agent_name: str, agent_config: dict):
+        super().__init__(agent_name=agent_name, agent_config=agent_config)
+
     async def handle_task(self, **kwargs) -> str:
         """
         Parameters:
            source_text (str): The source text to parse.
            source_text_constraints (str): The constraints while parsing source text.
            ontology (dict): The existing ontology.
-           openai_model (str): The model to use.
         """
         ontology_construction_logger.info(f"OntologyConstructionAgent is called")
 
@@ -46,14 +46,12 @@ class OntologyConstructionAgent(BaseAgent):
         user_prompt = source_text_constraints + "\n\n" + source_text
         ontology_construction_logger.debug(f"User Prompt:\n\n{user_prompt}")
 
-        response = await fetch_responses_openai(
-            model=kwargs.get("openai_model", "gpt-5-mini"),
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            text={"format": {"type": "text"}},
-            reasoning={"effort": "medium"},
-            max_output_tokens=128000,
-            tools=[],
+        ontology_construction_logger.debug(
+            f"OntologyConstructionAgent\nAgent configuration used:\n{str(self.agent_config)}"
+        )
+
+        response = await self.agent_system.llm_client.fetch_response(
+            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
         )
         ontology_construction_logger.info(
             f"OntologyConstructionAgent\nOntology construction response details:\n{get_formatted_openai_response(response)}"
@@ -69,11 +67,13 @@ class OntologyEvaluationAgent(BaseAgent):
     An agent responsible for evaluating the ontology.
     """
 
+    def __init__(self, agent_name: str, agent_config: dict):
+        super().__init__(agent_name=agent_name, agent_config=agent_config)
+
     async def handle_task(self, **kwargs) -> str:
         """
         Parameters:
           ontology (dict): The existing ontology.
-          openai_model (str): The model to use.
         """
         ontology_construction_logger.info(f"OntologyEvaluationAgent is called")
 
@@ -85,14 +85,12 @@ class OntologyEvaluationAgent(BaseAgent):
         user_prompt = get_formatted_ontology(data=kwargs.get("ontology", {}) or {})
         ontology_construction_logger.debug(f"User Prompt:\n\n{user_prompt}")
 
-        response = await fetch_responses_openai(
-            model=kwargs.get("openai_model", "gpt-5-mini"),
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            text={"format": {"type": "text"}},
-            reasoning={"effort": "medium"},
-            max_output_tokens=128000,
-            tools=[],
+        ontology_construction_logger.debug(
+            f"OntologyEvaluationAgent\nAgent configuration used:\n{str(self.agent_config)}"
+        )
+
+        response = await self.agent_system.llm_client.fetch_response(
+            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
         )
         ontology_construction_logger.info(
             f"OntologyEvaluationAgent\nOntology evaluation response details:\n{get_formatted_openai_response(response)}"
@@ -106,12 +104,14 @@ class OntologyEnhancementAgent(BaseAgent):
     An agent responsible for enhancing the ontology.
     """
 
+    def __init__(self, agent_name: str, agent_config: dict):
+        super().__init__(agent_name=agent_name, agent_config=agent_config)
+
     async def handle_task(self, **kwargs) -> str:
         """
         Parameters:
           ontology (dict): The existing ontology.
           evaluation_feedback (str): The evaluation feedback on the ontology
-          openai_model (str): The model to use.
         """
         ontology_construction_logger.info(f"OntologyEnhancementAgent is called")
 
@@ -127,14 +127,12 @@ class OntologyEnhancementAgent(BaseAgent):
         user_prompt = evaluation_feedback + "\n" + formatted_ontology
         ontology_construction_logger.debug(f"User Prompt:\n\n{user_prompt}")
 
-        response = await fetch_responses_openai(
-            model=kwargs.get("openai_model", "gpt-5-mini"),
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            text={"format": {"type": "text"}},
-            reasoning={"effort": "medium"},
-            max_output_tokens=128000,
-            tools=[],
+        ontology_construction_logger.debug(
+            f"OntologyEnhancementAgent\nAgent configuration used:\n{str(self.agent_config)}"
+        )
+
+        response = await self.agent_system.llm_client.fetch_response(
+            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
         )
 
         ontology_construction_logger.info(
@@ -151,17 +149,22 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         ontology_purpose: str,
         ontology_config: MongoStorageConfig,
         ontology_evaluation_config: MongoStorageConfig,
+        llm_client: BaseLLMClient,
+        agent_configs: dict[str, dict],
     ):
         super().__init__(
             {
                 "OntologyConstructionAgent": OntologyConstructionAgent(
-                    "OntologyConstructionAgent"
+                    agent_name="OntologyConstructionAgent",
+                    agent_config=agent_configs["OntologyConstructionAgent"],
                 ),
                 "OntologyEvaluationAgent": OntologyEvaluationAgent(
-                    "OntologyEvaluationAgent"
+                    agent_name="OntologyEvaluationAgent",
+                    agent_config=agent_configs["OntologyEvaluationAgent"],
                 ),
                 "OntologyEnhancementAgent": OntologyEnhancementAgent(
-                    "OntologyEnhancementAgent"
+                    agent_name="OntologyEnhancementAgent",
+                    agent_config=agent_configs["OntologyEnhancementAgent"],
                 ),
             }
         )
@@ -170,6 +173,8 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             self.ontology_evaluation_config = ontology_evaluation_config
             self.mongo_storage = AsyncMongoDBStorage(mongo_client)
             self.ontology_purpose = ontology_purpose
+            self.llm_client = llm_client
+            self.agent_configs = agent_configs
         except Exception as e:
             ontology_construction_logger.error(f"OntologyConstructionSystem: {e}")
             raise
@@ -178,7 +183,6 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         self,
         source_text: str,
         source_text_constraints: str,
-        openai_model: str = "gpt-5-mini",
     ):
         # Step 1: Fetch the latest ontology and its version
         current_onto = await self.get_current_onto()
@@ -191,7 +195,6 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             source_text=source_text,
             source_text_constraints=source_text_constraints,
             ontology=current_onto,
-            openai_model=openai_model,
         )
         if not construction_response:
             ontology_construction_logger.error(
@@ -238,7 +241,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             )
             new_ontology_entry = get_formatted_ontology_entry_for_db(
                 ontology=current_onto,
-                model=openai_model,
+                model=self.agent_configs["OntologyConstructionAgent"]["model"],
                 purpose=self.ontology_purpose,
                 version=new_version,
                 modification_type="EXTENSION",
@@ -257,7 +260,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
                 f"OntologyConstructionSystem\nOntology is updated, current version: {new_version}"
             )
 
-    async def enhance_ontology_via_loop(self, openai_model: str):
+    async def enhance_ontology_via_loop(self):
         """
         Iteration loop that runs up to 5 times.
         - Iteration 1: always run (if problems exist).
@@ -265,7 +268,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         - Iteration 3: run only if at least 2 problems remain.
         - Iteration 4: run only if at least 3 problems remain.
         - Iteration 5: run only if at least 4 problems remain.
-        - Iteration 6: run only if at least 5 problems remain (last iteration).
+        - Iteration 6: run only if at least 5 problems remain.
         - Iteration 7: run only if at least 6 problems remain (last iteration).
         """
         iteration = 0
@@ -273,23 +276,18 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             ontology_construction_logger.info(
                 f"OntologyConstructionSystem:\nEnhancing ontology via loop. Current iteration {iteration + 1}"
             )
-            evaluation_report = await self.get_ontology_evaluation_report(
-                openai_model=openai_model
-            )
+            evaluation_report = await self.get_ontology_evaluation_report()
             num_of_issues = len(evaluation_report["evaluation_result"])
 
             if (
-                (iteration == 0 and num_of_issues >= 0)
-                or (iteration == 1 and num_of_issues >= 0)
+                (iteration <= 1 and num_of_issues >= 0)
                 or (iteration == 2 and num_of_issues >= 2)
                 or (iteration == 3 and num_of_issues >= 3)
                 or (iteration == 4 and num_of_issues >= 4)
                 or (iteration == 5 and num_of_issues >= 5)
                 or (iteration == 6 and num_of_issues >= 6)
             ):
-                await self.enhance_ontology(
-                    evaluation_feedback=evaluation_report, openai_model=openai_model
-                )
+                await self.enhance_ontology(evaluation_feedback=evaluation_report)
                 iteration += 1
             else:
                 ontology_construction_logger.info(
@@ -299,7 +297,6 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
     async def get_ontology_evaluation_report(
         self,
-        openai_model: str = "gpt-5-mini",
     ):
         """
         Evaluates the latest ontology, stores the evaluation report in MongoDB, and returns the report.
@@ -311,7 +308,6 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         # Step 2: Call construction agent
         evaluation_response = await self.agents["OntologyEvaluationAgent"].handle_task(
             ontology=current_onto,
-            openai_model=openai_model,
         )
         if not evaluation_response:
             ontology_construction_logger.error(
@@ -336,7 +332,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             # Step 3.2 Prepare the evaluation report entry to be uploaded
             new_report_entry = get_formatted_ontology_evaluation_report_entry_for_db(
                 evaluation_result=evaluation_response["evaluation_result"],
-                model=openai_model,
+                model=self.agent_configs["OntologyEvaluationAgent"]["model"],
                 version=current_onto_version,
                 purpose=self.ontology_purpose,
                 note=evaluation_response["note"],
@@ -357,9 +353,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
 
         return evaluation_response
 
-    async def enhance_ontology(
-        self, evaluation_feedback: dict, openai_model: str = "gpt-5-mini"
-    ):
+    async def enhance_ontology(self, evaluation_feedback: dict):
         # Step 1: Fetch the latest ontology and its version
         current_onto = await self.get_current_onto()
         current_onto_version = await self.get_current_onto_version()
@@ -372,7 +366,6 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
                 evaluation_feedback
             ),
             ontology=current_onto,
-            openai_model=openai_model,
         )
         if not enhancement_response:
             ontology_construction_logger.error(
@@ -398,7 +391,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
             )
             new_ontology_entry = get_formatted_ontology_entry_for_db(
                 ontology=enhancement_response["updated_ontology"],
-                model=openai_model,
+                model=self.agent_configs["OntologyEnhancementAgent"]["model"],
                 purpose=self.ontology_purpose,
                 version=new_version,
                 modification_type="ENHANCEMENT",
