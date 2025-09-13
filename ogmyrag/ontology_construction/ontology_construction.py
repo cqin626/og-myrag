@@ -153,7 +153,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         agent_configs: dict[str, dict],
     ):
         super().__init__(
-            {
+            agents={
                 "OntologyConstructionAgent": OntologyConstructionAgent(
                     agent_name="OntologyConstructionAgent",
                     agent_config=agent_configs["OntologyConstructionAgent"],
@@ -166,14 +166,14 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
                     agent_name="OntologyEnhancementAgent",
                     agent_config=agent_configs["OntologyEnhancementAgent"],
                 ),
-            }
+            },
+            llm_client=llm_client,
         )
         try:
             self.ontology_config = ontology_config
             self.ontology_evaluation_config = ontology_evaluation_config
             self.mongo_storage = AsyncMongoDBStorage(mongo_client)
             self.ontology_purpose = ontology_purpose
-            self.llm_client = llm_client
             self.agent_configs = agent_configs
         except Exception as e:
             ontology_construction_logger.error(f"OntologyConstructionSystem: {e}")

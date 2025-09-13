@@ -219,7 +219,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         agent_configs: dict[str, dict],
     ):
         super().__init__(
-            {
+            agents={
                 "EntityRelationshipExtractionAgent": EntityRelationshipExtractionAgent(
                     agent_name="EntityRelationshipExtractionAgent",
                     agent_config=agent_configs["EntityRelationshipExtractionAgent"],
@@ -232,7 +232,8 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                     agent_name="RelationshipDeduplicationAgent",
                     agent_config=agent_configs["RelationshipDeduplicationAgent"],
                 ),
-            }
+            },
+            llm_client=llm_client,
         )
 
         try:
@@ -274,8 +275,6 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             )
 
             self.graph_storage = AsyncNeo4jStorage(**graphdb_config)
-
-            self.llm_client = llm_client
 
         except Exception as e:
             graph_construction_logger.error(f"GraphConstructionSystem: {e}")
@@ -522,42 +521,41 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 data=data, from_company=from_company
             )
         )
-        if formatted_entities and formatted_relationships:
-            async with self.async_mongo_storage.with_transaction() as session:
-                # Step 1: Insert entities
-                inserted_entity_ids = (
-                    await self.async_mongo_storage.get_database(
-                        self.entity_config["database_name"]
-                    )
-                    .get_collection(self.entity_config["collection_name"])
-                    .create_documents(data=formatted_entities, session=session)
+        async with self.async_mongo_storage.with_transaction() as session:
+            # Step 1: Insert entities
+            inserted_entity_ids = (
+                await self.async_mongo_storage.get_database(
+                    self.entity_config["database_name"]
                 )
+                .get_collection(self.entity_config["collection_name"])
+                .create_documents(data=formatted_entities, session=session)
+            )
 
-                # Step 2: Insert relationships
-                inserted_relationship_ids = (
-                    await self.async_mongo_storage.get_database(
-                        self.relationship_config["database_name"]
-                    )
-                    .get_collection(self.relationship_config["collection_name"])
-                    .create_documents(data=formatted_relationships, session=session)
+            # Step 2: Insert relationships
+            inserted_relationship_ids = (
+                await self.async_mongo_storage.get_database(
+                    self.relationship_config["database_name"]
                 )
-
-                graph_construction_logger.info(
-                    f"GraphConstructionSystem\nSuccessfully inserted {len(inserted_entity_ids)} entity(ies) and {len(inserted_relationship_ids)} relationship(s) into MongoDB."
-                )
-
-            # Step 3: Update the company disclosure as processed
-            # Since the reports are currently stored in different locations. This operation cannot be placed into a single transaction
-            await self.async_mongo_storage_reports.get_database(
-                self.disclosure_config["database_name"]
-            ).get_collection(self.disclosure_config["collection_name"]).update_document(
-                query={"_id": data["document_id"]},
-                update_data={"is_parsed": True},
+                .get_collection(self.relationship_config["collection_name"])
+                .create_documents(data=formatted_relationships, session=session)
             )
 
             graph_construction_logger.info(
-                f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
+                f"GraphConstructionSystem\nSuccessfully inserted {len(inserted_entity_ids)} entity(ies) and {len(inserted_relationship_ids)} relationship(s) into MongoDB."
             )
+
+        # Step 3: Update the company disclosure as processed
+        # Since the reports are currently stored in different locations. This operation cannot be placed into a single transaction
+        await self.async_mongo_storage_reports.get_database(
+            self.disclosure_config["database_name"]
+        ).get_collection(self.disclosure_config["collection_name"]).update_document(
+            query={"_id": data["document_id"]},
+            update_data={"is_parsed": True},
+        )
+
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
+        )
 
     async def deduplicate_entities(
         self,
