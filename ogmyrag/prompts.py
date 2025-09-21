@@ -738,7 +738,7 @@ Guidelines:
          - Then, in the `parameters` dictionary (as specified in Section 3 Output format), include `"company_name": "ABC Berhad"`.
          - This enables parameterized execution in downstream components.
             
-   [3] Output Format
+   [4] Output Format
 		- Always return results strictly in JSON (no extra text, commentary, or code blocks).
       - Format:
          {{

@@ -579,7 +579,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 from_company=from_company,
             )
 
-            # Step 3 : Fetch unparsed entities
+            # Step 3 : Fetch entities to deduplicate
             entities_to_deduplicate = await self._get_entities_to_deduplicate(
                 from_company=from_company,
                 num_of_entities_to_fetch=num_of_entities_per_batch,
@@ -1572,6 +1572,14 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 f"Failed to revert status for collection '{collection_to_revert}': {e}"
             )
             raise
+
+    async def upsert_entities_and_relationships_into_graph(
+        self, from_company: str, batch_size: int= 100
+    ):
+        await self.upsert_entities_into_pinecone(from_company, batch_size)
+        await self.upsert_entities_and_relationships_into_neo4j(
+            from_company, batch_size
+        )
 
     async def upsert_entities_into_pinecone(self, from_company: str, batch_size: int):
         """
