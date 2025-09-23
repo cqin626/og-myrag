@@ -10,6 +10,7 @@ from ogmyrag.base import PineconeStorageConfig
 
 query_logger = logging.getLogger("query")
 retrieval_logger = logging.getLogger("retrieval")
+graph_retrieval_logger = logging.getLogger("graph_retrieval")
 
 # ---------- tiny, fast DOM chunker ----------
 def _text_of(node) -> str:
@@ -282,7 +283,7 @@ async def rag_answer_with_company_detection(
     # NEW: unify single input query
     user_query = (query or "").strip()
     query_logger.info("RAG start | query=%r | top_k=%d", user_query, top_k)
-    
+    graph_retrieval_logger.info("RAG start | query=%r | top_k=%d", user_query, top_k)
 
 
     # ---------------- (1) List companies from the catalog namespace ----------------
@@ -295,6 +296,8 @@ async def rag_answer_with_company_detection(
             )
         except Exception as e:
             query_logger.warning("list(namespace=%r) failed: %s; falling back to list() without namespace",
+                                    catalog_namespace, e)
+            graph_retrieval_logger.warning("list(namespace=%r) failed: %s; falling back to list() without namespace",
                                     catalog_namespace, e)
             pages = await asyncio.to_thread(
                 lambda: list(pine.pinecone.Index(pinecone_config["index_name"]).list(prefix="company::", limit=1000))
@@ -312,6 +315,10 @@ async def rag_answer_with_company_detection(
                 )
             except Exception as e:
                 query_logger.warning(
+                    "fetch(namespace=%r) failed: %s; retrying without namespace",
+                    catalog_namespace, e
+                )
+                graph_retrieval_logger.warning(
                     "fetch(namespace=%r) failed: %s; retrying without namespace",
                     catalog_namespace, e
                 )
@@ -352,9 +359,11 @@ async def rag_answer_with_company_detection(
 
     except Exception as e:
         query_logger.exception("Catalog company extraction failed")  # <- real stacktrace
+        graph_retrieval_logger.exception("Catalog company extraction failed")
         companies = []
 
     query_logger.info("Catalog companies (%d): %s", len(companies), companies)
+    graph_retrieval_logger.info("Catalog companies (%d): %s", len(companies), companies)
     
     # ---------------- (2a) Decompose the user query into sub-queries ----------------
     # NEW: ask a small model to break the single query into atomic sub-queries
@@ -389,8 +398,10 @@ async def rag_answer_with_company_detection(
             subqueries = sq
     except Exception as e:
         query_logger.warning("Query decomposition failed: %s; proceeding with single query.", e)
+        graph_retrieval_logger.warning("Query decomposition failed: %s; proceeding with single query.", e)
 
     query_logger.info("Sub-queries (%d): %s", len(subqueries), subqueries)
+    graph_retrieval_logger.info("Sub-queries (%d): %s", len(subqueries), subqueries)
     
     # ---------------- helper: per-subquery RAG ----------------
     async def _run_rag_for_one_subquery(one_query: str) -> Dict[str, Any]:
@@ -448,14 +459,19 @@ async def rag_answer_with_company_detection(
                 search_query = llm_norm or one_query
             except Exception as e:
                 query_logger.warning("Company detection failed for sub-query %r: %s", one_query, e)
+                graph_retrieval_logger.warning("Company detection failed for sub-query %r: %s", one_query, e)
                 company_used = None
                 search_query = one_query
 
         query_logger.info("Detected company for sub-query %r: %r", one_query, company_used)
+        graph_retrieval_logger.info("Detected company for sub-query %r: %r", one_query, company_used)
+
         if search_query != one_query:
             query_logger.info("Search query normalized: %r → %r", one_query, search_query)
+            graph_retrieval_logger.info("Search query normalized: %r → %r", one_query, search_query)
         else:
             query_logger.info("Search query unchanged for this sub-query.")
+            graph_retrieval_logger.info("Search query unchanged for this sub-query.")
 
         # ---- (3) Retrieve top-k chunks from data namespace ----
         flt: Dict[str, Any] = {}
@@ -469,6 +485,7 @@ async def rag_answer_with_company_detection(
             flt["year"] = year
 
         query_logger.info("Query filter (sub-query): %s", flt or "{}")
+        graph_retrieval_logger.info("Query filter (sub-query): %s", flt or "{}")
 
         try:
             q_emb = await pine._embed_text(search_query)
@@ -483,6 +500,7 @@ async def rag_answer_with_company_detection(
                        else getattr(result, "matches", [])) or []
         except Exception as e:
             query_logger.warning("Vector query failed: %s", e)
+            graph_retrieval_logger.warning("Vector query failed: %s", e)
             matches = []
 
         hits: List[Dict[str, Any]] = []
@@ -522,19 +540,34 @@ async def rag_answer_with_company_detection(
 
             Rules:
             1) Group all context by company (use each chunk's 'company' metadata in the context header).
-            2) NEVER mix facts across companies. If the user names a specific company, answer ONLY for that company and ignore others.
+            2) NEVER mix facts across companies. If the user names a specific company/person, answer ONLY for that entity and ignore others.
             3) If multiple companies appear AND the question is generic (no single company specified), evaluate each company separately:
             - If you have enough evidence for a company, produce an answer for that company.
             - If not enough evidence for that company, write exactly: "Not found in provided documents."
-            4) No invention of facts. Every material claim (numbers, dates, names, products, events) must be supported by the provided chunks. If no company has sufficient evidence, the entire reply must be exactly: "Not found in provided documents."
+            4) No invention of facts. Every material claim (numbers, dates, names, products, events) must be supported by the provided chunks. If no company/person has sufficient evidence, the entire reply must be exactly: "Not found in provided documents."
             5) Be thorough yet economical: short paragraphs and tight bullets. Elaborate where the documents allow; never speculate.
 
+            Entity Anchoring & Filtering (People):
+            - When the query targets a specific PERSON, treat each chunk as follows:
+            a) Anchor at the FIRST occurrence of the person’s full name or a heading/profile line containing that name (case-insensitive; honorifics allowed: Dr., Datuk, Dato’, Ir., Mr., Ms., etc.).
+            b) IGNORE all text BEFORE that anchor, even if it appears in the same chunk.
+            c) Include text FROM the anchor forward UNTIL the next major heading/role line introducing a different person/entity, or the end of the chunk.
+            - Figures/Tables immediately following the anchor that reference the same person belong to that person; content clearly about other entities should be excluded.
+
+            Gender Consistency Guard:
+            - Determine gender from the ANCHORED segment only, with priority:
+            1) Explicit structured field (e.g., "Gender: Male/Female").
+            2) Consistent pronoun usage within the anchored segment when unambiguous.
+            - Discard statements that conflict with the determined gender (e.g., if gender is Male, ignore “she/her” statements unless they clearly refer to a different named person).
+            - Do NOT use pronouns or statements appearing BEFORE the anchor to infer gender or facts about the target person.
+            - If gender cannot be confidently determined from the anchored segment, treat gender as unknown (omit the gender line).
+
             Temporal Disambiguation (Ages & Dates):
-            - Treat every reported age as TIME-ANCHORED to the chunk’s date. Use date fields from the context header in this order: as_of_date, as_of_year, year. If none is provided in the header, derive the year from explicit dates in the chunk text only if unambiguous; otherwise mark as unknown year.
+            - Treat every reported age as TIME-ANCHORED to the chunk’s date. Use date fields from the context header in this order: as_of_date → as_of_year → year. If none is provided in the header, derive the year from explicit dates in the text only if unambiguous; otherwise mark as unknown and omit.
             - Build an age timeline mapping Year → Age from all chunks for the same person/company.
-            - If the user asks for the CURRENT age (or no year is specified), select the age from the most recent available year ≤ the current calendar year. If multiple ages exist for the same latest year, prefer the one with the latest as_of_date; if still conflicting, state both values for that year.
-            - If the user asks for a SPECIFIC year, return the age reported for that year. Do NOT infer ages for missing years unless a full date of birth (DOB) is explicitly present in the chunks.
-            - If DOB is present, you may compute age for a requested year using only that DOB and the requested/as_of date (subtract 1 if the birthday has not occurred by the as_of date). Otherwise, do not compute or interpolate.
+            - If the user asks for the CURRENT age (or no year is specified), select the age from the most recent available year ≤ the current calendar year. If multiple ages exist for that latest year, prefer the one with the latest as_of_date; if still conflicting, state both values for that year.
+            - If the user asks for a SPECIFIC year, return the age reported for that year. Do NOT infer ages for missing years unless a full DOB is explicitly present in the chunks.
+            - If DOB is present, you may compute age for a requested/as-of date (subtract 1 if the birthday has not occurred by that date). Otherwise, do not compute or interpolate.
             - When ages differ across years (e.g., 53 in 2023; 54 in 2024; 55 in 2025), report the timeline and label the latest year’s value as the current age if appropriate.
             - If no single latest value can be determined, output all age values with their specific years.
 
@@ -544,11 +577,17 @@ async def rag_answer_with_company_detection(
             - If sources conflict for the SAME year, note the conflict in Details (e.g., “Conflicting 2025 age reports: 54, 55.”). Do not attempt to reconcile using outside knowledge.
 
             Handling Gaps:
-            - If a needed detail is not stated, write: "Not stated in provided documents." (no speculation).
+            - Do not print placeholders like “Not stated in provided documents.” for individual fields.
+            - If the provided context does NOT contain an answer to the user’s question, output exactly: "Not found in provided documents."
             - Do not generalize beyond what is explicitly supported.
 
+            Conditional Field Emission (CLEAN OUTPUT):
+            - Emit a field/section ONLY if you have at least one supported value for it.
+            - Omit Gender if unknown; omit Age timeline if no ages are available; omit Current age if not determinable.
+            - Do not include empty headings or placeholder lines.
+
             Output Format:
-            - If answering for one company:
+            - If answering for one company/person (emit only sections that have content):
             ## Overview
             <2–4 sentences summarizing the supported answer. No citations.>
 
@@ -556,22 +595,18 @@ async def rag_answer_with_company_detection(
             - <concise fact or point. No citations.>
             - <concise fact or point. No citations.>
 
-            - If answering for multiple companies:
-            ### <Company Name>
-            ## Overview
-            <2–4 sentences. No citations.>
-
-            ## Details
-            - <concise fact or point. No citations.>
-            - <concise fact or point. No citations.>
+            - If answering for multiple companies/persons:
+            ### <Entity Name>
+            (Repeat the same subsections above, omitting any that lack content for that entity. If an entity has no supported content at all, write exactly: "Not found in provided documents.")
 
             Additional Constraints:
             - Neutral, analytical tone.
             - Do not include external knowledge or assumptions.
             - Preserve original numeric formatting (commas, decimals, signs, currencies).
-            - Only include cross-company comparisons if the user EXPLICITLY asks; otherwise, keep companies separate.
+            - Only include cross-company/person comparisons if the user EXPLICITLY asks; otherwise, keep entities separate.
 
-            Remember: If nothing can be answered for any company, output exactly: "Not found in provided documents."
+            Global Fallback:
+            - If nothing can be answered for any company/person, output exactly: "Not found in provided documents."
             """
         )
         user_msg = f"Question:\n{search_query}\n\nContext (top-{top_k}):\n{context}"
@@ -593,6 +628,7 @@ async def rag_answer_with_company_detection(
             answer = (ans.choices[0].message.content or "").strip()
         except Exception as e:
             query_logger.warning("Answer generation failed: %s", e)
+            graph_retrieval_logger.warning("Answer generation failed: %s", e)
             answer = "Failed to generate an answer."
 
         return {
@@ -613,6 +649,7 @@ async def rag_answer_with_company_detection(
                 res = await _run_rag_for_one_subquery(sq)
             except Exception as e:
                 query_logger.exception("RAG error for sub-query %r: %s", sq, e)
+                graph_retrieval_logger.warning("RAG error for sub-query %r: %s", sq, e)
                 res = {"subquery": sq, "answer": "Failed to generate an answer.", "error": str(e)}
             return idx, res
 
@@ -624,6 +661,7 @@ async def rag_answer_with_company_detection(
     for item in gathered:
         if isinstance(item, Exception):
             query_logger.exception("Unhandled task exception: %s", item)
+            graph_retrieval_logger.warning("Unhandled task exception: %s", item)
             continue
         idx, res = item
         ordered[idx] = res
@@ -633,16 +671,38 @@ async def rag_answer_with_company_detection(
     # ---------------- (5) Synthesize a single final answer ----------------
     try:
         synthesis_system = (
-            """You are a strict combiner. You will be given a list of sub-queries and their grounded answers.
-            Produce ONE final answer by merging their content for the original user query.
+            """ROLE: Strict Combiner (non-interactive). You will be given a list of sub-queries and their grounded sub-answers. Produce ONE final answer by merging their content for the original user query.
 
-            Rules:
+            NON-INTERACTION HARD RULES:
+            - You are NOT a chat agent. Do not address the user or yourself.
+            - Do not ask questions, give advice, apologize, or suggest next steps.
+            - Do not add prefaces/epilogues (e.g., “Here is the answer,” “In summary”).
+            - Do not include placeholders, TODOs, system notes, emojis, or chit-chat.
+            - Do not output role labels or meta commentary.
+            - Do not add or modify links/citations.
+            - Use third-person, content-only prose; avoid first/second-person pronouns.
+
+            SYNTHESIS RULES:
             - Use ONLY the text of the sub-answers. Do NOT invent, infer, calculate, explain, or add commentary.
             - Remove redundancies and duplicates; keep the most specific wording when texts overlap.
-            - Preserve original facts, wording (where possible), numbers, and dates without rephrasing meaning.
+            - Preserve original facts, wording (where possible), numbers, and dates without changing meaning.
+            - Maintain existing structure from sub-answers (paragraphs/bullets/headings) where feasible; introduce minimal structure only to deduplicate and improve clarity.
             - If sub-answers conflict, include both statements without resolving the conflict.
             - Keep any “Not found in provided documents.” lines present in the sub-answers; deduplicate identical lines.
-            - Output plain text only: the single combined final answer."""
+
+            READABILITY & STRUCTURE:
+            - Organize content into clean blocks with a single blank line between blocks.
+            - Group related lines together (e.g., by entity, topic, or timeframe). If multiple entities appear, use the exact entity name as a simple header line followed by its content.
+            - Prefer concise bullet lists for enumerations; keep paragraph form for narrative blocks. Do not change the factual content.
+            - Normalize whitespace (no double spaces, no repeated blank lines). Keep original capitalization and punctuation of facts.
+            - Preserve original numbers, dates, and units exactly as written.
+            - Avoid dangling or orphaned labels; if a heading has no remaining content after merging, remove the heading.
+            - Place any “Not found in provided documents.” line at the end of the relevant block for that entity/topic (and deduplicate).
+
+            OUTPUT:
+            - Plain text only: the single combined final answer.
+            - No greetings, sign-offs, labels, or extra commentary.
+            - If nothing remains after merging and there are no “Not found in provided documents.” lines, output exactly: “Not found in provided documents.”"""
         )
         synthesis_input = {
             "original_query": user_query,
@@ -665,11 +725,13 @@ async def rag_answer_with_company_detection(
         final_answer = (syn.choices[0].message.content or "").strip()
     except Exception as e:
         query_logger.warning("Synthesis failed: %s; concatenating sub-answers.", e)
+        graph_retrieval_logger.warning("Synthesis failed: %s; concatenating sub-answers.", e)
         final_answer = "\n\n".join(
             f"### {r.get('subquery')}\n{r.get('answer')}" for r in per_sub_results
         )
         
     query_logger.info("Final synthesized answer:\n%s", final_answer)
+    graph_retrieval_logger.info("Final synthesized answer:\n%s", final_answer)
 
     if not return_hits:
         return {"RAG_RESPONSE": final_answer}

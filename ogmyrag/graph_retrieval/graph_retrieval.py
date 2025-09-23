@@ -56,7 +56,7 @@ class ChatAgent(BaseAgent):
         """
         graph_retrieval_logger.info(f"ChatAgent is called")
 
-        system_prompt = PROMPT["CHAT"].format(
+        system_prompt = PROMPT["CHAT_VECTOR_RAG"].format(
             similarity_threshold=kwargs.get("similarity_threshold", 0.5) or 0.5,
         )
         graph_retrieval_logger.debug(f"ChatAgent\nSystem prompt used:\n{system_prompt}")
@@ -93,7 +93,7 @@ class VectorRAGAgent(BaseAgent):
     def __init__(self, agent_name: str, pinecone_config: dict):
         super().__init__(agent_name)
         # pinecone storage for RAG
-        self.pine = PineconeStorage(
+        self.pine = PineconeStorage( 
             pinecone_api_key=pinecone_config["pinecone_api_key"],
             openai_api_key=pinecone_config["openai_api_key"],
         )
@@ -126,6 +126,9 @@ class VectorRAGAgent(BaseAgent):
 
             # Concurrency:
             max_concurrency (int)                     [default: 4]
+
+            # Conversation threading (optional):
+            previous_chat_id (str)                    [optional]  <-- NEW
         """
         graph_retrieval_logger.info("VectorRAGAgent is called")
 
@@ -190,6 +193,7 @@ class VectorRAGAgent(BaseAgent):
             )
             graph_retrieval_logger.info("VectorRAGAgent: completed RAG for query=%r", q)
             final_answer = res.get("RAG_RESPONSE", "")
+
             graph_retrieval_logger.debug(
                 "RAG_RESPONSE length=%d preview=%s",
                 len(final_answer or ""),
@@ -615,6 +619,59 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                     chat_input=retrieved_result,
                     similarity_threshold=similarity_threshold,
                     previous_chat_id=self.current_chat_id,
+                )
+                tool_call += 1
+
+            else:
+                yield "**Unexpected error occured. Please contact the developer.**"
+                break
+
+    async def vector_rag_query(
+        self,
+        user_request: str,
+        top_k_for_similarity: int,
+        similarity_threshold: float = 0.5,
+        max_tool_call: int = 3,
+    ):
+        yield "## Calling ChatAgent..."
+        chat_agent_response = await self.agents["ChatAgent"].handle_task(
+            chat_input=user_request,
+            similarity_threshold=similarity_threshold,
+        )
+
+        tool_call = 0
+        while True:
+            if chat_agent_response["type"] == "RESPONSE_GENERATION":
+                yield chat_agent_response["payload"]["response"]
+                break
+
+            if tool_call >= max_tool_call:
+                yield f"**Maximum number of tool calls ({max_tool_call}) reached. Forcing final response generation...**"
+                final_response_generation = await self.agents["ChatAgent"].handle_task(
+                    chat_input="You have reached the maximum number of tool calls. You must now generate the final result based on the information and context you have gathered so far, regardless of its quality. Do not call any more tools.",
+                    similarity_threshold=similarity_threshold,
+                )
+                if final_response_generation["type"] == "RESPONSE_GENERATION":
+                    yield final_response_generation["payload"]["response"]
+                else:
+                    yield "**Agent failed to generate a final response after reaching the tool call limit.**"
+                break
+
+            if chat_agent_response["type"] == "CALLING_VECTOR_RAG_AGENT":
+                yield "## Calling VectorRAGAgent..."
+                request = chat_agent_response["payload"]["request"]
+                rag_agent_response = await self.agents["VectorRAGAgent"].handle_task(
+                    user_query=request,
+                    top_k=top_k_for_similarity,
+                )
+
+                retrieved_result = rag_agent_response["payload"]["answer"]
+
+                yield f"**Retrieved result by the VectorRAGAgent:**\n{retrieved_result}"
+                yield "## Calling ChatAgent to process combined final response..."
+                chat_agent_response = await self.agents["ChatAgent"].handle_task(
+                    chat_input=retrieved_result,
+                    similarity_threshold=similarity_threshold,
                 )
                 tool_call += 1
 

@@ -59,7 +59,7 @@ class ReportRetrievalManager:
         self.client = genai.Client(api_key=self.genai_api_key)
         self.openai_key    = openai_api_key
         self.dry_run       = dry_run
-        self.rpm_limit = 10  # requests per minute limit
+        self.rpm_limit = 20  # requests per minute limit
         self.win_start = time.time()
         self.reqs_in_window = 0
 
@@ -469,7 +469,7 @@ class ReportRetrievalManager:
                     usage = toc_resp.usage_metadata
 
                     retrieval_logger.info(
-                        f"Definition tokens: prompt = {usage.prompt_token_count}, "
+                        f"TOC tokens: prompt = {usage.prompt_token_count}, "
                         f"output = {usage.candidates_token_count}, total = {usage.total_token_count}"
                     )
 
@@ -610,9 +610,6 @@ class ReportRetrievalManager:
                                     self.client.models.generate_content,
                                     model=self.genai_model,
                                     contents=[*uploaded, prompt_text],
-                                    config=types.GenerateContentConfig(
-                                        system_instruction=PROMPT["REPORTS PARSING SYSTEM INSTRUCTION"],
-                                    ),
                                 )
 
                                 # --- minimal-safe extraction (prevents `'NoneType'.strip()`) ---
@@ -676,7 +673,7 @@ class ReportRetrievalManager:
                                 usage = getattr(response, "usage_metadata", None)
                                 if usage:
                                     retrieval_logger.info(
-                                        "Definition tokens: prompt = %s, output = %s, total = %s",
+                                        "Section tokens: prompt = %s, output = %s, total = %s",
                                         getattr(usage, "prompt_token_count", "?"),
                                         getattr(usage, "candidates_token_count", "?"),
                                         getattr(usage, "total_token_count", "?"),
