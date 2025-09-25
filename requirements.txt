@@ -9,3 +9,10 @@ pymongo
 python-dotenv
 tenacity
 tqdm
+curl_cffi
+beautifulsoup4
+tiktoken
+google-generativeai
+lxml
+markdown
+google-genai

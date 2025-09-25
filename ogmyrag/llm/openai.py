@@ -8,74 +8,57 @@ from openai import (
     APITimeoutError,
     OpenAIError,
 )
-
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
 )
-
 from ..util import limit_concurrency
+from ..base import BaseLLMClient
 
 openai_logger = logging.getLogger("openai")
 
-global_openai_async_client: AsyncOpenAI | None = None
 
+class OpenAIAsyncClient(BaseLLMClient):
+    def __init__(self, api_key: str | None = None):
+        api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            openai_logger.error("OPENAI_API_KEY is not set.")
+            raise Exception("OPENAI_API_KEY is required but missing.")
+        self.client = AsyncOpenAI(api_key=api_key)
 
-def get_openai_async_client_instance() -> AsyncOpenAI:
-    global global_openai_async_client
-    if global_openai_async_client is None:
-        try:
-            api_key = os.getenv("OPENAI_API_KEY")
-            global_openai_async_client = AsyncOpenAI(api_key=api_key)
-        except KeyError:
-            openai_logger.warning("OPENAI_API_KEY is not properly set!")
-            raise Exception(
-                "OPENAI_API_KEY is required but not properly set in environment variables."
-            )
-    return global_openai_async_client
-
-
-@limit_concurrency(max_concurrent_tasks=20)
-@retry(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
-    retry=retry_if_exception_type(
-        (RateLimitError, APIConnectionError, APITimeoutError)
-    ),
-)
-async def fetch_responses_openai(
-    model: str, user_prompt: str, system_prompt: str = "", **kwargs
-) -> str:
-    start = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    openai_logger.info(f"Started at {start} for prompt: {user_prompt[:30]}...")
-
-    client = get_openai_async_client_instance()
-
-    messages = (
-        [{"role": "developer", "content": system_prompt}] if system_prompt else []
+    @limit_concurrency(max_concurrent_tasks=20)
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(
+            (RateLimitError, APIConnectionError, APITimeoutError)
+        ),
     )
-    messages.append({"role": "user", "content": user_prompt})
+    async def fetch_response(
+        self, model: str, user_prompt: str, system_prompt: str | None = None, **kwargs
+    ):
+        start = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        openai_logger.info(f"Started at {start} for prompt: {user_prompt[:30]}...")
 
-    openai_logger.info(f"Sending query to {model} using ResponsesAPI")
+        messages = (
+            [{"role": "developer", "content": system_prompt}] if system_prompt else []
+        )
+        messages.append({"role": "user", "content": user_prompt})
 
-    try:
-        response = await client.responses.create(model=model, input=messages, **kwargs)
-    except APIConnectionError as e:
-        openai_logger.error(f"OpenAI API Connection Error: {e}")
-        raise
-    except RateLimitError as e:
-        openai_logger.error(f"OpenAI API Rate Limit Error: {e}")
-        raise
-    except APITimeoutError as e:
-        openai_logger.error(f"OpenAI API Timeout Error: {e}")
-        raise
-    except OpenAIError as e:
-        openai_logger.error(f"OpenAI API Call Failed: {e}")
-        raise
+        openai_logger.info(f"Sending query to {model} using ResponsesAPI")
 
-    openai_logger.info(f"Received response from ResponsesAPI:\n {response}")
-    end = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    openai_logger.info(f"Ended at {end} for prompt: {user_prompt[:30]}...")
-    return response
+        try:
+            response = await self.client.responses.create(
+                model=model, input=messages, **kwargs
+            )
+        except (APIConnectionError, RateLimitError, APITimeoutError, OpenAIError) as e:
+            openai_logger.error(f"OpenAI API Error: {e}")
+            raise
+
+        openai_logger.debug(f"Received response from ResponsesAPI:\n {str(response)}")
+        end = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        openai_logger.info(f"Ended at {end} for prompt: {user_prompt[:30]}...")
+
+        return response

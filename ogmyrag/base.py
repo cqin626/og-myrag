@@ -19,15 +19,25 @@ class PineconeStorageConfig(TypedDict):
     pinecone_dimensions: str
     openai_api_key: str
 
+
 class Neo4jStorageConfig(TypedDict):
     uri: str
     user: str
     password: str
 
 
+class BaseLLMClient:
+    async def fetch_response(
+        self, model: str, system_prompt: str | None, user_prompt: str, **kwargs
+    ) -> Any:
+        raise NotImplementedError
+
+
 class BaseAgent:
-    def __init__(self, agent_name: str):
+    def __init__(self, agent_name: str, agent_config: dict[str, dict] | None= None):
+        # agent_config should not be optional. However, it is optional at current stage to cater code that is not yet refactored
         self.agent_name = agent_name
+        self.agent_config = agent_config
         self.agent_system: BaseMultiAgentSystem = None
 
         try:
@@ -49,8 +59,13 @@ class BaseAgent:
 
 
 class BaseMultiAgentSystem:
-    def __init__(self, agents: dict[str, BaseAgent]):
+    def __init__(
+        self,
+        agents: dict[str, BaseAgent],
+        llm_client: BaseLLMClient,
+    ):
         self.agents = agents
+        self.llm_client = llm_client
 
         for agent in self.agents.values():
             agent.agent_system = self

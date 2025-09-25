@@ -7,8 +7,8 @@ def get_formatted_similar_entities(
     output_lines = []
 
     for query, result_set in zip(query_texts, results):
-        output_lines.append(f"Target: {query}")
-        output_lines.append("Found:")
+        output_lines.append(f"**Target:** {query}")
+        output_lines.append("**Found:**")
         for i, match in enumerate(result_set.get("matches", []), start=1):
             entity_name = match["metadata"].get("name", "Unknown")
             entity_type = match["metadata"].get("type", "Unknown Type")

@@ -199,7 +199,7 @@ class AsyncCollectionHandler:
         except PyMongoError as e:
             logger.error(f"Error updating async document: {e}, full error: {e.details}")
             raise DatabaseError("Update document failed") from e
-        
+
     async def update_documents(
         self,
         query: dict[str, Any],
@@ -300,8 +300,11 @@ class AsyncCollectionHandler:
             logger.error(f"Error during batch delete operation: {e}")
             raise DatabaseError("Delete documents failed") from e
 
-    async def get_doc_counts(self):
-        return await self.collection.count_documents({})
+    async def get_doc_counts(self, query: dict | None = None):
+        # If query is None (the default), create a new empty dict
+        if query is None:
+            query = {}
+        return await self.collection.count_documents(query)
 
 
 class AsyncDatabaseHandler:
