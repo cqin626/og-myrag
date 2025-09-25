@@ -3,21 +3,18 @@ from __future__ import annotations
 import logging
 import asyncio
 import json
-import copy
 from datetime import timedelta
-from collections import defaultdict
 from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import MongoClient
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
 )
+from ..base import BaseLLMClient
 from ..prompts import PROMPT
-from ..llm import fetch_responses_openai
 from ..util import (
     get_formatted_ontology,
     get_formatted_openai_response,
@@ -64,6 +61,9 @@ class EntityRelationshipExtractionAgent(BaseAgent):
     An agent responsible for extracting entities and relationships from document given.
     """
 
+    def __init__(self, agent_name: str, agent_config: dict):
+        super().__init__(agent_name=agent_name, agent_config=agent_config)
+
     async def handle_task(self, **kwargs) -> str:
         """
         Parameters:
@@ -77,15 +77,15 @@ class EntityRelationshipExtractionAgent(BaseAgent):
         formatted_ontology = get_formatted_ontology(
             data=kwargs.get("ontology", {}) or {},
         )
-        # graph_construction_logger.info(
-        #     f"EntityRelatonshipExtractionAgent\nOntology used:\n{formatted_ontology}"
-        # )
+        graph_construction_logger.debug(
+            f"EntityRelatonshipExtractionAgent\nOntology used:\n{formatted_ontology}"
+        )
 
         system_prompt = PROMPT["ENTITIES_RELATIONSHIPS_PARSING"].format(
             ontology=formatted_ontology,
             publish_date=kwargs.get("source_text_publish_date", "NA") or "NA",
         )
-        graph_construction_logger.info(
+        graph_construction_logger.debug(
             f"EntityRelatonshipExtractionAgent\System prompt used:\n{system_prompt}"
         )
 
@@ -107,15 +107,12 @@ class EntityRelationshipExtractionAgent(BaseAgent):
         user_prompt = constraints + source_text
         graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
 
-        response = await fetch_responses_openai(
-            model="o4-mini",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            text={"format": {"type": "text"}},
-            reasoning={"effort": "medium"},
-            max_output_tokens=100000,
-            stream=False,
-            tools=[],
+        graph_construction_logger.debug(
+            f"EntityRelationshipExtractionAgent\nAgent configuration used:\n{str(self.agent_config)}"
+        )
+
+        response = await self.agent_system.llm_client.fetch_response(
+            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
         )
         graph_construction_logger.info(
             f"EntityRelatonshipExtractionAgent\nEntity-relationship extraction response details:\n{get_formatted_openai_response(response)}"
@@ -128,6 +125,9 @@ class EntityDeduplicationAgent(BaseAgent):
     """
     An agent responsible for deduplicating extracted entities.
     """
+
+    def __init__(self, agent_name: str, agent_config: dict):
+        super().__init__(agent_name=agent_name, agent_config=agent_config)
 
     async def handle_task(self, **kwargs) -> str:
         """
@@ -144,15 +144,12 @@ class EntityDeduplicationAgent(BaseAgent):
         user_prompt = kwargs.get("entities_to_compare") or ""
         graph_construction_logger.debug(f"User prompt used:\n{user_prompt}")
 
-        response = await fetch_responses_openai(
-            model="gpt-5-mini",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            text={"format": {"type": "text"}},
-            reasoning={"effort": "medium"},
-            max_output_tokens=100000,
-            stream=False,
-            tools=[],
+        graph_construction_logger.debug(
+            f"EntityDeduplicationAgent\nAgent configuration used:\n{str(self.agent_config)}"
+        )
+
+        response = await self.agent_system.llm_client.fetch_response(
+            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
         )
         graph_construction_logger.info(
             f"EntityDeduplicationAgent\nEntity deduplication response details:\n{get_formatted_openai_response(response)}"
@@ -166,6 +163,9 @@ class RelationshipDeduplicationAgent(BaseAgent):
     An agent responsible for deduplicating extracted relationships.
     Works by merging the descriptions of both relationships
     """
+
+    def __init__(self, agent_name: str, agent_config: dict):
+        super().__init__(agent_name=agent_name, agent_config=agent_config)
 
     async def handle_task(self, **kwargs) -> str:
         """
@@ -185,15 +185,12 @@ class RelationshipDeduplicationAgent(BaseAgent):
             f"RelationshipDeduplicationAgent\nUser prompt used:\n{user_prompt}"
         )
 
-        response = await fetch_responses_openai(
-            model="gpt-5-mini",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            text={"format": {"type": "text"}},
-            reasoning={"effort": "medium"},
-            max_output_tokens=100000,
-            stream=False,
-            tools=[],
+        graph_construction_logger.debug(
+            f"RelationshipDeduplicationAgent\nAgent configuration used:\n{str(self.agent_config)}"
+        )
+
+        response = await self.agent_system.llm_client.fetch_response(
+            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
         )
         graph_construction_logger.info(
             f"RelationshipDeduplicationAgent\nRelationship deduplication response details:\n{get_formatted_openai_response(response)}"
@@ -218,19 +215,25 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         entity_vector_config: PineconeStorageConfig,
         entity_cache_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
+        llm_client: BaseLLMClient,
+        agent_configs: dict[str, dict],
     ):
         super().__init__(
-            {
+            agents={
                 "EntityRelationshipExtractionAgent": EntityRelationshipExtractionAgent(
-                    "EntityRelationshipExtractionAgent"
+                    agent_name="EntityRelationshipExtractionAgent",
+                    agent_config=agent_configs["EntityRelationshipExtractionAgent"],
                 ),
                 "EntityDeduplicationAgent": EntityDeduplicationAgent(
-                    "EntityDeduplicationAgent"
+                    agent_name="EntityDeduplicationAgent",
+                    agent_config=agent_configs["EntityDeduplicationAgent"],
                 ),
                 "RelationshipDeduplicationAgent": RelationshipDeduplicationAgent(
-                    "RelationshipDeduplicationAgent"
+                    agent_name="RelationshipDeduplicationAgent",
+                    agent_config=agent_configs["RelationshipDeduplicationAgent"],
                 ),
-            }
+            },
+            llm_client=llm_client,
         )
 
         try:
@@ -518,42 +521,41 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 data=data, from_company=from_company
             )
         )
-        if formatted_entities and formatted_relationships:
-            async with self.async_mongo_storage.with_transaction() as session:
-                # Step 1: Insert entities
-                inserted_entity_ids = (
-                    await self.async_mongo_storage.get_database(
-                        self.entity_config["database_name"]
-                    )
-                    .get_collection(self.entity_config["collection_name"])
-                    .create_documents(data=formatted_entities, session=session)
+        async with self.async_mongo_storage.with_transaction() as session:
+            # Step 1: Insert entities
+            inserted_entity_ids = (
+                await self.async_mongo_storage.get_database(
+                    self.entity_config["database_name"]
                 )
+                .get_collection(self.entity_config["collection_name"])
+                .create_documents(data=formatted_entities, session=session)
+            )
 
-                # Step 2: Insert relationships
-                inserted_relationship_ids = (
-                    await self.async_mongo_storage.get_database(
-                        self.relationship_config["database_name"]
-                    )
-                    .get_collection(self.relationship_config["collection_name"])
-                    .create_documents(data=formatted_relationships, session=session)
+            # Step 2: Insert relationships
+            inserted_relationship_ids = (
+                await self.async_mongo_storage.get_database(
+                    self.relationship_config["database_name"]
                 )
-
-                graph_construction_logger.info(
-                    f"GraphConstructionSystem\nSuccessfully inserted {len(inserted_entity_ids)} entity(ies) and {len(inserted_relationship_ids)} relationship(s) into MongoDB."
-                )
-
-            # Step 3: Update the company disclosure as processed
-            # Since the reports are currently stored in different locations. This operation cannot be placed into a single transaction
-            await self.async_mongo_storage_reports.get_database(
-                self.disclosure_config["database_name"]
-            ).get_collection(self.disclosure_config["collection_name"]).update_document(
-                query={"_id": data["document_id"]},
-                update_data={"is_parsed": True},
+                .get_collection(self.relationship_config["collection_name"])
+                .create_documents(data=formatted_relationships, session=session)
             )
 
             graph_construction_logger.info(
-                f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
+                f"GraphConstructionSystem\nSuccessfully inserted {len(inserted_entity_ids)} entity(ies) and {len(inserted_relationship_ids)} relationship(s) into MongoDB."
             )
+
+        # Step 3: Update the company disclosure as processed
+        # Since the reports are currently stored in different locations. This operation cannot be placed into a single transaction
+        await self.async_mongo_storage_reports.get_database(
+            self.disclosure_config["database_name"]
+        ).get_collection(self.disclosure_config["collection_name"]).update_document(
+            query={"_id": data["document_id"]},
+            update_data={"is_parsed": True},
+        )
+
+        graph_construction_logger.info(
+            f"GraphConstructionSystem\nSuccessfully updated the 'is_parsed' status of {data['document_name']}."
+        )
 
     async def deduplicate_entities(
         self,
@@ -577,7 +579,7 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
                 from_company=from_company,
             )
 
-            # Step 3 : Fetch unparsed entities
+            # Step 3 : Fetch entities to deduplicate
             entities_to_deduplicate = await self._get_entities_to_deduplicate(
                 from_company=from_company,
                 num_of_entities_to_fetch=num_of_entities_per_batch,
@@ -1571,6 +1573,14 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
             )
             raise
 
+    async def upsert_entities_and_relationships_into_graph(
+        self, from_company: str, batch_size: int= 100
+    ):
+        await self.upsert_entities_into_pinecone(from_company, batch_size)
+        await self.upsert_entities_and_relationships_into_neo4j(
+            from_company, batch_size
+        )
+
     async def upsert_entities_into_pinecone(self, from_company: str, batch_size: int):
         """
         Finds and upserts entities into Pinecone in manageable batches.
@@ -1759,7 +1769,6 @@ class GraphConstructionSystem(BaseMultiAgentSystem):
         graph_construction_logger.info(
             f"GraphConstructionSystem\nFinished upserting relationships into Neo4j. Total relationships processed: {total_processed}."
         )
-
 
     async def get_entity_count(self, query: dict):
         return await (
