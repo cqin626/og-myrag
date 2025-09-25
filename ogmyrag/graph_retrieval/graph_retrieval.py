@@ -9,6 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from ogmyrag.report_retrieval.report_chunker import rag_answer_with_company_detection
 
 from ..prompts import PROMPT
+from ..llm import fetch_responses_openai
 from ..util import (
     get_clean_json,
     get_formatted_ontology,
@@ -24,7 +25,6 @@ from ..storage import (
 
 from ..base import (
     BaseAgent,
-    BaseLLMClient,
     BaseMultiAgentSystem,
     MongoStorageConfig,
     PineconeStorageConfig,
@@ -47,15 +47,12 @@ class ChatAgent(BaseAgent):
     An agent responsible for interacting with the user.
     """
 
-    def __init__(self, agent_name: str, agent_config: dict):
-        super().__init__(agent_name=agent_name, agent_config=agent_config)
-
     async def handle_task(self, **kwargs):
         """
         Parameters:
             chat_input (str),
             similarity_threshold(float),
-            previous_chat_id (str),
+            previous_chat_id (str)
         """
         graph_retrieval_logger.info(f"ChatAgent is called")
 
@@ -67,15 +64,15 @@ class ChatAgent(BaseAgent):
         user_prompt = kwargs.get("chat_input", "") or ""
         graph_retrieval_logger.debug(f"ChatAgent\nUser prompt used:\n{user_prompt}")
 
-        graph_retrieval_logger.debug(
-            f"ChatAgent\nAgent configuration used:\n{str(self.agent_config)}"
-        )
-
-        response = await self.agent_system.llm_client.fetch_response(
+        response = await fetch_responses_openai(
+            model="o4-mini",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "medium"},
+            max_output_tokens=100000,
             previous_response_id=kwargs.get("previous_chat_id", None),
-            **self.agent_config,
+            tools=[],
         )
 
         graph_retrieval_logger.info(
@@ -253,9 +250,7 @@ class RequestDecompositionAgent(BaseAgent):
     """
     An agent responsible for decomposing and rephrasing the user request.
     """
-    def __init__(self, agent_name: str, agent_config: dict):
-        super().__init__(agent_name=agent_name, agent_config=agent_config)
-        
+
     async def handle_task(self, **kwargs):
         """
         Parameters:
@@ -278,12 +273,14 @@ class RequestDecompositionAgent(BaseAgent):
             f"RequestDecompositionAgent\nUser prompt used:\n{user_prompt}"
         )
 
-        graph_retrieval_logger.debug(
-            f"RequestDecompositionAgent\nAgent configuration used:\n{str(self.agent_config)}"
-        )
-
-        response = await self.agent_system.llm_client.fetch_response(
-            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
+        response = await fetch_responses_openai(
+            model="gpt-5-mini",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "medium"},
+            max_output_tokens=100000,
+            tools=[],
         )
 
         graph_retrieval_logger.info(
@@ -299,16 +296,13 @@ class QueryAgent(BaseAgent):
     """
     An agent responsible for interacting with Text2CypherAgent to come up with retrieval result.
     """
-    
-    def __init__(self, agent_name: str, agent_config: dict):
-        super().__init__(agent_name=agent_name, agent_config=agent_config)
 
     async def handle_task(self, **kwargs):
         """
         Parameters:
             user_request (str),
             ontology (dict),
-            previous_response_id (str | None),
+            previous_response_id (str | None)
         """
         graph_retrieval_logger.info(f"QueryAgent is called")
 
@@ -324,15 +318,15 @@ class QueryAgent(BaseAgent):
         user_prompt = kwargs.get("user_request", "")
         graph_retrieval_logger.debug(f"QueryAgent\nUser prompt used:\n{user_prompt}")
 
-        graph_retrieval_logger.debug(
-            f"QueryAgent\nAgent configuration used:\n{str(self.agent_config)}"
-        )
-
-        response = await self.agent_system.llm_client.fetch_response(
+        response = await fetch_responses_openai(
+            model="o4-mini",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "high"},
+            max_output_tokens=100000,
             previous_response_id=kwargs.get("previous_response_id", None),
-            **self.agent_config,
+            tools=[],
         )
 
         graph_retrieval_logger.info(
@@ -349,9 +343,6 @@ class Text2CypherAgent(BaseAgent):
     """
     An agent responsible for generating Cypher query and performing Cypher retrieval.
     """
-    
-    def __init__(self, agent_name: str, agent_config: dict):
-        super().__init__(agent_name=agent_name, agent_config=agent_config)
 
     async def handle_task(self, **kwargs):
         """
@@ -359,8 +350,8 @@ class Text2CypherAgent(BaseAgent):
             user_query (str),
             validated_entities list(str),
             ontology (dict),
-            note (str | None),
-            previous_response_id (str | None),
+            note (str | None)
+            previous_response_id (str | None)
         """
         graph_retrieval_logger.info(f"Text2CypherAgent is called")
 
@@ -386,15 +377,15 @@ class Text2CypherAgent(BaseAgent):
             f"Text2CypherAgent\nUser prompt used:\n{user_prompt}"
         )
 
-        graph_retrieval_logger.debug(
-            f"Text2CypherAgent\nAgent configuration used:\n{str(self.agent_config)}"
-        )
-
-        response = await self.agent_system.llm_client.fetch_response(
+        response = await fetch_responses_openai(
+            model="o4-mini",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            reasoning={"effort": "high"},
+            max_output_tokens=100000,
             previous_response_id=kwargs.get("previous_response_id", None),
-            **self.agent_config,
+            tools=[],
         )
 
         graph_retrieval_logger.info(
@@ -411,9 +402,6 @@ class RetrievalResultCompilationAgent(BaseAgent):
     """
     An agent responsible for compiling Cypher retrieval result.
     """
-    
-    def __init__(self, agent_name: str, agent_config: dict):
-        super().__init__(agent_name=agent_name, agent_config=agent_config)
 
     async def handle_task(self, **kwargs):
         """
@@ -439,12 +427,13 @@ class RetrievalResultCompilationAgent(BaseAgent):
             f"RetrievalResultCompilationAgent\nUser prompt used:\n{user_prompt}"
         )
 
-        graph_retrieval_logger.debug(
-            f"RetrievalResultCompilationAgent\nAgent configuration used:\n{str(self.agent_config)}"
-        )
-
-        response = await self.agent_system.llm_client.fetch_response(
-            system_prompt=system_prompt, user_prompt=user_prompt, **self.agent_config
+        response = await fetch_responses_openai(
+            model="gpt-4.1-mini",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            text={"format": {"type": "text"}},
+            max_output_tokens=32768,
+            tools=[],
         )
 
         graph_retrieval_logger.info(
@@ -462,36 +451,20 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
         entity_vector_config: PineconeStorageConfig,
         graphdb_config: Neo4jStorageConfig,
         rag_vector_config: PineconeStorageConfig,
-        llm_client: BaseLLMClient,
-        agent_configs: dict[str, dict],
     ):
         super().__init__(
-            agents={
-                "ChatAgent": ChatAgent(
-                    agent_name="ChatAgent",
-                    agent_config=agent_configs["ChatAgent"],
-                ),
+            {
+                "ChatAgent": ChatAgent("ChatAgent"),
                 "RequestDecompositionAgent": RequestDecompositionAgent(
-                    agent_name="RequestDecompositionAgent",
-                    agent_config=agent_configs["RequestDecompositionAgent"],
+                    "RequestDecompositionAgent"
                 ),
-                "QueryAgent": QueryAgent(
-                    agent_name="QueryAgent",
-                    agent_config=agent_configs["QueryAgent"],
-                ),
-                "Text2CypherAgent": Text2CypherAgent(
-                    agent_name="Text2CypherAgent",
-                    agent_config=agent_configs["Text2CypherAgent"],
-                ),
-                "VectorRAGAgent": VectorRAGAgent(
-                    agent_name="VectorRAGAgent", pinecone_config=rag_vector_config
-                ),
+                "QueryAgent": QueryAgent("QueryAgent"),
+                "Text2CypherAgent": Text2CypherAgent("Text2CypherAgent"),
+                "VectorRAGAgent": VectorRAGAgent("VectorRAGAgent", rag_vector_config),
                 "RetrievalResultCompilationAgent": RetrievalResultCompilationAgent(
-                    agent_name="RetrievalResultCompilationAgent",
-                    agent_config=agent_configs["RetrievalResultCompilationAgent"],
+                    "RetrievalResultCompilationAgent"
                 ),
-            },
-            llm_client=llm_client,
+            }
         )
 
         try:
