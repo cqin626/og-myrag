@@ -263,6 +263,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
     async def enhance_ontology_via_loop(self):
         """
         Iteration loop that runs up to 5 times.
+        
         - Iteration 1: always run (if problems exist).
         - Iteration 2: always run (if problems exist).
         - Iteration 3: run only if at least 2 problems remain.
@@ -270,6 +271,7 @@ class OntologyConstructionSystem(BaseMultiAgentSystem):
         - Iteration 5: run only if at least 4 problems remain.
         - Iteration 6: run only if at least 5 problems remain.
         - Iteration 7: run only if at least 6 problems remain (last iteration).
+        
         """
         iteration = 0
         while True:

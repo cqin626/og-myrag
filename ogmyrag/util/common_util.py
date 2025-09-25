@@ -21,24 +21,74 @@ def limit_concurrency(max_concurrent_tasks: int):
 
 
 def get_clean_json(text: str) -> dict:
-    # Step 1: Trim whitespace
+    """
+    Safely parse a JSON string from potentially messy input.
+    Handles:
+      - Markdown code blocks (```json ... ```)
+      - JSON that is double-encoded (JSON string inside a string)
+      - Extra text before/after JSON
+      - Already parsed JSON
+    Returns a dictionary or empty dict on failure.
+    """
     text = text.strip()
 
-    # Step 2: Remove markdown code block if present (```json ... ```)
+    # Remove markdown code block if present
     if text.startswith("```json") or text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
 
-    # Step 3: Try to extract valid JSON between first '{' and last '}'
+    # Extract first JSON-like substring
     try:
         start = text.index("{")
         end = text.rindex("}") + 1
         json_str = text[start:end]
-        return json.loads(json_str)
+
+        # First parse attempt
+        result = json.loads(json_str)
+
+        # If it’s still a string, it’s likely double-encoded JSON, parse again
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError:
+                # If second parse fails, return the string as a dict with 'raw' key
+                result = {"raw": result}
+
+        return result
     except (ValueError, json.JSONDecodeError) as e:
         print(f"[Error] JSON parsing failed: {e}")
         return {}
 
+
+def get_clean_json(text: str) -> dict:
+    text = text.strip()
+
+    # Remove markdown code block if present
+    if text.startswith("```json") or text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+
+    # Extract first JSON-like substring
+    try:
+        start = text.index("{")
+        end = text.rindex("}") + 1
+        json_str = text[start:end]
+
+        # First parse attempt
+        result = json.loads(json_str)
+
+        # If still a string, parse again (double-encoded JSON)
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError:
+                # Return as raw string if still cannot parse
+                result = {"raw": result}
+
+        return result
+    except (ValueError, json.JSONDecodeError) as e:
+        print(f"[Error] JSON parsing failed: {e}")
+        return {}
 
 async def fetch_reports_along_with_constraints(
     async_mongo_storage_reports: AsyncMongoDBStorage,
