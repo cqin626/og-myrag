@@ -56,7 +56,7 @@ class ChatAgent(BaseAgent):
         """
         graph_retrieval_logger.info(f"ChatAgent is called")
 
-        system_prompt = PROMPT["CHAT_VECTOR_RAG"].format(
+        system_prompt = PROMPT["CHAT"].format(
             similarity_threshold=kwargs.get("similarity_threshold", 0.5) or 0.5,
         )
         graph_retrieval_logger.debug(f"ChatAgent\nSystem prompt used:\n{system_prompt}")
@@ -93,7 +93,7 @@ class VectorRAGAgent(BaseAgent):
     def __init__(self, agent_name: str, pinecone_config: dict):
         super().__init__(agent_name)
         # pinecone storage for RAG
-        self.pine = PineconeStorage( 
+        self.pine = PineconeStorage(
             pinecone_api_key=pinecone_config["pinecone_api_key"],
             openai_api_key=pinecone_config["openai_api_key"],
         )
@@ -126,9 +126,6 @@ class VectorRAGAgent(BaseAgent):
 
             # Concurrency:
             max_concurrency (int)                     [default: 4]
-
-            # Conversation threading (optional):
-            previous_chat_id (str)                    [optional]  <-- NEW
         """
         graph_retrieval_logger.info("VectorRAGAgent is called")
 
@@ -193,7 +190,6 @@ class VectorRAGAgent(BaseAgent):
             )
             graph_retrieval_logger.info("VectorRAGAgent: completed RAG for query=%r", q)
             final_answer = res.get("RAG_RESPONSE", "")
-
             graph_retrieval_logger.debug(
                 "RAG_RESPONSE length=%d preview=%s",
                 len(final_answer or ""),
