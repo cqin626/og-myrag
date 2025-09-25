@@ -626,59 +626,6 @@ class GraphRetrievalSystem(BaseMultiAgentSystem):
                 yield "**Unexpected error occured. Please contact the developer.**"
                 break
 
-    async def vector_rag_query(
-        self,
-        user_request: str,
-        top_k_for_similarity: int,
-        similarity_threshold: float = 0.5,
-        max_tool_call: int = 3,
-    ):
-        yield "## Calling ChatAgent..."
-        chat_agent_response = await self.agents["ChatAgent"].handle_task(
-            chat_input=user_request,
-            similarity_threshold=similarity_threshold,
-        )
-
-        tool_call = 0
-        while True:
-            if chat_agent_response["type"] == "RESPONSE_GENERATION":
-                yield chat_agent_response["payload"]["response"]
-                break
-
-            if tool_call >= max_tool_call:
-                yield f"**Maximum number of tool calls ({max_tool_call}) reached. Forcing final response generation...**"
-                final_response_generation = await self.agents["ChatAgent"].handle_task(
-                    chat_input="You have reached the maximum number of tool calls. You must now generate the final result based on the information and context you have gathered so far, regardless of its quality. Do not call any more tools.",
-                    similarity_threshold=similarity_threshold,
-                )
-                if final_response_generation["type"] == "RESPONSE_GENERATION":
-                    yield final_response_generation["payload"]["response"]
-                else:
-                    yield "**Agent failed to generate a final response after reaching the tool call limit.**"
-                break
-
-            if chat_agent_response["type"] == "CALLING_VECTOR_RAG_AGENT":
-                yield "## Calling VectorRAGAgent..."
-                request = chat_agent_response["payload"]["request"]
-                rag_agent_response = await self.agents["VectorRAGAgent"].handle_task(
-                    user_query=request,
-                    top_k=top_k_for_similarity,
-                )
-
-                retrieved_result = rag_agent_response["payload"]["answer"]
-
-                yield f"**Retrieved result by the VectorRAGAgent:**\n{retrieved_result}"
-                yield "## Calling ChatAgent to process combined final response..."
-                chat_agent_response = await self.agents["ChatAgent"].handle_task(
-                    chat_input=retrieved_result,
-                    similarity_threshold=similarity_threshold,
-                )
-                tool_call += 1
-
-            else:
-                yield "**Unexpected error occured. Please contact the developer.**"
-                break
-
     async def rag_query(
         self,
         user_request: str | list[str],
