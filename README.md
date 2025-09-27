@@ -1,6 +1,6 @@
 # 🕸️ og-myrag
 
-**Ontology-Grounded Graph-Based RAG with Text-to-Cypher Retrieval**
+**Ontology-Grounded Vector & Graph RAG: Report Scraping, Preprocessing & Text-to-Cypher Retrieval**
 
 ![Python](https://img.shields.io/badge/python-3.9%2B-green.svg)  
 ![Neo4j](https://img.shields.io/badge/graphdb-neo4j-orange.svg)  
